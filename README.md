@@ -1,11 +1,48 @@
-<div align="center">
+# SO3 PT Digital Platform
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Bu repo, SO3 PT premium spor ve yaşam kulübü için geliştirilecek uzun vadeli dijital platformun temel iskeletidir.
 
-  <h1>Built with AI Studio</h2>
+## Proje Mimarisi
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- `src/assets/`: Görseller, logolar ve statik medya dosyaları.
+- `src/components/`:
+  - `ui/`: Buton, input, modal gibi temel (atomic) UI bileşenleri.
+  - `layout/`: Navbar, Footer, Sidebar gibi sayfa düzeni bileşenleri.
+- `src/config/`: Sabitler, ortam değişkenleri ve genel konfigürasyon dosyaları.
+- `src/data/`: Mock datalar veya sabit içerikler (örn. menü linkleri).
+- `src/features/`: Spesifik modüllere (ör. auth, etkinlikler) ait bileşenler ve mantık katmanı.
+- `src/lib/`: Yardımcı fonksiyonlar (utils), üçüncü parti araçların yapılandırmaları.
+- `src/pages/`:
+  - `public/`: Herkese açık web sayfası görünümleri.
+  - `admin/`: Sistem yöneticisi ekranları.
+  - `member/`: Üye platformu ekranları.
+  - `trainer/`: Antrenör yönetim ekranları.
+  - `reception/`: Resepsiyon ve operasyon ekranları.
+- `src/routes/`: React Router yapılandırması ve navigasyon mimarisi.
+- `src/styles/`: Global stiller ve Tailwind konfigürasyonları.
+- `src/types/`: TypeScript interface ve tipleri.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Kurulum ve Çalıştırma
 
-</div>
+1. Proje dizinine gidin.
+2. Bağımlılıkları yükleyin:
+   ```bash
+   npm install
+   ```
+3. Geliştirme sunucusunu başlatın:
+   ```bash
+   npm run dev
+   ```
+
+## Build Alma
+
+Projenin üretime hazır (production-ready) versiyonunu oluşturmak için:
+```bash
+npm run build
+```
+
+## Kalite Standartları
+
+Bu projede Strict TypeScript uygulanmaktadır. Hiçbir build veya type hatası kabul edilemez. Tasarımlar daima mobil öncelikli (mobile-first) ve Tailwind utility class'ları ile geliştirilir.
+
+Diğer standartlar için `AGENTS.md` ve `SO3_PRODUCT_SPEC.md` dosyalarını inceleyin.
