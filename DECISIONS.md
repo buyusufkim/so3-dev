@@ -19,3 +19,16 @@ Bu dosya, proje süresince alınan önemli mimari, teknolojik ve ürüne dair ka
 - **Bağlam:** Spor markasının premium ve disiplinli hissini yansıtmak.
 - **Karar:** Siyah, antrasit ve kırık beyaz ana renkler olarak belirlendi. Cam efekti, aşırı neon renkler ve hazır spor salonu şablonlarından kesinlikle kaçınılması.
 - **Gerekçe:** Hedef kitlenin üst gelir grubu olması ve markanın disiplin odaklı premium duruşu nedeniyle sade, net hiyerarşiye sahip ve minimal bir dil tercih edildi.
+
+## Karar 4: Homepage Visual Direction ve Medya Kullanımı
+- **Tarih:** 2026-08-07
+- **Bağlam:** Farklı tasarım konseptleri (V1, V2, V3, V3.1) arasından hangisinin production'a alınacağı ve mevcut web sitesinden gelecek görsellerin durumu.
+- **Karar:** Homepage görsel yönü olarak V3.1 konsepti onaylanıp production'a alınmıştır. V3.1'de kullanılan `#851C35` accent rengi "provisional" (geçici) olarak kabul edilmiştir; nihai marka kimliği onaylanana kadar kurumsal marka rengi olarak kilitlenmeyecektir. Ayrıca mevcut (eski) web sitesindeki görsellerin, doğrulanmış SO3 prodüksiyon medyası olmadığı kabul edilmiş ve onay olmadan yeni platformda kullanılmaması kararlaştırılmıştır.
+- **Gerekçe:** Dağınık ve karmaşık eski konseptler kaldırılarak, kod tabanı sadeleştirilmiş, modüler bir production homepage elde edilmiştir. Gerçek fotoğraf çekimi tamamlanana kadar da kontrollü bir media placeholder stratejisi izlenecektir. Logo varlığı için de geçici metin ("SO3 PT") kullanılmakta olup, marka yetkililerinden orijinal vektörel veya yüksek çözünürlüklü logo dosyası (official asset) beklenmektedir.
+
+## Karar 5: Public Route Optimizasyonu
+- **Tarih:** 2026-08-07
+- **Bağlam:** Galeri ve SO3 Deneyimi sayfalarının içerik bütünlüğü.
+- **Karar:** `galeri` ve `so3-deneyimi` sayfaları ürün kapsamından çıkarılarak route yapılandırmasından silinmiştir.
+- **Gerekçe:** Separate Gallery and SO3 Experience pages were removed to avoid duplicated content. Real SO3 media will be distributed contextually across the relevant public pages.
+- **Final Public Routes:** `/`, `/branslar`, `/egitmenler`, `/topluluk`, `/etkinlikler`, `/basarilar`, `/360-tur`, `/iletisim`, `/giris`

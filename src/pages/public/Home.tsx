@@ -1,23 +1,29 @@
-import { HeroSection } from "@/features/marketing/home/HeroSection";
-import { SystemSection } from "@/features/marketing/home/SystemSection";
-import { BranchesSection } from "@/features/marketing/home/BranchesSection";
-import { TrainersSection } from "@/features/marketing/home/TrainersSection";
-import { CommunitySection } from "@/features/marketing/home/CommunitySection";
-import { PerformanceSection } from "@/features/marketing/home/PerformanceSection";
-import { VirtualTourSection } from "@/features/marketing/home/VirtualTourSection";
-import { CtaSection } from "@/features/marketing/home/CtaSection";
+import { HomeHero } from "@/features/marketing/home/HomeHero";
+import { HomeBrandBand } from "@/features/marketing/home/HomeBrandBand";
+import { HomeDiscovery } from "@/features/marketing/home/HomeDiscovery";
+import { HomeWhySO3 } from "@/features/marketing/home/HomeWhySO3";
+import { HomeProcess } from "@/features/marketing/home/HomeProcess";
+import { HomeBranches } from "@/features/marketing/home/HomeBranches";
+import { HomeTrainers } from "@/features/marketing/home/HomeTrainers";
+import { HomePerformance } from "@/features/marketing/home/HomePerformance";
+import { HomeCommunity } from "@/features/marketing/home/HomeCommunity";
+import { HomeTour } from "@/features/marketing/home/HomeTour";
+import { HomeFinalCta } from "@/features/marketing/home/HomeFinalCta";
 
 export function Home() {
   return (
     <div className="w-full flex-1">
-      <HeroSection />
-      <SystemSection />
-      <BranchesSection />
-      <TrainersSection />
-      <CommunitySection />
-      <PerformanceSection />
-      <VirtualTourSection />
-      <CtaSection />
+      <HomeHero />
+      <HomeBrandBand />
+      <HomeDiscovery />
+      <HomeWhySO3 />
+      <HomeProcess />
+      <HomeBranches />
+      <HomeTrainers />
+      <HomePerformance />
+      <HomeCommunity />
+      <HomeTour />
+      <HomeFinalCta />
     </div>
   );
 }

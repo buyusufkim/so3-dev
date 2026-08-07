@@ -27,7 +27,7 @@ Sistemde gelecekte bulunacak ve mimarisi buna göre planlanan kullanıcı roller
    - Hızlı randevu/seans görüntüleme ve salonun anlık durumunu yönetme işlemlerini yürütür.
 
 5. **İçerik Editörü (Content Editor):**
-   - Blog, etkinlikler, galeri, başarılar ve herkese açık web sitesindeki metin ve görselleri günceller.
+   - Blog, etkinlikler, başarılar ve herkese açık web sitesindeki metin ve görselleri günceller.
 
 6. **İşletme Yöneticisi (Manager):**
    - Genel gelir-gider yönetimi, personel takibi, performans raporları ve salon doluluk oranları gibi operasyonel süreçleri yönetir.
@@ -67,3 +67,9 @@ SO3, kalabalık bir spor salonunda kişinin kendi başına antrenman yaptığı 
 - "Gerçek bir sosyal ağ" vb. teknoloji / ürün dili.
 
 Tasarım, kişiselleştirme ve hizmet anlayışı premium algıyı kelimelerle bağırmadan, kendi duruşuyla hissettirmelidir.
+
+## Görsel Tasarım ve Medya Kararları (Faz 0.1)
+- **Homepage Visual Direction finalized from V3.1 concept.**
+- Accent color (`#851C35`) remains provisional until final brand/visual identity approval.
+- Existing legacy website imagery is not considered verified SO3-owned production media and must not be reused in the new platform without explicit approval.
+- **Logo TODO:** Currently using a text placeholder ("SO3 PT") in the Header and Footer. Awaiting official high-resolution/vector logo asset from the brand owners for production use.

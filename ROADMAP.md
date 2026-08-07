@@ -9,7 +9,7 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 - Route mimarisinin oluşturulması.
 
 ## Faz 1: Premium Web Sitesi
-- Herkese açık sayfaların (Ana Sayfa, SO3 Deneyimi, Branşlar, Eğitmenler, Topluluk, vb.) final tasarımlarıyla kodlanması.
+- Herkese açık sayfaların (Ana Sayfa, Branşlar, Eğitmenler, Topluluk, vb.) final tasarımlarıyla kodlanması.
 - SEO, erişilebilirlik ve performans optimizasyonları.
 - Animasyon ve geçişlerin premium hisse uygun entegrasyonu.
 
@@ -20,7 +20,7 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 
 ## Faz 3: CMS ve Yönetim Paneli
 - İçerik yönetim altyapısının kurulması.
-- Yöneticilerin, etkinlik, galeri ve takım üyelerini yönetebileceği içerik ekranları.
+- Yöneticilerin, etkinlik ve takım üyelerini yönetebileceği içerik ekranları.
 
 ## Faz 4: Üye ve Antrenör Sistemi
 - Üye dashboard'unun geliştirilmesi (Program takibi, ölçümler).
