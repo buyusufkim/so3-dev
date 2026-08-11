@@ -1,37 +1,27 @@
 # SO3 PT Ürün Spesifikasyonu (Product Spec)
 
 ## Ürün Vizyonu
-SO3 PT, Kayseri'de premium standartlarda Personal Training odaklı bir spor ve yaşam kulübüdür. Kulüp yalnızca standart bir spor salonu değil, aynı zamanda üyelerine voleybol, doğa yürüyüşü, kano ve piknik gibi çeşitli topluluk etkinlikleri de sunan bütünsel bir yaşam merkezidir. 
-
-Platformun vizyonu, kulübün premium hizmet anlayışını dijital ortama taşıyarak, disiplinli, kaliteli ve kişiselleştirilmiş bir deneyimi üyelerine, antrenörlerine ve yönetimine sunmaktır. 
+SO3 PT, Kayseri'de premium standartlarda Personal Training odaklı bir spor ve yaşam kulübüdür. Kulüp yalnızca standart bir spor salonu değil, aynı zamanda üyelerine voleybol, doğa yürüyüşü, kano ve piknik gibi çeşitli topluluk etkinlikleri de sunan bütünsel bir yaşam merkezidir. Platformun vizyonu, kulübün premium hizmet anlayışını dijital ortama taşıyarak, disiplinli, kaliteli ve kişiselleştirilmiş bir deneyimi üyelerine, antrenörlerine ve yönetimine sunmaktır.
 
 ## Kullanıcı Rolleri
-
 Sistemde gelecekte bulunacak ve mimarisi buna göre planlanan kullanıcı rolleri:
-
-1. **Ziyaretçi (Guest):** 
-   - Platformun herkese açık premium web sitesini görüntüler. 
-   - Antrenörleri, branşları ve topluluk etkinliklerini inceler, iletişim formlarını veya üyelik başvuru ekranlarını kullanabilir.
-
+1. **Ziyaretçi (Guest):**
+    - Platformun herkese açık premium web sitesini görüntüler.
+    - Antrenörleri, branşları ve topluluk etkinliklerini inceler, iletişim formlarını veya üyelik başvuru ekranlarını kullanabilir.
 2. **Üye (Member):**
    - Kendi antrenman programlarını, gelişimlerini, randevu ve seans haklarını takip eder.
    - Topluluk etkinliklerine kayıt olabilir.
    - Bildirimleri, abonelik durumunu yönetir.
-
 3. **Antrenör (Trainer):**
    - Kendi portföyündeki üyelerin gelişimini takip eder ve antrenman programları atar.
    - Günlük randevularını, seanslarını ve doluluk oranlarını yönetir.
-
 4. **Resepsiyon (Reception):**
    - Günlük giriş-çıkış yapan üyeleri takip eder.
    - Hızlı randevu/seans görüntüleme ve salonun anlık durumunu yönetme işlemlerini yürütür.
-
 5. **İçerik Editörü (Content Editor):**
    - Blog, etkinlikler, başarılar ve herkese açık web sitesindeki metin ve görselleri günceller.
-
 6. **İşletme Yöneticisi (Manager):**
    - Genel gelir-gider yönetimi, personel takibi, performans raporları ve salon doluluk oranları gibi operasyonel süreçleri yönetir.
-
 7. **Süper Admin (Super Admin):**
    - Sistemin tüm yapılandırma ayarlarına, rol yönetimlerine ve teknik panellere tam erişime sahiptir.
 
@@ -68,8 +58,18 @@ SO3, kalabalık bir spor salonunda kişinin kendi başına antrenman yaptığı 
 
 Tasarım, kişiselleştirme ve hizmet anlayışı premium algıyı kelimelerle bağırmadan, kendi duruşuyla hissettirmelidir.
 
-## Görsel Tasarım ve Medya Kararları (Faz 0.1)
+## Public Platform - Onaylanmış Veriler
+- **Eğitmen Kadrosu:** Yusuf Açık, Mehmet Ateş, İrem, Gamze Arslan, Müniyra Karayağız, Almira Tektaş, Selami Özyıldırım, Selim Özyıldırım, Sencer Özyıldırım, Eren Sencer Öztürk, Hulusi Ünlü, Mehmet Katipoğlu (Uzman Diyetisyen).
+- **İletişim & Lokasyon:** 
+  - Adres: Yıldırım Beyazıt, Aşık Veysel Blv. No:69/4, 38030 Melikgazi / Kayseri
+  - Telefon 1: 0553 957 37 38
+  - Telefon 2: 0507 207 77 97
+  - WhatsApp: 0552 379 07 77
+  - Instagram: @so3pt
+- **Hizmet Kapsamı (Ticker Copy):** Kişisel Diyetisyen ve Beslenme Programı, Supplement Danışmanlığı, Birebir Dersler, Kişiye Özel Program, Özel Etkinlikler, Profesyonel Eğitmenler.
+
+## Görsel Tasarım ve Medya Kararları
 - **Homepage Visual Direction finalized from V3.1 concept.**
 - Accent color (`#851C35`) remains provisional until final brand/visual identity approval.
 - Existing legacy website imagery is not considered verified SO3-owned production media and must not be reused in the new platform without explicit approval.
-- **Logo TODO:** Currently using a text placeholder ("SO3 PT") in the Header and Footer. Awaiting official high-resolution/vector logo asset from the brand owners for production use.
+- Official SO3 logo has been integrated.

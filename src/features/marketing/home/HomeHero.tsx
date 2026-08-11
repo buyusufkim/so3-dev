@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 
 export function HomeHero() {
   return (
     <section id="so3" className="relative h-[90svh] min-h-[600px] flex items-center justify-center bg-[#050505] overflow-hidden scroll-mt-24 md:scroll-mt-28">
       {/* Background Image / Placeholder */}
       <div className="absolute inset-0 z-0">
-        <HomeMediaPlaceholder label="HERO PHOTO" className="w-full h-full object-cover opacity-60 mix-blend-luminosity" />
+        <img src="/media/so3/hero-so3.webp" alt="SO3 Personal Training antrenman alanı" className="w-full h-full object-cover opacity-60 mix-blend-luminosity" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
         <div className="absolute inset-0 bg-gradient-to-r from-[#050505]/80 via-transparent to-transparent"></div>
       </div>
@@ -48,7 +47,7 @@ export function HomeHero() {
           {/* CTA Actions */}
           <div className="flex flex-col sm:flex-row lg:flex-col gap-4 w-full sm:w-auto min-w-[220px]">
             <Link 
-               to="/iletisim" 
+               to="/#iletisim" 
                className="flex items-center justify-center bg-white text-black px-6 py-4 md:py-5 rounded text-sm font-semibold hover:bg-[#851C35] hover:text-white transition-all group"
             >
               <span>Ön görüşme planla</span>

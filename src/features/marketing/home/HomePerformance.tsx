@@ -1,10 +1,8 @@
-import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
-
 export function HomePerformance() {
   return (
     <section className="relative min-h-[70vh] flex items-center bg-[#050505] overflow-hidden">
       <div className="absolute inset-0 z-0">
-        <HomeMediaPlaceholder label="PERFORMANS FOTOĞRAFI" className="w-full h-full object-cover opacity-50 mix-blend-luminosity" />
+        <img src="/media/so3/performance.webp" alt="Performans" loading="lazy" className="w-full h-full object-cover opacity-50 mix-blend-luminosity" />
       </div>
       
       <div className="absolute inset-0 bg-[#050505]/40 z-10"></div>

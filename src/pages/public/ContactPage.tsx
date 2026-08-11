@@ -14,7 +14,7 @@ export function ContactPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20">
             {/* Form Column */}
             <div className="lg:col-span-7">
-              <ConsultationForm submissionEnabled={false} />
+              <ConsultationForm />
             </div>
             
             {/* Info Column */}

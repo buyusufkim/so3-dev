@@ -2,20 +2,26 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { useEffect } from "react";
+import { WhatsAppButton } from "../ui/WhatsAppButton";
 
 export function MainLayout() {
   const { pathname, hash } = useLocation();
 
   useEffect(() => {
+    const isReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const scrollBehavior = isReducedMotion ? "auto" : "smooth";
+
     if (hash) {
-      setTimeout(() => {
-        const element = document.querySelector(hash);
+      const timer = setTimeout(() => {
+        const id = hash.replace("#", "");
+        const element = document.getElementById(id);
         if (element) {
-          element.scrollIntoView({ behavior: "smooth" });
+          element.scrollIntoView({ behavior: scrollBehavior });
         }
-      }, 100);
+      }, 0);
+      return () => clearTimeout(timer);
     } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: scrollBehavior });
     }
   }, [pathname, hash]);
 
@@ -26,6 +32,7 @@ export function MainLayout() {
         <Outlet />
       </main>
       <Footer />
+      <WhatsAppButton />
     </div>
   );
 }

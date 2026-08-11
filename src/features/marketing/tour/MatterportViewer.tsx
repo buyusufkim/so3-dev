@@ -5,11 +5,12 @@ import { cn } from "@/lib/utils";
 interface MatterportViewerProps {
   className?: string;
   coverLabel?: string;
+  coverImage?: string;
   isActive?: boolean;
   onPlay?: () => void;
 }
 
-export function MatterportViewer({ className, coverLabel = "360° MEKÂN GÖRSELİ", isActive: externalIsActive, onPlay }: MatterportViewerProps) {
+export function MatterportViewer({ className, coverLabel = "360° MEKÂN GÖRSELİ", coverImage, isActive: externalIsActive, onPlay }: MatterportViewerProps) {
   const [internalIsActive, setInternalIsActive] = useState(false);
   
   const isActive = externalIsActive !== undefined ? externalIsActive : internalIsActive;
@@ -30,7 +31,11 @@ export function MatterportViewer({ className, coverLabel = "360° MEKÂN GÖRSEL
           onClick={handlePlay} 
           aria-label="360 derece turu başlat"
         >
-          <HomeMediaPlaceholder label={coverLabel} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+          {coverImage ? (
+            <img src={coverImage} alt="360° Tur" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" loading="lazy" />
+          ) : (
+            <HomeMediaPlaceholder label={coverLabel} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+          )}
           <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors"></div>
           
           <div className="absolute inset-0 flex flex-col items-center justify-center">

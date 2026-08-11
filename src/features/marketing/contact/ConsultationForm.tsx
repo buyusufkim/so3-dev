@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-interface ConsultationFormProps {
-  submissionEnabled?: boolean;
-}
-
-export function ConsultationForm({ submissionEnabled = false }: ConsultationFormProps) {
+export function ConsultationForm() {
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
@@ -21,7 +17,20 @@ export function ConsultationForm({ submissionEnabled = false }: ConsultationForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // API entegrasyonu aşamasında implement edilecek
+    
+    // Format the WhatsApp message
+    let messageBody = `Merhaba, SO3 PT için ön görüşme planlamak istiyorum.\n\nAd Soyad: ${formData.fullName}\nTelefon: ${formData.phone}\nİlgilendiğim Alan: ${formData.interest}`;
+    
+    if (formData.email) {
+      messageBody += `\nE-posta: ${formData.email}`;
+    }
+    if (formData.message) {
+      messageBody += `\nMesaj: ${formData.message}`;
+    }
+    
+    // Redirect to WhatsApp
+    const whatsappUrl = `https://wa.me/905523790777?text=${encodeURIComponent(messageBody)}`;
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -101,6 +110,8 @@ export function ConsultationForm({ submissionEnabled = false }: ConsultationForm
               <option value="Fitness">Fitness</option>
               <option value="Yoga & Pilates">Yoga & Pilates</option>
               <option value="Boks">Boks</option>
+              <option value="Beslenme / Uzman Diyetisyen">Beslenme / Uzman Diyetisyen</option>
+              <option value="Supplement Danışmanlığı">Supplement Danışmanlığı</option>
               <option value="Emin değilim">Emin değilim</option>
             </select>
             <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-[#0A0A0A]/50">
@@ -129,22 +140,10 @@ export function ConsultationForm({ submissionEnabled = false }: ConsultationForm
         <div className="mt-4 pt-6 border-t border-[#0A0A0A]/10">
           <button
             type="submit"
-            disabled={!submissionEnabled}
-            className={cn(
-              "w-full py-4 rounded text-sm font-semibold transition-all flex items-center justify-center gap-2",
-              submissionEnabled 
-                ? "bg-[#0A0A0A] text-white hover:bg-[#851C35]" 
-                : "bg-[#E5E3DB] text-[#0A0A0A]/50 cursor-not-allowed"
-            )}
+            className="w-full py-4 rounded text-sm font-semibold transition-all flex items-center justify-center gap-2 bg-[#25D366] text-white hover:bg-[#1EBE5A]"
           >
-            Ön Görüşme Talebi Gönder
+            WhatsApp'tan Ön Görüşme Planla
           </button>
-          
-          {!submissionEnabled && (
-            <p className="text-center text-xs text-[#0A0A0A]/50 mt-4 font-medium">
-              Online ön görüşme talebi yakında aktif olacak.
-            </p>
-          )}
         </div>
       </form>
     </div>

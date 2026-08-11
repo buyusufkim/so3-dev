@@ -12,6 +12,7 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 - Herkese açık sayfaların (Ana Sayfa, Branşlar, Eğitmenler, Topluluk, vb.) final tasarımlarıyla kodlanması.
 - SEO, erişilebilirlik ve performans optimizasyonları.
 - Animasyon ve geçişlerin premium hisse uygun entegrasyonu.
+- **Bekleyen Özellik (Pending):** Instagram automatic feed integration (Instagram gönderilerinin ana sayfaya otomatik aktarımı).
 
 ## Faz 2: Supabase Veri/Auth Güvenlik Temeli
 - Supabase (PostgreSQL, Auth, Storage) bağlantısının kurulması.

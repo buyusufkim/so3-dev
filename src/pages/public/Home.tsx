@@ -7,8 +7,9 @@ import { HomeBranches } from "@/features/marketing/home/HomeBranches";
 import { HomeTrainers } from "@/features/marketing/home/HomeTrainers";
 import { HomePerformance } from "@/features/marketing/home/HomePerformance";
 import { HomeCommunity } from "@/features/marketing/home/HomeCommunity";
+import { HomeInstagram } from "@/features/marketing/home/HomeInstagram";
 import { HomeTour } from "@/features/marketing/home/HomeTour";
-import { HomeFinalCta } from "@/features/marketing/home/HomeFinalCta";
+import { HomeContact } from "@/features/marketing/home/HomeContact";
 
 export function Home() {
   return (
@@ -22,8 +23,9 @@ export function Home() {
       <HomeTrainers />
       <HomePerformance />
       <HomeCommunity />
+      <HomeInstagram />
       <HomeTour />
-      <HomeFinalCta />
+      <HomeContact />
     </div>
   );
 }

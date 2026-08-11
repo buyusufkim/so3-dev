@@ -5,8 +5,8 @@ export function HomeTour() {
   const [isTourActive, setIsTourActive] = useState(false);
 
   return (
-    <section id="tour" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#050505] text-white scroll-mt-24 md:scroll-mt-28">
-      <div className="container mx-auto max-w-7xl">
+    <section id="tour" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#050505] bg-so3-grain text-white scroll-mt-24 md:scroll-mt-28">
+      <div className="container mx-auto max-w-7xl relative z-10">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-12 md:mb-16 gap-8">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3 mb-6 md:mb-8">
@@ -39,6 +39,7 @@ export function HomeTour() {
           className="aspect-video min-h-[400px]" 
           isActive={isTourActive} 
           onPlay={() => setIsTourActive(true)} 
+          coverImage="/media/so3/tour-cover.webp"
         />
       </div>
     </section>
