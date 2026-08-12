@@ -59,7 +59,7 @@ SO3, kalabalık bir spor salonunda kişinin kendi başına antrenman yaptığı 
 Tasarım, kişiselleştirme ve hizmet anlayışı premium algıyı kelimelerle bağırmadan, kendi duruşuyla hissettirmelidir.
 
 ## Public Platform - Onaylanmış Veriler
-- **Eğitmen Kadrosu:** Yusuf Açık, Mehmet Ateş, İrem, Gamze Arslan, Müniyra Karayağız, Almira Tektaş, Selami Özyıldırım, Selim Özyıldırım, Sencer Özyıldırım, Eren Sencer Öztürk, Hulusi Ünlü, Mehmet Katipoğlu (Uzman Diyetisyen).
+- **Eğitmen Kadrosu:** Selami Özyıldırım, Selim Özyıldırım, Sencer Özyıldırım, Burak Çorakçıoğlu, Eren Sencer Öztürk, Mehmet Katipoğlu (Fitness Eğitmeni · Uzman Diyetisyen), Hulusi Ünlü, Sahranur Sözer, Mehmet Ateş, Serhat Güler, Almira Tektaş, Müniyra Karayağız, İrem Bulut.
 - **İletişim & Lokasyon:** 
   - Adres: Yıldırım Beyazıt, Aşık Veysel Blv. No:69/4, 38030 Melikgazi / Kayseri
   - Telefon 1: 0553 957 37 38

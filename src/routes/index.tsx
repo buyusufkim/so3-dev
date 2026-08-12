@@ -1,13 +1,14 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { MainLayout } from "../components/layout/MainLayout";
 import { Home } from "../pages/public/Home";
-import { TourPage } from "../pages/public/TourPage";
 import { NotFound } from "../pages/NotFound";
+import { RouteErrorPage } from "../components/system/RouteErrorPage";
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <MainLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         index: true,
@@ -29,11 +30,6 @@ const router = createBrowserRouter([
       {
         path: "iletisim",
         element: <Navigate to="/#iletisim" replace />,
-      },
-      // Kept real pages
-      {
-        path: "360-tur",
-        element: <Navigate to="/#tour" replace />,
       },
       
       // 404 Fallback

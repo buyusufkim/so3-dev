@@ -2,23 +2,23 @@ export function HomeWhySO3() {
   const values = [
     {
       num: "01",
-      title: "Kişiye özel plan",
-      desc: "Herkes aynı hedefle başlamaz. Antrenman süreci de aynı olmak zorunda değildir."
+      title: "Birebir Takip",
+      desc: "Antrenmanın her anında antrenör gözetiminde her bir tekrarda en doğru ve sağlıklı sonuç"
     },
     {
       num: "02",
-      title: "Sana uygun antrenör",
-      desc: "Çalışmak istediğin alan ve ihtiyacına göre doğru eğitmenle ilerlersin."
+      title: "Kişiye Özel Program",
+      desc: "Kalıplaşmış antrenman programları değil, size özel hazırlanmış en verimli antrenman programı ile çalışın"
     },
     {
       num: "03",
-      title: "Birebir takip",
-      desc: "Programı alıp kendi başına kalmazsın. Süreç birlikte takip edilir."
+      title: "Özel Takip",
+      desc: "Antrenörün sadece salonda değil günlük beslenme, takviye kullanımı ve su tüketimini her öğün ilgiyle birebir WhatsApp üzerinden takip eder"
     },
     {
       num: "04",
-      title: "Sürekli uyarlama",
-      desc: "Sen geliştikçe antrenman süreci de seninle birlikte değişir."
+      title: "Sürekli Güncel",
+      desc: "Programın her ay düzenli ölçümlerle kişisel gelişimin ve vücut tipinize en uygun şekilde güncellenir."
     }
   ];
 

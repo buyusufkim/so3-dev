@@ -10,7 +10,7 @@ export function TourPage() {
       <TourHero />
       <section className="px-4 sm:px-6 lg:px-12 py-8 md:py-16">
         <div className="container mx-auto max-w-7xl">
-          <MatterportViewer className="aspect-video min-h-[420px] md:min-h-[500px]" coverImage="/media/so3/tour-cover.webp" />
+          <MatterportViewer className="aspect-video min-h-[420px] md:min-h-[500px]" />
         </div>
       </section>
       <TourGuidance />

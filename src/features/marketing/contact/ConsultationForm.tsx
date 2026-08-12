@@ -108,7 +108,8 @@ export function ConsultationForm() {
             >
               <option value="" disabled>Bir alan seç...</option>
               <option value="Fitness">Fitness</option>
-              <option value="Yoga & Pilates">Yoga & Pilates</option>
+              <option value="Yoga">Yoga</option>
+              <option value="Pilates">Pilates</option>
               <option value="Boks">Boks</option>
               <option value="Beslenme / Uzman Diyetisyen">Beslenme / Uzman Diyetisyen</option>
               <option value="Supplement Danışmanlığı">Supplement Danışmanlığı</option>

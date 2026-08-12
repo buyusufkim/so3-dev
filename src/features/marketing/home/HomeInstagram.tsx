@@ -1,42 +1,49 @@
 export function HomeInstagram() {
   return (
-    <section id="instagram" className="py-16 md:py-24 bg-white text-[#0A0A0A]">
-      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 bg-[#F4F1EB] rounded-lg border border-[#E5E3DB] p-8 md:p-12">
+    <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-white text-[#0A0A0A]">
+      <div className="container mx-auto max-w-7xl">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-3 mb-4 md:mb-6">
+            <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-                SO3 / INSTAGRAM
+                SO3 / REELS
               </span>
             </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight mb-4">
-              SO3'ü <span className="font-bold">takip et.</span>
+            <h2 className="text-4xl sm:text-5xl font-medium tracking-tight mb-6">
+              SO3'ü takip et.
             </h2>
-            <p className="text-base md:text-lg text-[#0A0A0A]/70 font-medium">
-              Antrenmanlar, eğitmenler ve SO3 topluluğundan güncel anlar için @so3pt.
+            <p className="text-lg text-[#0A0A0A]/70 font-medium">
+              Güncel motivasyon, antrenman kesitleri ve SO3 topluluğundan anlar için Instagram'da bize katılın.
             </p>
           </div>
-
-          <div className="shrink-0 w-full md:w-auto mt-4 md:mt-0">
+          
+          <div className="shrink-0 w-full md:w-auto">
             <a 
               href="https://www.instagram.com/so3pt/" 
               target="_blank" 
               rel="noopener noreferrer"
               className="group flex items-center justify-center bg-[#0A0A0A] text-white px-8 py-4 rounded text-sm font-semibold hover:bg-[#851C35] transition-colors w-full md:w-auto"
-              aria-label="SO3 PT Instagram"
             >
-              <span className="mr-3">@so3pt</span>
-              <span className="transform transition-transform group-hover:translate-x-1">→</span>
+              Instagram'da Takip Et
+              <svg className="ml-2 w-4 h-4 transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
             </a>
           </div>
         </div>
-        
-        {/* 
-          TODO: Real Instagram Professional API datasource will replace empty state 
-          after server-side credentials are configured.
-        */}
+
+        {/* Reels Placeholder Container - Ready for Future API Integration */}
+        <div className="w-full bg-[#F4F1EB] rounded-lg border border-[#E5E3DB] flex flex-col items-center justify-center p-12 text-center min-h-[300px]">
+           <svg className="w-12 h-12 text-[#0A0A0A]/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+             <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+             <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+             <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+           </svg>
+           <p className="text-sm font-medium text-[#0A0A0A]/50 max-w-sm">
+             En güncel Reels videolarımızı Instagram hesabımız üzerinden hemen izleyebilirsiniz.
+           </p>
+        </div>
       </div>
     </section>
   );

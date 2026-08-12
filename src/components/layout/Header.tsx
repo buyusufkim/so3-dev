@@ -3,24 +3,34 @@ import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-const NAV_LINKS = [
+const LEFT_NAV_LINKS = [
   { name: "SO3", path: "/#so3" },
   { name: "Branşlar", path: "/#branslar" },
-  { name: "Eğitmenler", path: "/#egitmenler" },
+  { name: "Ekip", path: "/#egitmenler" },
+];
+
+const RIGHT_NAV_LINKS = [
   { name: "Topluluk", path: "/#topluluk" },
   { name: "360° Tur", path: "/#tour" },
+];
+
+const MOBILE_NAV_LINKS = [
+  ...LEFT_NAV_LINKS,
+  ...RIGHT_NAV_LINKS
 ];
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+
   const isHomePage = location.pathname === "/";
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 80);
     };
+
     window.addEventListener("scroll", handleScroll);
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
@@ -36,19 +46,15 @@ export function Header() {
       )}
     >
       {/* Desktop Header */}
-      <div className="hidden lg:flex items-center justify-between mx-auto max-w-7xl px-6 lg:px-8 h-16 md:h-20 transition-all duration-300">
-        <div className="flex-shrink-0">
-          <Link to="/#so3" className="block hover:opacity-80 transition-opacity">
-            <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-8 md:h-10 lg:h-11 w-auto object-contain" />
-          </Link>
-        </div>
-
-        <nav className="flex items-center space-x-8">
-          {NAV_LINKS.map((link) => (
+      <div className="hidden lg:grid grid-cols-[1fr_auto_1fr] gap-10 xl:gap-16 items-center mx-auto max-w-7xl px-6 lg:px-8 h-16 lg:h-28 transition-all duration-300">
+        
+        {/* Left Navigation */}
+        <nav className="flex items-center justify-end space-x-8 xl:space-x-10">
+          {LEFT_NAV_LINKS.map((link) => (
             <Link
               key={link.name}
               to={link.path}
-              className="relative text-sm font-medium text-white/70 hover:text-white transition-colors group"
+              className="relative text-sm font-semibold text-white/70 hover:text-white transition-colors group tracking-wide"
             >
               {link.name}
               <span className="absolute -bottom-1 left-0 w-0 h-px bg-[#851C35] transition-all group-hover:w-full"></span>
@@ -56,8 +62,26 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center space-x-6">
-          <Link to="/#iletisim" className="group flex items-center bg-white text-black px-5 py-2.5 rounded text-sm font-semibold hover:bg-[#851C35] hover:text-white transition-all">
+        {/* Center Logo */}
+        <div className="flex justify-center items-center">
+          <Link to="/#so3" className="block hover:opacity-80 transition-opacity">
+            <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-16 lg:h-24 w-auto object-contain transition-all duration-300" />
+          </Link>
+        </div>
+
+        {/* Right Navigation */}
+        <div className="flex items-center justify-start space-x-8 xl:space-x-10">
+          {RIGHT_NAV_LINKS.map((link) => (
+            <Link
+              key={link.name}
+              to={link.path}
+              className="relative text-sm font-semibold text-white/70 hover:text-white transition-colors group tracking-wide"
+            >
+              {link.name}
+              <span className="absolute -bottom-1 left-0 w-0 h-px bg-[#851C35] transition-all group-hover:w-full"></span>
+            </Link>
+          ))}
+          <Link to="/#iletisim" className="group flex items-center bg-white text-black px-6 py-3 rounded text-sm font-bold tracking-wide hover:bg-[#851C35] hover:text-white transition-all">
             <span>Ön Görüşme</span>
           </Link>
         </div>
@@ -66,7 +90,7 @@ export function Header() {
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between h-16 px-5 transition-all duration-300">
         <Link to="/#so3" className="z-50 block">
-          <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-8 w-auto object-contain" />
+          <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-9 w-auto object-contain" />
         </Link>
         
         <button
@@ -90,7 +114,7 @@ export function Header() {
       )}>
         <div className="flex flex-col h-full px-6 pt-24 pb-12 overflow-y-auto">
           <nav className="flex flex-col space-y-6">
-            {NAV_LINKS.map((link) => (
+            {MOBILE_NAV_LINKS.map((link) => (
               <Link
                 key={link.name}
                 to={link.path}

@@ -1,0 +1,41 @@
+SO3 Phase 5.3 — Real Media Pack
+
+Upload ALL .webp files physically to:
+public/media/so3/
+
+Suggested mapping:
+
+YOGA GALLERY
+- branch-yoga-01.webp
+- branch-yoga-02.webp
+- branch-yoga-03.webp
+Existing /media/so3/discovery-yoga.webp can be used as the 4th Yoga image.
+
+BOKS GALLERY
+- branch-boxing-01.webp
+- branch-boxing-02.webp
+Existing:
+- /media/so3/branch-boxing.webp
+- /media/so3/discovery-boxing.webp
+Together these give 4 real Boks images.
+
+PILATES GALLERY
+- branch-pilates-01.webp
+Existing:
+- /media/so3/branch-yoga-pilates.webp
+Note: only verified Pilates-focused assets should be labeled Pilates.
+Do NOT use Yoga imagery as Pilates just to reach 3–4 images.
+If both existing files are the same/similar source, keep gallery shorter until more Pilates media arrives.
+
+COMMUNITY
+- community-nature-walk.webp -> Doğa Yürüyüşleri
+- community-kano.webp -> Kano Etkinlikleri
+- community-team-games.webp -> Takımlı Oyunlar
+- community-group-training.webp -> Salon İçi Toplu Antrenmanlar
+
+IMPORTANT
+- Remove old halı saha image from the highlighted Community mosaic.
+- Do not hotlink Google Drive.
+- Do not use these group photos as trainer portraits.
+- Keep trainer portraits as placeholders until name-confirmed portrait assets are supplied.
+- Preserve original people/scenes; no AI recreation.
