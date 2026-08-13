@@ -1,4 +1,9 @@
-import { useState, useEffect } from "react";
+import re
+
+with open('src/features/marketing/home/HomeCommunity.tsx', 'r') as f:
+    content = f.read()
+
+new_content = """import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { PublicEvent } from "../events/EventCard";
 
@@ -16,10 +21,9 @@ export function HomeCommunity() {
           setEvents(json.data.items);
         }
       } catch (err) {
-        // @ts-ignore
         if (import.meta.env.DEV) {
           import('../events/events.data').then(m => {
-             const featured = m.EVENTS_DATA.slice(0, 6);
+             const featured = m.EVENTS_DATA.filter(e => e.featured_on_home).slice(0, 6);
              setEvents(featured as unknown as PublicEvent[]);
           }).catch(console.error);
         }
@@ -95,3 +99,7 @@ export function HomeCommunity() {
     </section>
   );
 }
+"""
+
+with open('src/features/marketing/home/HomeCommunity.tsx', 'w') as f:
+    f.write(new_content)

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { getEventBySlug } from "../../features/marketing/events/events.data";
 import { NotFound } from "../NotFound";
 import { EventDetailHero } from "../../features/marketing/events/EventDetailHero";
 import { EventMediaWall } from "../../features/marketing/events/EventMediaWall";
@@ -24,33 +23,36 @@ export function EventDetailPage() {
       try {
         setLoading(true);
         const res = await fetch(`/api/public/events/${slug}`);
-        if (res.status === 404) {
-          const staticFallback = slug ? getEventBySlug(slug) : undefined;
-          if (staticFallback) {
-            setEvent(staticFallback);
-            setNotFound(false);
-          } else {
+        if (!res.ok) {
+          if (res.status === 404) {
             setNotFound(true);
+            return;
           }
-          return;
+          throw new Error("API Error");
         }
-        if (!res.ok) throw new Error("API Error");
-        const data = await res.json();
-        setEvent(data.data);
+        const json = await res.json();
+        setEvent(json.data);
         setNotFound(false);
       } catch (err) {
-        const staticFallback = slug ? getEventBySlug(slug) : undefined;
-        if (staticFallback) {
-          setEvent(staticFallback);
-          setNotFound(false);
+        // @ts-ignore
+        if (import.meta.env.DEV) {
+          import('../../features/marketing/events/events.data').then(m => {
+            const staticFallback = slug ? m.getEventBySlug(slug) : undefined;
+            if (staticFallback) {
+              setEvent(staticFallback);
+              setNotFound(false);
+            } else {
+              setNotFound(true);
+            }
+          }).catch(() => setNotFound(true));
         } else {
-          setNotFound(true);
+          setEvent(null);
         }
       } finally {
         setLoading(false);
       }
     }
-
+    
     fetchEventDetail();
   }, [slug]);
 
@@ -62,7 +64,7 @@ export function EventDetailPage() {
     );
   }
 
-  if (notFound || !event) {
+  if (notFound) {
     return (
       <>
         <PageSEO title="Etkinlik Bulunamadı | SO3 Personal Training" />
@@ -71,9 +73,17 @@ export function EventDetailPage() {
     );
   }
 
+  if (!event) {
+    return (
+      <main className="w-full flex items-center justify-center min-h-screen bg-[#0A0A0A] text-white">
+        <div className="text-red-400 font-medium">Etkinlik yüklenemedi.</div>
+      </main>
+    );
+  }
+
   const seoTitle = event.seo_title || `${event.title} | SO3 Personal Training`;
   const seoDescription = event.seo_description || event.excerpt || `${event.title} etkinliğinden SO3 topluluğuna ait gerçek fotoğraf ve video içeriklerini keşfedin.`;
-  const coverImg = event.cover_url || event.coverImage;
+  const coverImg = event.cover?.url || event.cover_url;
 
   return (
     <main className="w-full flex flex-col min-h-screen bg-white">
@@ -84,6 +94,7 @@ export function EventDetailPage() {
         ogType="article"
         ogImage={coverImg ? (coverImg.startsWith('http') ? coverImg : `https://so3pt.com.tr${coverImg}`) : undefined}
       />
+      
       <EventDetailHero event={event} />
 
       {(event.excerpt || event.content) && (
@@ -104,6 +115,7 @@ export function EventDetailPage() {
       <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 mt-12 md:mt-16">
         <EventMediaWall event={event} />
       </div>
+
       <EventRelated currentSlug={event.slug} />
     </main>
   );

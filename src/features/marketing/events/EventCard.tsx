@@ -1,25 +1,26 @@
 import { Link } from "react-router-dom";
-import { SO3Event } from "./events.data";
 
-export interface EventCardData {
+export interface PublicEvent {
   slug: string;
   title: string;
-  categoryLabel?: string;
   category_name?: string;
-  coverImage?: string | null;
   cover_url?: string | null;
   cover_thumbnail_url?: string | null;
+  cover_alt_text?: string | null;
+  excerpt?: string | null;
+  event_date?: string | null;
+  location?: string | null;
 }
 
 interface EventCardProps {
-  event: EventCardData;
+  event: PublicEvent;
   className?: string;
   isLarge?: boolean;
 }
 
 export function EventCard({ event, className = "", isLarge = false }: EventCardProps) {
-  const imageSrc = event.cover_thumbnail_url || event.cover_url || event.coverImage;
-  const category = event.category_name || event.categoryLabel || 'Etkinlik';
+  const imageSrc = event.cover_thumbnail_url || event.cover_url;
+  const category = event.category_name || 'Etkinlik';
 
   return (
     <Link 

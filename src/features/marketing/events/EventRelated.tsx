@@ -1,30 +1,35 @@
 import { useState, useEffect } from "react";
-import { getRelatedEvents } from "./events.data";
-import { EventCard, EventCardData } from "./EventCard";
+import { EventCard, PublicEvent } from "./EventCard";
 
 export function EventRelated({ currentSlug }: { currentSlug: string }) {
-  const [relatedEvents, setRelatedEvents] = useState<EventCardData[]>([]);
+  const [relatedEvents, setRelatedEvents] = useState<PublicEvent[]>([]);
 
   useEffect(() => {
     async function fetchRelated() {
       try {
         const res = await fetch('/api/public/events?limit=10');
         if (!res.ok) throw new Error('API Error');
-        const data = await res.json();
-
-        if (data.data && data.data.length > 0) {
-          const filtered = data.data
+        const json = await res.json();
+        if (json.data && json.data.items) {
+          const filtered = json.data.items
             .filter((e: any) => e.slug !== currentSlug)
             .slice(0, 3);
           setRelatedEvents(filtered);
         } else {
-          setRelatedEvents(getRelatedEvents(currentSlug, 3) as unknown as EventCardData[]);
+          setRelatedEvents([]);
         }
       } catch (err) {
-        setRelatedEvents(getRelatedEvents(currentSlug, 3) as unknown as EventCardData[]);
+        // @ts-ignore
+        if (import.meta.env.DEV) {
+          import('./events.data').then(m => {
+             setRelatedEvents(m.getRelatedEvents(currentSlug, 3) as unknown as PublicEvent[]);
+          }).catch(() => setRelatedEvents([]));
+        } else {
+          setRelatedEvents([]);
+        }
       }
     }
-
+    
     fetchRelated();
   }, [currentSlug]);
 

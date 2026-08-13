@@ -1,27 +1,31 @@
 import { useState, useEffect } from "react";
-import { EVENTS_DATA } from "./events.data";
-import { EventCard, EventCardData } from "./EventCard";
+import { EventCard, PublicEvent } from "./EventCard";
 
 export function EventArchive() {
-  const [events, setEvents] = useState<EventCardData[]>([]);
+  const [events, setEvents] = useState<PublicEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchEvents() {
       try {
+
         const res = await fetch('/api/public/events?limit=50');
         if (!res.ok) throw new Error('API Error');
         const data = await res.json();
-
-        if (data.data && data.data.length > 0) {
-          setEvents(data.data);
+        if (data.data && data.data.items) {
+          setEvents(data.data.items);
         } else {
-          // Fallback to static if no database records
-          setEvents(EVENTS_DATA as unknown as EventCardData[]);
+          setEvents([]);
         }
       } catch (err) {
-        setEvents(EVENTS_DATA as unknown as EventCardData[]);
+        // @ts-ignore
+        if (import.meta.env.DEV) {
+          import('./events.data').then(m => setEvents(m.EVENTS_DATA as unknown as PublicEvent[]));
+        } else {
+          setEvents([]);
+        }
       } finally {
+
         setLoading(false);
       }
     }

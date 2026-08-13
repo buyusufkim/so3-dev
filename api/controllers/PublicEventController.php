@@ -19,7 +19,7 @@ class PublicEventController {
         try {
             $stmt = $this->db->query("SELECT name, slug, description FROM event_categories WHERE status = 'active' ORDER BY sort_order ASC, name ASC");
             $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            Response::json(['data' => $categories]);
+            Response::json(['items' => $categories]);
         } catch (Exception $e) {
             Response::json(['error' => 'Kategoriler alınamadı.'], 500);
         }
@@ -81,7 +81,7 @@ class PublicEventController {
             }
 
             Response::json([
-                'data' => $events,
+                'items' => $events,
                 'meta' => [
                     'current_page' => $page,
                     'per_page' => $limit,
@@ -164,7 +164,7 @@ class PublicEventController {
                 $response['coverImage'] = $tempAsset['url'] ?? null;
             }
 
-            Response::json(['data' => $response]);
+            Response::json($response);
         } catch (Exception $e) {
             Response::json(['error' => 'Etkinlik alınamadı.'], 500);
         }

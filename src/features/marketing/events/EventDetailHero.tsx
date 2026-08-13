@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
-import { SO3Event } from "./events.data";
 
 export function EventDetailHero({ event }: { event: any }) {
-  const cover = event.cover_url || event.coverImage;
-  const category = event.category_name || event.categoryLabel || 'Etkinlik';
+  const cover = event.cover?.url || event.cover_url || event.coverImage;
+  const category = event.category?.name || event.category_name || 'Etkinlik';
 
   return (
     <section className="relative w-full">
@@ -11,7 +10,7 @@ export function EventDetailHero({ event }: { event: any }) {
         {cover ? (
           <img 
             src={cover} 
-            alt={event.title} 
+            alt={event.cover?.alt_text || event.title} 
             loading="eager" 
             fetchPriority="high"
             className="w-full h-full object-cover opacity-60" 
