@@ -18,7 +18,7 @@ export function normalizeStaticEventDetail(event: SO3Event): PublicEventDetail {
   const gallery: PublicEventMedia[] = [];
   
   if (event.gallery) {
-    event.gallery.forEach((g: any, i: number) => {
+    event.gallery.forEach((g, i) => {
       gallery.push({
         id: i,
         media_type: 'image',
@@ -29,7 +29,7 @@ export function normalizeStaticEventDetail(event: SO3Event): PublicEventDetail {
   }
   
   if (event.videos) {
-    event.videos.forEach((v: any, i: number) => {
+    event.videos.forEach((v, i) => {
       gallery.push({
         id: 1000 + i,
         media_type: 'video',
@@ -43,8 +43,6 @@ export function normalizeStaticEventDetail(event: SO3Event): PublicEventDetail {
     id: event.id || event.slug,
     slug: event.slug,
     title: event.title,
-    excerpt: (event as any).excerpt,
-    content: (event as any).content,
     category: {
       name: event.categoryLabel || 'Etkinlik',
       slug: 'etkinlik'

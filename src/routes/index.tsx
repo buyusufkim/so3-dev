@@ -11,6 +11,7 @@ import { RouteErrorPage } from "../components/system/RouteErrorPage";
 const AdminLayout = lazy(() => import("../admin/layouts/AdminLayout").then(m => ({ default: m.AdminLayout })));
 const Login = lazy(() => import("../admin/pages/Login").then(m => ({ default: m.Login })));
 const Dashboard = lazy(() => import("../admin/pages/Dashboard").then(m => ({ default: m.Dashboard })));
+const Homepage = lazy(() => import("../admin/pages/Homepage").then(m => ({ default: m.Homepage })));
 const MediaPage = lazy(() => import("../admin/pages/Media").then(m => ({ default: m.MediaPage })));
 const AdminEventsList = lazy(() => import("../admin/pages/events/AdminEventsList").then(m => ({ default: m.AdminEventsList })));
 const AdminEventEditor = lazy(() => import("../admin/pages/events/AdminEventEditor").then(m => ({ default: m.AdminEventEditor })));
@@ -72,6 +73,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <AdminSuspense><Dashboard /></AdminSuspense>,
+      },
+      {
+        path: "homepage",
+        element: <AdminSuspense><Homepage /></AdminSuspense>,
       },
       {
         path: "login",

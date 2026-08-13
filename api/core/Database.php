@@ -46,6 +46,36 @@ class Database
         return self::$instance;
     }
 
+    public function beginTransaction() {
+        return $this->pdo->beginTransaction();
+    }
+
+    public function commit() {
+        return $this->pdo->commit();
+    }
+
+    public function rollBack() {
+        return $this->pdo->rollBack();
+    }
+
+    public function inTransaction() {
+        return $this->pdo->inTransaction();
+    }
+
+    public function query($sql, $params = []) {
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    }
+
+    public function fetchAll($sql, $params = []) {
+        return $this->query($sql, $params)->fetchAll();
+    }
+
+    public function fetch($sql, $params = []) {
+        return $this->query($sql, $params)->fetch();
+    }
+
     public function getConnection()
     {
         return $this->pdo;

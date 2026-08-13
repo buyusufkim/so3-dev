@@ -97,6 +97,33 @@ if (isset($routes[$method][$requestUri])) {
     $matched = true;
 } else {
     // Dynamic matching for media endpoints
+    if (preg_match('#^/api/admin/homepage/sections$#', $requestUri)) {
+        AuthMiddleware::handle();
+        $controller = new ControllersAdminHomepageController();
+        if ($method === 'GET') {
+            $controller->index();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/homepage/sections/order$#', $requestUri)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new ControllersAdminHomepageController())->reorder();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/homepage/sections/([^/]+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            if ($matches[1] !== 'order') {
+                (new ControllersAdminHomepageController())->update($matches[1]);
+                $matched = true;
+            }
+        }
+    }
+
     if (preg_match('#^/api/admin/media/(\d+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         $id = (int)$matches[1];
@@ -113,6 +140,33 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
     
+    if (preg_match('#^/api/admin/homepage/sections$#', $requestUri)) {
+        AuthMiddleware::handle();
+        $controller = new ControllersAdminHomepageController();
+        if ($method === 'GET') {
+            $controller->index();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/homepage/sections/order$#', $requestUri)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new ControllersAdminHomepageController())->reorder();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/homepage/sections/([^/]+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            if ($matches[1] !== 'order') {
+                (new ControllersAdminHomepageController())->update($matches[1]);
+                $matched = true;
+            }
+        }
+    }
+
     if (preg_match('#^/api/admin/media/(\d+)/restore$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         if ($method === 'POST') {
