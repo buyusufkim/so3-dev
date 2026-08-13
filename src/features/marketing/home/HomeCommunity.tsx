@@ -20,9 +20,11 @@ export function HomeCommunity() {
         }
       } catch (err) {
         if (import.meta.env.DEV) {
-          import('../events/events.data').then(m => {
-             const featured = m.EVENTS_DATA.filter((e: any) => e.featured_on_home).slice(0, 6);
-             setEvents(featured as unknown as PublicEvent[]);
+          import('../events/events.data').then(async (m) => {
+             const { normalizeStaticEventList } = await import('../events/eventDevFallback');
+             const featured = m.EVENTS_DATA.filter((e) => e.featured);
+             const fallbackEvents = featured.length > 0 ? featured.slice(0, 6) : m.EVENTS_DATA.slice(0, 6);
+             setEvents(normalizeStaticEventList(fallbackEvents));
           }).catch(() => setError(true));
         } else {
           setError(true);
@@ -64,6 +66,8 @@ export function HomeCommunity() {
 
         {error ? (
           <div className="text-center py-12 text-[#0A0A0A]/40 font-medium">Etkinlikler şu anda görüntülenemiyor.</div>
+        ) : !loading && events.length === 0 ? (
+          <div className="text-center py-12 text-[#0A0A0A]/40 font-medium">Şu an için öne çıkan bir etkinlik bulunmuyor.</div>
         ) : !loading && events.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-2 gap-4 md:gap-6 mb-12 md:mb-16">
             {events.map((event, idx) => (

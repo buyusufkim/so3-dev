@@ -23,69 +23,48 @@ export function EventDetailPage() {
     async function fetchEventDetail() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/public/events/${slug}`);
-        if (!res.ok) {
-          if (res.status === 404) {
-            setNotFound(true);
-            return;
-          }
-          throw new Error("API Error");
-        }
-        const json = await res.json();
-        setEvent(json.data);
-        setNotFound(false);
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          import('../../features/marketing/events/events.data').then(m => {
-            const staticFallback = slug ? m.getEventBySlug(slug) : undefined;
-            if (staticFallback) {
-              
-              // Normalize to PublicEventDetail
-              const gallery: any[] = [];
-              if (staticFallback.gallery) {
-                 staticFallback.gallery.forEach((g: any, i: number) => {
-                    gallery.push({
-                       id: i,
-                       media_type: 'image',
-                       url: g.src,
-                       alt_text: g.alt
-                    });
-                 });
-              }
-              if (staticFallback.videos) {
-                 staticFallback.videos.forEach((v: any, i: number) => {
-                    gallery.push({
-                       id: 1000 + i,
-                       media_type: 'video',
-                       url: v.src,
-                       thumbnail_url: v.poster
-                    });
-                 });
-              }
+        let resolvedData: PublicEventDetail | null = null;
+        let isApi404 = false;
 
-              const normalized: PublicEventDetail = {
-                id: staticFallback.id || staticFallback.slug,
-                slug: staticFallback.slug,
-                title: staticFallback.title,
-                excerpt: (staticFallback as any).excerpt,
-                content: (staticFallback as any).content,
-                category: {
-                  name: staticFallback.categoryLabel || 'Etkinlik',
-                  slug: 'etkinlik'
-                },
-                cover: {
-                  url: staticFallback.coverImage || ''
-                },
-                gallery
-              };
-
-              setEvent(normalized);
-              setNotFound(false);
-            } else {
-              setNotFound(true);
+        try {
+          const res = await fetch(`/api/public/events/${slug}`);
+          if (res.ok) {
+            const json = await res.json();
+            resolvedData = json.data;
+          } else {
+            if (res.status === 404) {
+              isApi404 = true;
             }
-          }).catch(() => setNotFound(true));
-        } else {
+            throw new Error(isApi404 ? "Not Found" : "API Error");
+          }
+        } catch (apiErr) {
+          if (import.meta.env.DEV) {
+            // Attempt DEV static fallback
+            try {
+              const m = await import('../../features/marketing/events/events.data');
+              const staticFallback = m.getEventBySlug(slug as string);
+              if (staticFallback) {
+                const { normalizeStaticEventDetail } = await import('../../features/marketing/events/eventDevFallback');
+                resolvedData = normalizeStaticEventDetail(staticFallback);
+              } else {
+                setNotFound(true);
+                return;
+              }
+            } catch (fallbackErr) {
+              if (isApi404) setNotFound(true);
+            }
+          } else {
+            if (isApi404) {
+              setNotFound(true);
+              return;
+            }
+          }
+        }
+
+        if (resolvedData) {
+          setEvent(resolvedData);
+          setNotFound(false);
+        } else if (!isApi404 && !import.meta.env.DEV) {
           setEvent(null);
         }
       } finally {
@@ -123,7 +102,7 @@ export function EventDetailPage() {
 
   const seoTitle = event.seo_title || `${event.title} | SO3 Personal Training`;
   const seoDescription = event.seo_description || event.excerpt || `${event.title} etkinliğinden SO3 topluluğuna ait gerçek fotoğraf ve video içeriklerini keşfedin.`;
-  const coverImg = event.cover?.url || (event as any).cover_url;
+  const coverImg = event.cover?.url;
 
   return (
     <main className="w-full flex flex-col min-h-screen bg-white">

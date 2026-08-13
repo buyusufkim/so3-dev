@@ -20,9 +20,13 @@ export function EventRelated({ currentSlug }: { currentSlug: string }) {
         }
       } catch (err) {
         if (import.meta.env.DEV) {
-          import('./events.data').then(m => {
-             setRelatedEvents(m.getRelatedEvents(currentSlug, 3) as unknown as PublicEvent[]);
-          }).catch(() => setRelatedEvents([]));
+          try {
+            const m = await import('./events.data');
+            const { normalizeStaticEventList } = await import('./eventDevFallback');
+            setRelatedEvents(normalizeStaticEventList(m.getRelatedEvents(currentSlug, 3)));
+          } catch (fallbackErr) {
+            setRelatedEvents([]);
+          }
         } else {
           setRelatedEvents([]);
         }
@@ -50,7 +54,6 @@ export function EventRelated({ currentSlug }: { currentSlug: string }) {
             </h3>
           </div>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {relatedEvents.map((event, idx) => (
             <div key={event.slug || idx} className="h-[300px] md:h-[400px]">

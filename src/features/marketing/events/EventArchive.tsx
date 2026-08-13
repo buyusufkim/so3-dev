@@ -21,7 +21,13 @@ export function EventArchive() {
         }
       } catch (err) {
         if (import.meta.env.DEV) {
-          import('./events.data').then(m => setEvents(m.EVENTS_DATA as unknown as PublicEvent[])).catch(() => setError(true));
+          try {
+            const m = await import('./events.data');
+            const { normalizeStaticEventList } = await import('./eventDevFallback');
+            setEvents(normalizeStaticEventList(m.EVENTS_DATA));
+          } catch (fallbackErr) {
+            setError(true);
+          }
         } else {
           setError(true);
           setEvents([]);
