@@ -1,6 +1,61 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { featuredEvents as staticFeaturedEvents } from "../events/events.data";
+
+interface PublicEvent {
+  slug: string;
+  title: string;
+  excerpt: string;
+  category_name: string;
+  cover_url: string;
+  cover_thumbnail_url: string | null;
+  cover_alt_text: string | null;
+}
 
 export function HomeCommunity() {
+  const [events, setEvents] = useState<PublicEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    async function fetchFeaturedEvents() {
+      try {
+        const response = await fetch('/api/public/events?featured=1&limit=6');
+        if (!response.ok) throw new Error('API Error');
+        const data = await response.json();
+        
+        if (data.data && data.data.length > 0) {
+          setEvents(data.data);
+        } else {
+          setEvents([]);
+        }
+      } catch (err) {
+        console.error("Failed to load dynamic events, using fallback in dev");
+        setError(true);
+        if (import.meta.env.DEV) {
+          const mapped = staticFeaturedEvents.map(e => ({
+            slug: e.slug,
+            title: e.title,
+            excerpt: e.description,
+            category_name: e.category,
+            cover_url: e.image,
+            cover_thumbnail_url: e.image,
+            cover_alt_text: e.imageAlt || ''
+          }));
+          setEvents(mapped);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchFeaturedEvents();
+  }, []);
+
+  if (!loading && events.length === 0 && !import.meta.env.DEV) {
+    return null;
+  }
+
   return (
     <section id="topluluk" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28">
       <div className="container mx-auto max-w-7xl">
@@ -19,42 +74,45 @@ export function HomeCommunity() {
           </p>
         </div>
 
-        {/* Community Editorial Mosaic */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-2 gap-4 md:gap-6 lg:h-[460px] mb-12 md:mb-16">
-          
-          <div className="lg:col-span-5 lg:row-span-2 group relative rounded-md overflow-hidden bg-black h-[280px] lg:h-auto">
-            <img src="/media/so3/community-nature-walk.webp" alt="Doğa Yürüyüşü" loading="lazy" className="w-full h-full object-cover opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A]/80 via-[#0A0A0A]/10 to-transparent opacity-90 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 right-5 text-white pointer-events-none">
-              <span className="text-xs font-bold uppercase tracking-widest block drop-shadow-md">Doğa Yürüyüşleri</span>
-            </div>
+        {error && !import.meta.env.DEV && (
+          <div className="text-center py-12 text-[#0A0A0A]/50">
+            Etkinlikler şu anda görüntülenemiyor.
           </div>
-          
-          <div className="lg:col-span-3 lg:row-span-2 group relative rounded-md overflow-hidden bg-black h-[280px] lg:h-auto">
-            <img src="/media/so3/community-kano.webp" alt="Kano Etkinliği" loading="lazy" className="w-full h-full object-cover opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A]/80 via-[#0A0A0A]/10 to-transparent opacity-90 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 right-5 text-white pointer-events-none">
-              <span className="text-xs font-bold uppercase tracking-widest block drop-shadow-md">Kano Etkinlikleri</span>
-            </div>
-          </div>
-            
-          <div className="lg:col-span-4 lg:row-span-1 group relative rounded-md overflow-hidden bg-black h-[220px] lg:h-auto">
-            <img src="/media/so3/community-team-games.webp" alt="Takımlı Oyunlar" loading="lazy" className="w-full h-full object-cover opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A]/80 via-[#0A0A0A]/10 to-transparent opacity-90 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 right-5 text-white pointer-events-none">
-              <span className="text-xs font-bold uppercase tracking-widest block drop-shadow-md">Takımlı Oyunlar<br/><span className="text-[10px] text-white/70 block mt-0.5">Voleybol · Futbol</span></span>
-            </div>
-          </div>
-          
-          <div className="lg:col-span-4 lg:row-span-1 group relative rounded-md overflow-hidden bg-black h-[220px] lg:h-auto">
-            <img src="/media/so3/community-group-training.webp" alt="Salon İçi Toplu Antrenmanlar" loading="lazy" className="w-full h-full object-cover object-[center_60%] opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A]/80 via-[#0A0A0A]/10 to-transparent opacity-90 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-            <div className="absolute bottom-5 left-5 right-5 text-white pointer-events-none">
-              <span className="text-xs font-bold uppercase tracking-widest block drop-shadow-md">Salon İçi<br/>Toplu Antrenmanlar</span>
-            </div>
-          </div>
+        )}
 
-        </div>
+        {!error || import.meta.env.DEV ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 mb-12 md:mb-16">
+            {events.map((event) => (
+              <Link 
+                key={event.slug}
+                to={`/etkinlikler/${event.slug}`}
+                className="group flex flex-col focus:outline-none"
+              >
+                <div className="relative aspect-[4/3] rounded-md overflow-hidden bg-black mb-6">
+                  <img 
+                    src={event.cover_thumbnail_url || event.cover_url} 
+                    alt={event.cover_alt_text || ""} 
+                    loading="lazy" 
+                    className="w-full h-full object-cover opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" 
+                  />
+                  <div className="absolute top-4 left-4">
+                    <span className="px-3 py-1 bg-white/90 backdrop-blur-sm text-[#0A0A0A] text-[10px] font-bold tracking-wider uppercase rounded-sm">
+                      {event.category_name}
+                    </span>
+                  </div>
+                </div>
+                <h3 className="text-xl md:text-2xl font-bold text-[#0A0A0A] mb-3 group-hover:text-[#851C35] transition-colors leading-tight">
+                  {event.title}
+                </h3>
+                {event.excerpt && (
+                  <p className="text-[#0A0A0A]/70 line-clamp-2">
+                    {event.excerpt}
+                  </p>
+                )}
+              </Link>
+            ))}
+          </div>
+        ) : null}
 
         <div className="flex justify-center">
           <Link 

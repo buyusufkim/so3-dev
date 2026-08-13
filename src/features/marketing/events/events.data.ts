@@ -57,18 +57,13 @@ export const EVENTS_DATA: SO3Event[] = [
       { src: "/media/so3/events/kano-etkinligi/gallery/08.webp", alt: "SO3 kano etkinliğinden bir an", orientation: "portrait" },
       { src: "/media/so3/events/kano-etkinligi/gallery/09.webp", alt: "SO3 kano etkinliğinden bir an", orientation: "portrait" }
     ],
-    videos: [
-      { src: "/media/so3/events/kano-etkinligi/video/01.mp4", poster: "/media/so3/events/kano-etkinligi/video/01-poster.webp", orientation: "portrait" },
-      { src: "/media/so3/events/kano-etkinligi/video/02.mp4", poster: "/media/so3/events/kano-etkinligi/video/02-poster.webp", orientation: "portrait" }
-    ],
+    videos: [],
     mediaStory: [
       { type: "image", index: 0 },
-      { type: "video", index: 0 },
       { type: "image", index: 1 },
       { type: "image", index: 2 },
       { type: "image", index: 3 },
       { type: "image", index: 4 },
-      { type: "video", index: 1 },
       { type: "image", index: 5 },
       { type: "image", index: 6 },
       { type: "image", index: 7 },
@@ -91,13 +86,10 @@ export const EVENTS_DATA: SO3Event[] = [
       { src: "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/06.webp", alt: "SO3 Gomeda Vadisi yürüyüşünden bir an", orientation: "portrait" },
       { src: "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/07.webp", alt: "SO3 Gomeda Vadisi yürüyüşünden bir an", orientation: "portrait" }
     ],
-    videos: [
-      { src: "/media/so3/events/gomeda-vadisi-yuruyusu/video/01.mp4", poster: "/media/so3/events/gomeda-vadisi-yuruyusu/video/01-poster.webp", orientation: "portrait" }
-    ],
+    videos: [],
     mediaStory: [
       { type: "image", index: 0 },
       { type: "image", index: 1 },
-      { type: "video", index: 0 },
       { type: "image", index: 2 },
       { type: "image", index: 3 },
       { type: "image", index: 4 },
@@ -146,12 +138,9 @@ export const EVENTS_DATA: SO3Event[] = [
       { src: "/media/so3/events/voleybol-etkinligi/gallery/06.webp", alt: "SO3 voleybol etkinliğinden bir an", orientation: "portrait" },
       { src: "/media/so3/events/voleybol-etkinligi/gallery/07.webp", alt: "SO3 voleybol etkinliğinden bir an", orientation: "portrait" }
     ],
-    videos: [
-      { src: "/media/so3/events/voleybol-etkinligi/video/01.mp4", poster: "/media/so3/events/voleybol-etkinligi/video/01-poster.webp", orientation: "portrait" }
-    ],
+    videos: [],
     mediaStory: [
       { type: "image", index: 0 },
-      { type: "video", index: 0 },
       { type: "image", index: 1 },
       { type: "image", index: 2 },
       { type: "image", index: 3 },
@@ -197,13 +186,10 @@ export const EVENTS_DATA: SO3Event[] = [
       { src: "/media/so3/events/mobilite-grup-dersi/gallery/04.webp", alt: "SO3 mobilite grup dersinden bir an", orientation: "portrait" },
       { src: "/media/so3/events/mobilite-grup-dersi/gallery/05.webp", alt: "SO3 mobilite grup dersinden bir an", orientation: "portrait" }
     ],
-    videos: [
-      { src: "/media/so3/events/mobilite-grup-dersi/video/01.mp4", poster: "/media/so3/events/mobilite-grup-dersi/video/01-poster.webp", orientation: "portrait" }
-    ],
+    videos: [],
     mediaStory: [
       { type: "image", index: 0 },
       { type: "image", index: 1 },
-      { type: "video", index: 0 },
       { type: "image", index: 2 },
       { type: "image", index: 3 },
       { type: "image", index: 4 }

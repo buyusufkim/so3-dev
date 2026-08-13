@@ -47,13 +47,18 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
   const resolvedItems: ResolvedStoryItem[] = [];
   
   if (event.mediaStory) {
-    event.mediaStory.forEach((item) => {
-      if (item.type === "image") {
+    event.mediaStory.forEach((item: any) => {
+      if (item.type === "image" && event.gallery) {
         const image = event.gallery[item.index];
         if (image) {
-          resolvedItems.push({ type: "image", src: image.src, alt: image.alt, index: item.index });
+          resolvedItems.push({ 
+            type: "image", 
+            src: (image as any).url || image.src, 
+            alt: (image as any).alt_text || image.alt || "", 
+            index: item.index 
+          });
         }
-      } else if (item.type === "video") {
+      } else if (item.type === "video" && event.videos) {
         const video = event.videos[item.index];
         if (video && video.poster) {
           resolvedItems.push({ type: "video", src: video.src, poster: video.poster, index: item.index });
@@ -61,15 +66,38 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
       }
     });
   } else {
-    // Fallback: all images, then videos
-    event.gallery.forEach((image, i) => {
-      resolvedItems.push({ type: "image", src: image.src, alt: image.alt, index: i });
-    });
-    event.videos.forEach((video, i) => {
-      if (video.poster) {
-        resolvedItems.push({ type: "video", src: video.src, poster: video.poster, index: i });
-      }
-    });
+    // Fallback: all images/gallery items, then videos
+    if (event.gallery) {
+      event.gallery.forEach((item: any, i: number) => {
+        const src = item.url || item.src;
+        const alt = item.alt_text || item.alt || "";
+        const type = item.media_type || "image";
+        
+        if (type === "video" || item.src?.endsWith('.mp4')) {
+          resolvedItems.push({ 
+            type: "video", 
+            src: item.url || item.src, 
+            poster: item.thumbnail_url || item.poster || item.url || item.src, 
+            index: i 
+          });
+        } else if (src) {
+          resolvedItems.push({ 
+            type: "image", 
+            src: src, 
+            alt: alt, 
+            index: i 
+          });
+        }
+      });
+    }
+
+    if (event.videos) {
+      event.videos.forEach((video: any, i: number) => {
+        if (video.poster) {
+          resolvedItems.push({ type: "video", src: video.src, poster: video.poster, index: i });
+        }
+      });
+    }
   }
 
   if (resolvedItems.length === 0) return null;

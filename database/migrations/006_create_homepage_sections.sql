@@ -1,0 +1,9 @@
+CREATE TABLE `homepage_sections` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `section_id` VARCHAR(50) NOT NULL UNIQUE,
+  `content_json` JSON NOT NULL,
+  `is_active` TINYINT(1) DEFAULT 1,
+  `updated_by` INT NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,10 +1,25 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { MainLayout } from "../components/layout/MainLayout";
 import { Home } from "../pages/public/Home";
 import { EventsPage } from "../pages/public/EventsPage";
 import { EventDetailPage } from "../pages/public/EventDetailPage";
 import { NotFound } from "../pages/NotFound";
 import { RouteErrorPage } from "../components/system/RouteErrorPage";
+
+// Lazy load admin modules
+const AdminLayout = lazy(() => import("../admin/layouts/AdminLayout").then(m => ({ default: m.AdminLayout })));
+const Login = lazy(() => import("../admin/pages/Login").then(m => ({ default: m.Login })));
+const Dashboard = lazy(() => import("../admin/pages/Dashboard").then(m => ({ default: m.Dashboard })));
+const MediaPage = lazy(() => import("../admin/pages/Media").then(m => ({ default: m.MediaPage })));
+const AdminEventsList = lazy(() => import("../admin/pages/events/AdminEventsList").then(m => ({ default: m.AdminEventsList })));
+const AdminEventEditor = lazy(() => import("../admin/pages/events/AdminEventEditor").then(m => ({ default: m.AdminEventEditor })));
+
+const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
+  <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
+    {children}
+  </Suspense>
+);
 
 const router = createBrowserRouter([
   {
@@ -49,6 +64,37 @@ const router = createBrowserRouter([
       },
     ],
   },
+  {
+    path: "/admin",
+    element: <AdminSuspense><AdminLayout /></AdminSuspense>,
+    errorElement: <RouteErrorPage />,
+    children: [
+      {
+        index: true,
+        element: <AdminSuspense><Dashboard /></AdminSuspense>,
+      },
+      {
+        path: "login",
+        element: <AdminSuspense><Login /></AdminSuspense>,
+      },
+      {
+        path: "media",
+        element: <AdminSuspense><MediaPage /></AdminSuspense>,
+      },
+      {
+        path: "events",
+        element: <AdminSuspense><AdminEventsList /></AdminSuspense>,
+      },
+      {
+        path: "events/new",
+        element: <AdminSuspense><AdminEventEditor /></AdminSuspense>,
+      },
+      {
+        path: "events/:id",
+        element: <AdminSuspense><AdminEventEditor /></AdminSuspense>,
+      },
+    ]
+  }
 ]);
 
 export function AppRouter() {

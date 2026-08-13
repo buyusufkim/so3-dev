@@ -1,22 +1,35 @@
 import { Link } from "react-router-dom";
 import { SO3Event } from "./events.data";
 
+export interface EventCardData {
+  slug: string;
+  title: string;
+  categoryLabel?: string;
+  category_name?: string;
+  coverImage?: string | null;
+  cover_url?: string | null;
+  cover_thumbnail_url?: string | null;
+}
+
 interface EventCardProps {
-  event: SO3Event;
+  event: EventCardData;
   className?: string;
   isLarge?: boolean;
 }
 
 export function EventCard({ event, className = "", isLarge = false }: EventCardProps) {
+  const imageSrc = event.cover_thumbnail_url || event.cover_url || event.coverImage;
+  const category = event.category_name || event.categoryLabel || 'Etkinlik';
+
   return (
     <Link 
       to={`/etkinlikler/${event.slug}`}
       className={`group relative flex flex-col overflow-hidden bg-brand-black rounded-md ${className}`}
     >
       <div className="absolute inset-0 z-0">
-        {event.coverImage ? (
+        {imageSrc ? (
           <img 
-            src={event.coverImage} 
+            src={imageSrc} 
             alt={event.title} 
             loading="lazy" 
             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-700 group-hover:scale-105" 
@@ -34,7 +47,7 @@ export function EventCard({ event, className = "", isLarge = false }: EventCardP
         <div className="flex items-center gap-3 mb-2">
           <span className="w-1 h-1 rounded-full bg-[#851C35]"></span>
           <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-            {event.categoryLabel}
+            {category}
           </span>
         </div>
         

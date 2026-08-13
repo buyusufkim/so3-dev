@@ -1,13 +1,16 @@
 import { Link } from "react-router-dom";
 import { SO3Event } from "./events.data";
 
-export function EventDetailHero({ event }: { event: SO3Event }) {
+export function EventDetailHero({ event }: { event: any }) {
+  const cover = event.cover_url || event.coverImage;
+  const category = event.category_name || event.categoryLabel || 'Etkinlik';
+
   return (
     <section className="relative w-full">
       <div className="absolute inset-0 z-0 bg-brand-black">
-        {event.coverImage ? (
+        {cover ? (
           <img 
-            src={event.coverImage} 
+            src={cover} 
             alt={event.title} 
             loading="eager" 
             fetchPriority="high"
@@ -32,7 +35,7 @@ export function EventDetailHero({ event }: { event: SO3Event }) {
         <div className="flex items-center gap-3 mb-6 md:mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
           <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/70">
-            {event.categoryLabel}
+            {category}
           </span>
         </div>
         

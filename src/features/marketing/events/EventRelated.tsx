@@ -1,8 +1,32 @@
+import { useState, useEffect } from "react";
 import { getRelatedEvents } from "./events.data";
-import { EventCard } from "./EventCard";
+import { EventCard, EventCardData } from "./EventCard";
 
 export function EventRelated({ currentSlug }: { currentSlug: string }) {
-  const relatedEvents = getRelatedEvents(currentSlug, 3);
+  const [relatedEvents, setRelatedEvents] = useState<EventCardData[]>([]);
+
+  useEffect(() => {
+    async function fetchRelated() {
+      try {
+        const res = await fetch('/api/public/events?limit=10');
+        if (!res.ok) throw new Error('API Error');
+        const data = await res.json();
+
+        if (data.data && data.data.length > 0) {
+          const filtered = data.data
+            .filter((e: any) => e.slug !== currentSlug)
+            .slice(0, 3);
+          setRelatedEvents(filtered);
+        } else {
+          setRelatedEvents(getRelatedEvents(currentSlug, 3) as unknown as EventCardData[]);
+        }
+      } catch (err) {
+        setRelatedEvents(getRelatedEvents(currentSlug, 3) as unknown as EventCardData[]);
+      }
+    }
+
+    fetchRelated();
+  }, [currentSlug]);
 
   if (relatedEvents.length === 0) return null;
 
@@ -24,8 +48,8 @@ export function EventRelated({ currentSlug }: { currentSlug: string }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          {relatedEvents.map(event => (
-            <div key={event.id} className="h-[300px] md:h-[400px]">
+          {relatedEvents.map((event, idx) => (
+            <div key={event.slug || idx} className="h-[300px] md:h-[400px]">
               <EventCard event={event} className="w-full h-full" />
             </div>
           ))}
