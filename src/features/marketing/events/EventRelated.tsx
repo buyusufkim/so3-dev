@@ -19,7 +19,6 @@ export function EventRelated({ currentSlug }: { currentSlug: string }) {
           setRelatedEvents([]);
         }
       } catch (err) {
-        // @ts-ignore
         if (import.meta.env.DEV) {
           import('./events.data').then(m => {
              setRelatedEvents(m.getRelatedEvents(currentSlug, 3) as unknown as PublicEvent[]);

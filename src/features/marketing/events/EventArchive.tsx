@@ -4,11 +4,13 @@ import { EventCard, PublicEvent } from "./EventCard";
 export function EventArchive() {
   const [events, setEvents] = useState<PublicEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     async function fetchEvents() {
       try {
-
+        setLoading(true);
+        setError(false);
         const res = await fetch('/api/public/events?limit=50');
         if (!res.ok) throw new Error('API Error');
         const data = await res.json();
@@ -18,18 +20,16 @@ export function EventArchive() {
           setEvents([]);
         }
       } catch (err) {
-        // @ts-ignore
         if (import.meta.env.DEV) {
-          import('./events.data').then(m => setEvents(m.EVENTS_DATA as unknown as PublicEvent[]));
+          import('./events.data').then(m => setEvents(m.EVENTS_DATA as unknown as PublicEvent[])).catch(() => setError(true));
         } else {
+          setError(true);
           setEvents([]);
         }
       } finally {
-
         setLoading(false);
       }
     }
-
     fetchEvents();
   }, []);
 
@@ -50,6 +50,8 @@ export function EventArchive() {
 
         {loading ? (
           <div className="text-center py-16 text-[#0A0A0A]/40">Etkinlikler yükleniyor...</div>
+        ) : error ? (
+          <div className="text-center py-16 text-[#0A0A0A]/40">Etkinlikler şu anda görüntülenemiyor.</div>
         ) : events.length === 0 ? (
           <div className="text-center py-16 text-[#0A0A0A]/40">Henüz yayınlanmış bir etkinlik bulunmuyor.</div>
         ) : (
@@ -85,7 +87,6 @@ export function EventArchive() {
             )}
           </>
         )}
-
       </div>
     </section>
   );

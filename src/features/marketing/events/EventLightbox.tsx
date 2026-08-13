@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { EventMedia } from "./events.data";
+import { PublicEventMedia } from "./publicEvent.types";
 
 interface EventLightboxProps {
   isOpen: boolean;
   onClose: () => void;
-  images: EventMedia[];
+  images: PublicEventMedia[];
   title: string;
   initialIndex?: number;
 }
@@ -96,8 +96,8 @@ export function EventLightbox({ isOpen, onClose, images, title, initialIndex = 0
       <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4 md:p-12" onClick={handleBackdropClick}>
         {currentImage ? (
           <img 
-            src={(currentImage as any).url || currentImage.src} 
-            alt={(currentImage as any).alt_text || currentImage.alt || `${title} - Görsel ${safeIndex + 1}`} 
+            src={currentImage.url} 
+            alt={currentImage.alt_text || `${title} - Görsel ${safeIndex + 1}`} 
             className="max-w-full max-h-full object-contain select-none" 
           />
         ) : null}

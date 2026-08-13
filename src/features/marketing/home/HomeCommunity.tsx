@@ -5,10 +5,13 @@ import { PublicEvent } from "../events/EventCard";
 export function HomeCommunity() {
   const [events, setEvents] = useState<PublicEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     async function fetchEvents() {
       try {
+        setLoading(true);
+        setError(false);
         const res = await fetch('/api/public/events?featured=1&limit=6');
         if (!res.ok) throw new Error('API Error');
         const json = await res.json();
@@ -16,17 +19,19 @@ export function HomeCommunity() {
           setEvents(json.data.items);
         }
       } catch (err) {
-        // @ts-ignore
         if (import.meta.env.DEV) {
           import('../events/events.data').then(m => {
-             const featured = m.EVENTS_DATA.slice(0, 6);
+             const featured = m.EVENTS_DATA.filter((e: any) => e.featured_on_home).slice(0, 6);
              setEvents(featured as unknown as PublicEvent[]);
-          }).catch(console.error);
+          }).catch(() => setError(true));
+        } else {
+          setError(true);
         }
       } finally {
         setLoading(false);
       }
     }
+    
     fetchEvents();
   }, []);
 
@@ -57,7 +62,9 @@ export function HomeCommunity() {
           </p>
         </div>
 
-        {!loading && events.length > 0 && (
+        {error ? (
+          <div className="text-center py-12 text-[#0A0A0A]/40 font-medium">Etkinlikler şu anda görüntülenemiyor.</div>
+        ) : !loading && events.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-2 gap-4 md:gap-6 mb-12 md:mb-16">
             {events.map((event, idx) => (
               <Link 

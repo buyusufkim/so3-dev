@@ -5,10 +5,11 @@ import { EventDetailHero } from "../../features/marketing/events/EventDetailHero
 import { EventMediaWall } from "../../features/marketing/events/EventMediaWall";
 import { EventRelated } from "../../features/marketing/events/EventRelated";
 import { PageSEO } from "@/components/seo/PageSEO";
+import { PublicEventDetail } from "../../features/marketing/events/publicEvent.types";
 
 export function EventDetailPage() {
   const { slug } = useParams<{ slug: string }>();
-  const [event, setEvent] = useState<any>(null);
+  const [event, setEvent] = useState<PublicEventDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -34,12 +35,51 @@ export function EventDetailPage() {
         setEvent(json.data);
         setNotFound(false);
       } catch (err) {
-        // @ts-ignore
         if (import.meta.env.DEV) {
           import('../../features/marketing/events/events.data').then(m => {
             const staticFallback = slug ? m.getEventBySlug(slug) : undefined;
             if (staticFallback) {
-              setEvent(staticFallback);
+              
+              // Normalize to PublicEventDetail
+              const gallery: any[] = [];
+              if (staticFallback.gallery) {
+                 staticFallback.gallery.forEach((g: any, i: number) => {
+                    gallery.push({
+                       id: i,
+                       media_type: 'image',
+                       url: g.src,
+                       alt_text: g.alt
+                    });
+                 });
+              }
+              if (staticFallback.videos) {
+                 staticFallback.videos.forEach((v: any, i: number) => {
+                    gallery.push({
+                       id: 1000 + i,
+                       media_type: 'video',
+                       url: v.src,
+                       thumbnail_url: v.poster
+                    });
+                 });
+              }
+
+              const normalized: PublicEventDetail = {
+                id: staticFallback.id || staticFallback.slug,
+                slug: staticFallback.slug,
+                title: staticFallback.title,
+                excerpt: (staticFallback as any).excerpt,
+                content: (staticFallback as any).content,
+                category: {
+                  name: staticFallback.categoryLabel || 'Etkinlik',
+                  slug: 'etkinlik'
+                },
+                cover: {
+                  url: staticFallback.coverImage || ''
+                },
+                gallery
+              };
+
+              setEvent(normalized);
               setNotFound(false);
             } else {
               setNotFound(true);
@@ -83,7 +123,7 @@ export function EventDetailPage() {
 
   const seoTitle = event.seo_title || `${event.title} | SO3 Personal Training`;
   const seoDescription = event.seo_description || event.excerpt || `${event.title} etkinliğinden SO3 topluluğuna ait gerçek fotoğraf ve video içeriklerini keşfedin.`;
-  const coverImg = event.cover?.url || event.cover_url;
+  const coverImg = event.cover?.url || (event as any).cover_url;
 
   return (
     <main className="w-full flex flex-col min-h-screen bg-white">

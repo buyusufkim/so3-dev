@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { EventVideo } from "./events.data";
+import { PublicEventMedia } from "./publicEvent.types";
 import { X } from "lucide-react";
 
 type EventVideoModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  video: EventVideo | null;
+  video: PublicEventMedia | null;
 };
 
 export function EventVideoModal({ isOpen, onClose, video }: EventVideoModalProps) {
@@ -20,6 +20,7 @@ export function EventVideoModal({ isOpen, onClose, video }: EventVideoModalProps
       document.body.style.overflow = "";
       if (videoRef.current) {
         videoRef.current.pause();
+        videoRef.current.currentTime = 0;
       }
       // Delay unmount to allow transition
       const timer = setTimeout(() => setMounted(false), 300);
@@ -58,10 +59,11 @@ export function EventVideoModal({ isOpen, onClose, video }: EventVideoModalProps
         >
           <X className="w-8 h-8" />
         </button>
+
         <video
           ref={videoRef}
-          src={video.src}
-          poster={video.poster}
+          src={video.url}
+          poster={video.thumbnail_url || undefined}
           controls
           playsInline
           preload="metadata"

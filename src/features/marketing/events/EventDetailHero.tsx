@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
+import { PublicEventDetail } from "./publicEvent.types";
 
-export function EventDetailHero({ event }: { event: any }) {
-  const cover = event.cover?.url || event.cover_url || event.coverImage;
-  const category = event.category?.name || event.category_name || 'Etkinlik';
+export function EventDetailHero({ event }: { event: PublicEventDetail }) {
+  const cover = event.cover?.url || (event as any).cover_url || (event as any).coverImage;
+  const category = event.category?.name || (event as any).category_name || 'Etkinlik';
 
   return (
     <section className="relative w-full">

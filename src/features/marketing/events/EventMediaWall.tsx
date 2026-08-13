@@ -1,16 +1,12 @@
 import { useState } from "react";
-import { SO3Event, EventStoryItem } from "./events.data";
+import { PublicEventDetail, PublicEventMedia } from "./publicEvent.types";
 import { Play } from "lucide-react";
 import { EventLightbox } from "./EventLightbox";
 import { EventVideoModal } from "./EventVideoModal";
 
 type EventMediaWallProps = {
-  event: SO3Event;
+  event: PublicEventDetail;
 };
-
-type ResolvedStoryItem = 
-  | { type: "image"; src: string; alt: string; index: number }
-  | { type: "video"; src: string; poster: string; index: number };
 
 const getItemClasses = (index: number) => {
   const isMobileFull = index % 3 === 0;
@@ -41,66 +37,11 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   
   const [videoModalOpen, setVideoModalOpen] = useState(false);
-  const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
+  const [activeVideo, setActiveVideo] = useState<PublicEventMedia | null>(null);
 
-  // 1. Resolve Story Sequence
-  const resolvedItems: ResolvedStoryItem[] = [];
-  
-  if (event.mediaStory) {
-    event.mediaStory.forEach((item: any) => {
-      if (item.type === "image" && event.gallery) {
-        const image = event.gallery[item.index];
-        if (image) {
-          resolvedItems.push({ 
-            type: "image", 
-            src: (image as any).url || image.src, 
-            alt: (image as any).alt_text || image.alt || "", 
-            index: item.index 
-          });
-        }
-      } else if (item.type === "video" && event.videos) {
-        const video = event.videos[item.index];
-        if (video && video.poster) {
-          resolvedItems.push({ type: "video", src: video.src, poster: video.poster, index: item.index });
-        }
-      }
-    });
-  } else {
-    // Fallback: all images/gallery items, then videos
-    if (event.gallery) {
-      event.gallery.forEach((item: any, i: number) => {
-        const src = item.url || item.src;
-        const alt = item.alt_text || item.alt || "";
-        const type = item.media_type || "image";
-        
-        if (type === "video" || item.src?.endsWith('.mp4')) {
-          resolvedItems.push({ 
-            type: "video", 
-            src: item.url || item.src, 
-            poster: item.thumbnail_url || item.poster || item.url || item.src, 
-            index: i 
-          });
-        } else if (src) {
-          resolvedItems.push({ 
-            type: "image", 
-            src: src, 
-            alt: alt, 
-            index: i 
-          });
-        }
-      });
-    }
+  if (!event.gallery || event.gallery.length === 0) return null;
 
-    if (event.videos) {
-      event.videos.forEach((video: any, i: number) => {
-        if (video.poster) {
-          resolvedItems.push({ type: "video", src: video.src, poster: video.poster, index: i });
-        }
-      });
-    }
-  }
-
-  if (resolvedItems.length === 0) return null;
+  const images = event.gallery.filter((m) => m.media_type === "image");
 
   return (
     <section className="mb-16 md:mb-24">
@@ -111,23 +52,25 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
       </div>
 
       <div className="grid grid-cols-12 gap-3 md:gap-4">
-        {resolvedItems.map((item, index) => {
+        {event.gallery.map((item, index) => {
           const className = getItemClasses(index);
 
-          if (item.type === "image") {
+          if (item.media_type === "image") {
+            const imageLightboxIndex = images.findIndex((img) => img.id === item.id);
+            
             return (
               <button
                 key={`story-${index}`}
                 className={className}
                 onClick={() => {
-                  setLightboxIndex(item.index);
+                  setLightboxIndex(imageLightboxIndex >= 0 ? imageLightboxIndex : 0);
                   setLightboxOpen(true);
                 }}
                 aria-label="Görseli büyüt"
               >
                 <img
-                  src={item.src}
-                  alt={item.alt}
+                  src={item.thumbnail_url || item.url}
+                  alt={item.alt_text || event.title}
                   loading="lazy"
                   className="w-full h-full object-cover transition-transform duration-500 md:group-hover:scale-[1.03]"
                 />
@@ -136,137 +79,140 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
             );
           }
 
-          if (item.type === "video") {
-  return (
-    <div
-      key={`story-${index}`}
-      className={`${className} relative overflow-visible`}
-    >
-      {/* Burgundy editorial frame */}
-      <div className="absolute inset-0 z-10 pointer-events-none border-2 border-[#851C35]" />
+          if (item.media_type === "video") {
+            return (
+              <div
+                key={`story-${index}`}
+                className={`${className} relative overflow-visible`}
+              >
+                {/* Burgundy editorial frame */}
+                <div className="absolute inset-0 z-10 pointer-events-none border-2 border-[#851C35]" />
+                
+                {/* Label sitting directly on the frame */}
+                <div
+                  className="
+                    absolute z-30
+                    top-0 left-4 md:left-6
+                    -translate-y-1/2
+                    bg-[#851C35]
+                    px-3 py-1.5
+                    flex items-center gap-2
+                    pointer-events-none
+                  "
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                  <span
+                    className="
+                      text-[8px] md:text-[9px]
+                      font-bold uppercase
+                      tracking-[0.22em]
+                      text-white
+                      whitespace-nowrap
+                    "
+                  >
+                    SO3 / ETKİNLİK VİDEOSU
+                  </span>
+                </div>
 
-      {/* Label sitting directly on the frame */}
-      <div
-        className="
-          absolute z-30
-          top-0 left-4 md:left-6
-          -translate-y-1/2
-          bg-[#851C35]
-          px-3 py-1.5
-          flex items-center gap-2
-          pointer-events-none
-        "
-      >
-        <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                <button
+                  className="
+                    group relative block
+                    w-full h-full
+                    overflow-hidden
+                    bg-black
+                    text-left
+                  "
+                  onClick={() => {
+                    setActiveVideo(item);
+                    setVideoModalOpen(true);
+                  }}
+                  aria-label={`${event.title} videosunu izle`}
+                >
+                  {item.thumbnail_url ? (
+                    <img
+                      src={item.thumbnail_url}
+                      alt=""
+                      loading="lazy"
+                      className="
+                        w-full h-full object-cover
+                        transition-transform duration-700
+                        md:group-hover:scale-[1.03]
+                      "
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#121212] flex items-center justify-center">
+                       <span className="text-white/20 text-4xl font-bold">SO3</span>
+                    </div>
+                  )}
 
-        <span
-          className="
-            text-[8px] md:text-[9px]
-            font-bold uppercase
-            tracking-[0.22em]
-            text-white
-            whitespace-nowrap
-          "
-        >
-          SO3 / ETKİNLİK VİDEOSU
-        </span>
-      </div>
+                  {/* Very restrained readability gradient */}
+                  <div
+                    className="
+                      absolute inset-0
+                      bg-gradient-to-t
+                      from-black/65
+                      via-transparent
+                      to-black/10
+                    "
+                  />
 
-      <button
-        className="
-          group relative block
-          w-full h-full
-          overflow-hidden
-          bg-black
-          text-left
-        "
-        onClick={() => {
-          setActiveVideoIndex(item.index);
-          setVideoModalOpen(true);
-        }}
-        aria-label={`${event.title} videosunu izle`}
-      >
-        <img
-          src={item.poster}
-          alt=""
-          loading="lazy"
-          className="
-            w-full h-full object-cover
-            transition-transform duration-700
-            md:group-hover:scale-[1.03]
-          "
-        />
-
-        {/* Very restrained readability gradient */}
-        <div
-          className="
-            absolute inset-0
-            bg-gradient-to-t
-            from-black/65
-            via-transparent
-            to-black/10
-          "
-        />
-
-        {/* Play action */}
-        <div
-          className="
-            absolute
-            bottom-4 left-4
-            md:bottom-6 md:left-6
-            z-20
-            flex items-center gap-3
-          "
-        >
-          <div
-            className="
-              flex items-center justify-center
-              w-11 h-11 md:w-13 md:h-13
-              rounded-full
-              bg-[#851C35]
-              border border-white/20
-              shadow-lg
-              transition-all duration-300
-              group-hover:scale-110
-              group-hover:bg-[#9A203E]
-            "
-          >
-            <Play
-              className="
-                w-4 h-4 md:w-5 md:h-5
-                fill-white text-white
-                ml-0.5
-              "
-            />
-          </div>
-
-          <div className="flex flex-col">
-            <span
-              className="
-                text-[9px]
-                uppercase tracking-[0.18em]
-                text-white/60
-              "
-            >
-              Videoyu
-            </span>
-
-            <span
-              className="
-                text-xs md:text-sm
-                font-bold uppercase
-                tracking-[0.18em]
-                text-white
-              "
-            >
-              İzle
-            </span>
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-}
+                  {/* Play action */}
+                  <div
+                    className="
+                      absolute
+                      bottom-4 left-4
+                      md:bottom-6 md:left-6
+                      z-20
+                      flex items-center gap-3
+                    "
+                  >
+                    <div
+                      className="
+                        flex items-center justify-center
+                        w-11 h-11 md:w-13 md:h-13
+                        rounded-full
+                        bg-[#851C35]
+                        border border-white/20
+                        shadow-lg
+                        transition-all duration-300
+                        group-hover:scale-110
+                        group-hover:bg-[#9A203E]
+                      "
+                    >
+                      <Play
+                        className="
+                          w-4 h-4 md:w-5 md:h-5
+                          fill-white text-white
+                          ml-0.5
+                        "
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <span
+                        className="
+                          text-[9px]
+                          uppercase tracking-[0.18em]
+                          text-white/60
+                        "
+                      >
+                        Videoyu
+                      </span>
+                      <span
+                        className="
+                          text-xs md:text-sm
+                          font-bold uppercase
+                          tracking-[0.18em]
+                          text-white
+                        "
+                      >
+                        İzle
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            );
+          }
 
           return null;
         })}
@@ -275,7 +221,7 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
       {/* Lightbox for images */}
       <EventLightbox
         isOpen={lightboxOpen}
-        images={event.gallery}
+        images={images}
         title={event.title}
         initialIndex={lightboxIndex}
         onClose={() => setLightboxOpen(false)}
@@ -286,9 +232,9 @@ export function EventMediaWall({ event }: EventMediaWallProps) {
         isOpen={videoModalOpen}
         onClose={() => {
           setVideoModalOpen(false);
-          setActiveVideoIndex(null);
+          setActiveVideo(null);
         }}
-        video={activeVideoIndex !== null ? event.videos[activeVideoIndex] : null}
+        video={activeVideo}
       />
     </section>
   );
