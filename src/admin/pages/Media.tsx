@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { apiClient } from "../api/client";
 import { Upload, X, Trash2, Edit2, Loader2, Image as ImageIcon, Video, CheckCircle2, AlertCircle } from "lucide-react";
 
-interface MediaAsset {
+export interface MediaAsset {
   id: number;
   uuid: string;
   original_name: string;

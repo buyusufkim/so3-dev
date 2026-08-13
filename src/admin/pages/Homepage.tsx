@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../api/client";
-import { MoveUp, MoveDown, Eye, EyeOff, Save } from "lucide-react";
+import { MoveUp, MoveDown, Eye, EyeOff, Save, Edit2 } from "lucide-react";
+import { HeroEditor } from "./homepage/HeroEditor";
+import { BrandBandEditor } from "./homepage/BrandBandEditor";
+import { AboutEditor } from "./homepage/AboutEditor";
+
 
 type HomepageSection = {
   section_id: string;
@@ -31,6 +35,9 @@ export function Homepage() {
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+
+
   useEffect(() => {
     fetchSections();
   }, []);
@@ -42,10 +49,8 @@ export function Homepage() {
       const res = await apiClient.get('/api/admin/homepage/sections');
       if (Array.isArray(res)) {
         setSections(res as HomepageSection[]);
-      } else if (res && (res as any).data) { // Fallback if still wrapped
-        setSections((res as any).data as HomepageSection[]);
       } else {
-        setSections(res as unknown as HomepageSection[]);
+        throw new Error('Geçersiz API yanıtı.');
       }
     } catch (err: any) {
       setError(err.message || 'Bölümler yüklenirken bir hata oluştu.');
@@ -195,8 +200,19 @@ export function Homepage() {
               </div>
             </div>
 
+
             <div className="flex items-center gap-6">
+              {['hero', 'brand_band', 'about'].includes(section.section_id) && (
+                <button
+                  onClick={() => setEditingSection(section.section_id)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white hover:bg-white/20 transition"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  Düzenle
+                </button>
+              )}
               <button
+
                 onClick={() => handleToggleActive(section.section_id, section.is_active)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition ${
                   section.is_active 
@@ -211,6 +227,10 @@ export function Homepage() {
           </div>
         ))}
       </div>
+
+      {editingSection === 'hero' && <HeroEditor onClose={() => setEditingSection(null)} />}
+      {editingSection === 'brand_band' && <BrandBandEditor onClose={() => setEditingSection(null)} />}
+      {editingSection === 'about' && <AboutEditor onClose={() => setEditingSection(null)} />}
     </div>
   );
 }

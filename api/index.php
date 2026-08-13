@@ -130,6 +130,18 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/admin/homepage/sections/([^/]+)/content$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $controller = new \Controllers\AdminHomepageController();
+        if ($method === 'GET') {
+            $controller->getContent($matches[1]);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->updateContent($matches[1]);
+            $matched = true;
+        }
+    }
+
     if (preg_match('#^/api/admin/homepage/sections/([^/]+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         if ($method === 'PATCH') {
