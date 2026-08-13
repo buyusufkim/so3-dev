@@ -1,0 +1,80 @@
+{
+  "version": 2,
+  "purpose": "AI Studio snapshot-safe (<30 MiB each MP4)",
+  "video_format": "MP4 H.264/AAC",
+  "dimensions": "540x960 portrait",
+  "video_target_bitrate": "1200 kbps",
+  "audio_bitrate": "80 kbps AAC",
+  "events": [
+    {
+      "title": "Kano Etkinliği",
+      "video_path": "/media/so3/events/kano-etkinligi/video/01.mp4",
+      "poster_path": "/media/so3/events/kano-etkinligi/video/01-poster.webp",
+      "duration_seconds": 142.176,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "width": 540,
+      "height": 960,
+      "fps": "30/1",
+      "video_bytes": 22793508,
+      "video_mib": 21.74,
+      "poster_bytes": 108830
+    },
+    {
+      "title": "Kano Etkinliği",
+      "video_path": "/media/so3/events/kano-etkinligi/video/02.mp4",
+      "poster_path": "/media/so3/events/kano-etkinligi/video/02-poster.webp",
+      "duration_seconds": 98.406,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "width": 540,
+      "height": 960,
+      "fps": "30/1",
+      "video_bytes": 15792113,
+      "video_mib": 15.06,
+      "poster_bytes": 146128
+    },
+    {
+      "title": "Gomeda Vadisi Yürüyüşü",
+      "video_path": "/media/so3/events/gomeda-vadisi-yuruyusu/video/01.mp4",
+      "poster_path": "/media/so3/events/gomeda-vadisi-yuruyusu/video/01-poster.webp",
+      "duration_seconds": 165.047,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "width": 540,
+      "height": 960,
+      "fps": "30/1",
+      "video_bytes": 26077481,
+      "video_mib": 24.87,
+      "poster_bytes": 128414
+    },
+    {
+      "title": "Voleybol Etkinliği",
+      "video_path": "/media/so3/events/voleybol-etkinligi/video/01.mp4",
+      "poster_path": "/media/so3/events/voleybol-etkinligi/video/01-poster.webp",
+      "duration_seconds": 149.142,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "width": 540,
+      "height": 960,
+      "fps": "30/1",
+      "video_bytes": 24141194,
+      "video_mib": 23.02,
+      "poster_bytes": 94744
+    },
+    {
+      "title": "Mobilite Grup Dersi",
+      "video_path": "/media/so3/events/mobilite-grup-dersi/video/01.mp4",
+      "poster_path": "/media/so3/events/mobilite-grup-dersi/video/01-poster.webp",
+      "duration_seconds": 90.813,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "width": 540,
+      "height": 960,
+      "fps": "30/1",
+      "video_bytes": 14536848,
+      "video_mib": 13.86,
+      "poster_bytes": 50720
+    }
+  ]
+}

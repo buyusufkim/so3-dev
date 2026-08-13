@@ -42,11 +42,11 @@ export function Header() {
     <header 
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-        isTransparent ? "bg-transparent py-2 lg:py-4 border-b border-transparent" : "bg-[#121212] border-b border-white/10 py-0"
+        isTransparent ? "bg-transparent py-2 min-[1366px]:py-4 border-b border-transparent" : "bg-[#121212] border-b border-white/10 py-0"
       )}
     >
       {/* Desktop Header */}
-      <div className="hidden lg:grid grid-cols-[1fr_auto_1fr] gap-10 xl:gap-16 items-center mx-auto max-w-7xl px-6 lg:px-8 h-16 lg:h-28 transition-all duration-300">
+      <div className="hidden lg:grid grid-cols-[1fr_auto_1fr] gap-8 min-[1366px]:gap-16 items-center mx-auto max-w-7xl px-6 lg:px-8 h-20 min-[1366px]:h-28 transition-all duration-300">
         
         {/* Left Navigation */}
         <nav className="flex items-center justify-end space-x-8 xl:space-x-10">
@@ -65,7 +65,7 @@ export function Header() {
         {/* Center Logo */}
         <div className="flex justify-center items-center">
           <Link to="/#so3" className="block hover:opacity-80 transition-opacity">
-            <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-16 lg:h-24 w-auto object-contain transition-all duration-300" />
+            <img src="/brand/so3-logo.png" alt="SO3 PT" className="h-16 min-[1366px]:h-24 w-auto object-contain transition-all duration-300" />
           </Link>
         </div>
 

@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export function HomeCommunity() {
   return (
     <section id="topluluk" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28">
@@ -18,7 +20,7 @@ export function HomeCommunity() {
         </div>
 
         {/* Community Editorial Mosaic */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-2 gap-4 md:gap-6 lg:h-[460px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-2 gap-4 md:gap-6 lg:h-[460px] mb-12 md:mb-16">
           
           <div className="lg:col-span-5 lg:row-span-2 group relative rounded-md overflow-hidden bg-black h-[280px] lg:h-auto">
             <img src="/media/so3/community-nature-walk.webp" alt="Doğa Yürüyüşü" loading="lazy" className="w-full h-full object-cover opacity-90 saturate-[0.85] contrast-[1.05] transition-all duration-700 group-hover:scale-105 group-hover:opacity-100 group-hover:saturate-100" />
@@ -52,6 +54,16 @@ export function HomeCommunity() {
             </div>
           </div>
 
+        </div>
+
+        <div className="flex justify-center">
+          <Link 
+            to="/etkinlikler"
+            className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#0A0A0A] hover:text-[#851C35] transition-colors"
+          >
+            Tüm Etkinlikleri Keşfet
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform group-hover:translate-x-1 transition-transform"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </Link>
         </div>
 
       </div>

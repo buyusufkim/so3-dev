@@ -158,7 +158,7 @@ export function HomeTrainers() {
           {[...TRAINERS, ...TRAINERS].map((trainer, index) => (
             <div 
               key={index} 
-              className="flex-none w-[calc(100vw/1.4)] sm:w-[calc(100vw/2.8)] md:w-[calc(100vw/4.5)] lg:w-[calc(100vw/6.5)] xl:w-[calc(100vw/7.5)] 2xl:w-[calc(100vw/9)] max-w-[260px] snap-start flex flex-col group relative"
+              className="flex-none w-[calc(100vw/1.4)] sm:w-[calc(100vw/2.8)] md:w-[calc(100vw/4.5)] lg:w-[calc(100vw/4.8)] min-[1366px]:w-[calc(100vw/6.5)] 2xl:w-[calc(100vw/9)] max-w-[280px] min-[1366px]:max-w-[260px] snap-start flex flex-col group relative"
             >
               <div className="relative overflow-hidden bg-[#F4F1EB] border border-[#E5E3DB] aspect-[3/4] mb-3 rounded-sm">
                 <HomeMediaPlaceholder label="EĞİTMEN" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" light />

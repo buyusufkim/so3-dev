@@ -10,10 +10,17 @@ import { HomeCommunity } from "@/features/marketing/home/HomeCommunity";
 import { HomeInstagram } from "@/features/marketing/home/HomeInstagram";
 import { HomeTour } from "@/features/marketing/home/HomeTour";
 import { HomeContact } from "@/features/marketing/home/HomeContact";
+import { PageSEO } from "@/components/seo/PageSEO";
 
 export function Home() {
   return (
     <div className="w-full flex-1">
+      <PageSEO 
+        title="SO3 Personal Training | Kayseri" 
+        description="Kayseri'de kişiye özel antrenman, birebir dersler, fitness, yoga, pilates, boks ve uzman diyetisyen desteği. SO3 Personal Training ile hedeflerine göre şekillenen kişisel bir antrenman deneyimi."
+        canonical="https://so3pt.com.tr/"
+        ogType="website"
+      />
       <HomeHero />
       <HomeBrandBand />
       <HomeBranches />

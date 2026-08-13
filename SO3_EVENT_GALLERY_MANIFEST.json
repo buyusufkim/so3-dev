@@ -1,0 +1,396 @@
+{
+  "version": 1,
+  "output_format": "WebP",
+  "source_format": "PNG 2160x3840 (9:16)",
+  "gallery_output": "1440x2560 (9:16), quality 82",
+  "total_images": 39,
+  "events": [
+    {
+      "slug": "kano-etkinligi",
+      "title": "Kano Etkinliği",
+      "images": [
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/01.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 365306
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/02.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 335648
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/03.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 480086
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/04.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 471002
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/05.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 283602
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/06.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "KANO(5).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 379408
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/07.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "0806.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 483446
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/08.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "0806(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 373622
+        },
+        {
+          "src": "/media/so3/events/kano-etkinligi/gallery/09.webp",
+          "alt": "SO3 kano etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "0806(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 353534
+        }
+      ]
+    },
+    {
+      "slug": "gomeda-vadisi-yuruyusu",
+      "title": "Gomeda Vadisi Yürüyüşü",
+      "images": [
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/01.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 490298
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/02.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 610740
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/03.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 751676
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/04.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 426642
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/05.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 407128
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/06.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(5).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 506660
+        },
+        {
+          "src": "/media/so3/events/gomeda-vadisi-yuruyusu/gallery/07.webp",
+          "alt": "SO3 Gomeda Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0518(6).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 604434
+        }
+      ]
+    },
+    {
+      "slug": "kirlangic-vadisi-yuruyusu",
+      "title": "Kırlangıç Vadisi Yürüyüşü",
+      "images": [
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/01.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 432024
+        },
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/02.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 546356
+        },
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/03.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 376114
+        },
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/04.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 927872
+        },
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/05.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 150296
+        },
+        {
+          "src": "/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/06.webp",
+          "alt": "SO3 Kırlangıç Vadisi yürüyüşünden bir an",
+          "orientation": "portrait",
+          "source_file": "0506(5).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 199664
+        }
+      ]
+    },
+    {
+      "slug": "voleybol-etkinligi",
+      "title": "Voleybol Etkinliği",
+      "images": [
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/01.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 247820
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/02.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 223324
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/03.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 295842
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/04.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 119016
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/05.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 114916
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/06.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(5).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 286040
+        },
+        {
+          "src": "/media/so3/events/voleybol-etkinligi/gallery/07.webp",
+          "alt": "SO3 voleybol etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "Voleybol Maçı(6).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 257234
+        }
+      ]
+    },
+    {
+      "slug": "plaj-voleybolu",
+      "title": "Plaj Voleybolu",
+      "images": [
+        {
+          "src": "/media/so3/events/plaj-voleybolu/gallery/01.webp",
+          "alt": "SO3 plaj voleybolu etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "vOLEYBOL eRCİYES.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 176176
+        },
+        {
+          "src": "/media/so3/events/plaj-voleybolu/gallery/02.webp",
+          "alt": "SO3 plaj voleybolu etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "vOLEYBOL eRCİYES(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 188348
+        },
+        {
+          "src": "/media/so3/events/plaj-voleybolu/gallery/03.webp",
+          "alt": "SO3 plaj voleybolu etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "vOLEYBOL eRCİYES(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 154064
+        },
+        {
+          "src": "/media/so3/events/plaj-voleybolu/gallery/04.webp",
+          "alt": "SO3 plaj voleybolu etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "vOLEYBOL eRCİYES(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 388444
+        },
+        {
+          "src": "/media/so3/events/plaj-voleybolu/gallery/05.webp",
+          "alt": "SO3 plaj voleybolu etkinliğinden bir an",
+          "orientation": "portrait",
+          "source_file": "vOLEYBOL eRCİYES(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 182954
+        }
+      ]
+    },
+    {
+      "slug": "mobilite-grup-dersi",
+      "title": "Mobilite Grup Dersi",
+      "images": [
+        {
+          "src": "/media/so3/events/mobilite-grup-dersi/gallery/01.webp",
+          "alt": "SO3 mobilite grup dersinden bir an",
+          "orientation": "portrait",
+          "source_file": "Mobilite Grup Dersi.png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 163884
+        },
+        {
+          "src": "/media/so3/events/mobilite-grup-dersi/gallery/02.webp",
+          "alt": "SO3 mobilite grup dersinden bir an",
+          "orientation": "portrait",
+          "source_file": "Mobilite Grup Dersi(1).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 219092
+        },
+        {
+          "src": "/media/so3/events/mobilite-grup-dersi/gallery/03.webp",
+          "alt": "SO3 mobilite grup dersinden bir an",
+          "orientation": "portrait",
+          "source_file": "Mobilite Grup Dersi(2).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 238954
+        },
+        {
+          "src": "/media/so3/events/mobilite-grup-dersi/gallery/04.webp",
+          "alt": "SO3 mobilite grup dersinden bir an",
+          "orientation": "portrait",
+          "source_file": "Mobilite Grup Dersi(3).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 278276
+        },
+        {
+          "src": "/media/so3/events/mobilite-grup-dersi/gallery/05.webp",
+          "alt": "SO3 mobilite grup dersinden bir an",
+          "orientation": "portrait",
+          "source_file": "Mobilite Grup Dersi(4).png",
+          "width": 1440,
+          "height": 2560,
+          "bytes": 178948
+        }
+      ]
+    }
+  ]
+}

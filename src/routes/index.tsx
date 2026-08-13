@@ -1,6 +1,8 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { MainLayout } from "../components/layout/MainLayout";
 import { Home } from "../pages/public/Home";
+import { EventsPage } from "../pages/public/EventsPage";
+import { EventDetailPage } from "../pages/public/EventDetailPage";
 import { NotFound } from "../pages/NotFound";
 import { RouteErrorPage } from "../components/system/RouteErrorPage";
 
@@ -13,6 +15,14 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <Home />,
+      },
+      {
+        path: "etkinlikler",
+        element: <EventsPage />,
+      },
+      {
+        path: "etkinlikler/:slug",
+        element: <EventDetailPage />,
       },
       // Redirects for onepage public routes
       {
