@@ -40,8 +40,12 @@ export function Homepage() {
       setLoading(true);
       setError(null);
       const res = await apiClient.get('/api/admin/homepage/sections');
-      if (res.data) {
-        setSections(res.data as HomepageSection[]);
+      if (Array.isArray(res)) {
+        setSections(res as HomepageSection[]);
+      } else if (res && (res as any).data) { // Fallback if still wrapped
+        setSections((res as any).data as HomepageSection[]);
+      } else {
+        setSections(res as unknown as HomepageSection[]);
       }
     } catch (err: any) {
       setError(err.message || 'Bölümler yüklenirken bir hata oluştu.');
@@ -183,6 +187,11 @@ export function Homepage() {
                 <div className="text-xs text-white/40 font-mono mt-1">
                   ID: {section.section_id}
                 </div>
+                {section.updated_at && (
+                  <div className="text-xs text-white/30 mt-1">
+                    Son güncelleme: {new Date(section.updated_at).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </div>
+                )}
               </div>
             </div>
 
