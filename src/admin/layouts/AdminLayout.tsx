@@ -71,6 +71,7 @@ export function AdminLayout() {
             <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Genel</h3>
             <div className="space-y-1">
               <Link to="/admin" className="flex items-center px-2 py-2 text-sm text-white bg-white/5 rounded">Dashboard</Link>
+              <Link to="/admin/settings" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition-colors">Ayarlar</Link>
             </div>
           </div>
           
