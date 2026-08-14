@@ -1,34 +1,44 @@
+import { type PublicTrainer, parsePublicTrainersResponse } from "@/features/trainers/publicTrainers";
 import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 import { useRef, useEffect, useState } from "react";
-
-type Trainer = {
-  name: string;
-  discipline: string;
-  image?: string;
-  instagram?: string;
-};
-
-const TRAINERS: Trainer[] = [
-  { name: "Selami Özyıldırım", discipline: "Fitness Eğitmeni" },
-  { name: "Selim Özyıldırım", discipline: "Fitness Eğitmeni" },
-  { name: "Sencer Özyıldırım", discipline: "Fitness Eğitmeni" },
-  { name: "Burak Çorakçıoğlu", discipline: "Fitness Eğitmeni" },
-  { name: "Eren Sencer Öztürk", discipline: "Fitness Eğitmeni" },
-  { name: "Mehmet Katipoğlu", discipline: "Fitness Eğitmeni · Uzman Diyetisyen" },
-  { name: "Hulusi Ünlü", discipline: "Fitness Eğitmeni" },
-  { name: "Sahranur Sözer", discipline: "Fitness Eğitmeni" },
-  { name: "Mehmet Ateş", discipline: "Boks Eğitmeni" },
-  { name: "Serhat Güler", discipline: "Boks Eğitmeni" },
-  { name: "Almira Tektaş", discipline: "Pilates Eğitmeni" },
-  { name: "Müniyra Karayağız", discipline: "Pilates Eğitmeni" },
-  { name: "İrem Bulut", discipline: "Yoga Eğitmeni" }
-];
 
 export function HomeTrainers() {
   const sectionRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+
+  const [trainers, setTrainers] = useState<PublicTrainer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchTrainers() {
+      try {
+        setLoading(true);
+        setError(false);
+        const res = await fetch("/api/public/trainers");
+        if (!res.ok) throw new Error("Failed to fetch trainers");
+        
+        const json: unknown = await res.json();
+        const parsedTrainers = parsePublicTrainersResponse(json);
+        if (mounted) {
+          setTrainers(parsedTrainers);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(true);
+          setTrainers([]);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    fetchTrainers();
+    return () => { mounted = false; };
+  }, []);
+
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -54,13 +64,13 @@ export function HomeTrainers() {
     if (scrollRef.current) {
       scrollRef.current.scrollLeft = 0;
     }
-  }, []);
+  }, [trainers]);
   
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReducedMotion) return;
 
-    if (!isVisible || isPaused) return;
+    if (!isVisible || isPaused || trainers.length <= 1) return;
 
     let animationFrameId: number;
     let lastTime = 0;
@@ -90,7 +100,7 @@ export function HomeTrainers() {
       clearTimeout(startTimeout);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isPaused, isVisible]);
+  }, [isPaused, isVisible, trainers.length]);
   
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -118,7 +128,7 @@ export function HomeTrainers() {
               Profesyonel Eğitim Kadrosu
             </h2>
             <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium leading-relaxed">
-              Her birisi alanında uzman, sertifikalı ve güncel eğitim programları ile her yıl kendisini yenileyen SO3 antrenör kadromuz ile tanışın.
+              SO3 antrenör kadromuzla tanışın.
             </p>
           </div>
           
@@ -141,55 +151,86 @@ export function HomeTrainers() {
         </div>
       </div>
 
-      {/* Full Bleed Rail Container */}
-      <div 
-        className="w-full relative px-4 sm:px-6 lg:px-12 mx-auto max-w-[2560px]"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onTouchStart={() => setIsPaused(true)}
-        onTouchEnd={() => setIsPaused(false)}
-        onFocus={() => setIsPaused(true)}
-        onBlur={() => setIsPaused(false)}
-      >
-        <div 
-          ref={scrollRef}
-          className="flex overflow-x-auto gap-3 md:gap-4 pb-8 snap-x snap-mandatory hide-scrollbar"
-        >
-          {[...TRAINERS, ...TRAINERS].map((trainer, index) => (
-            <div 
-              key={index} 
-              className="flex-none w-[calc(100vw/1.4)] sm:w-[calc(100vw/2.8)] md:w-[calc(100vw/4.5)] lg:w-[calc(100vw/4.8)] min-[1366px]:w-[calc(100vw/6.5)] 2xl:w-[calc(100vw/9)] max-w-[280px] min-[1366px]:max-w-[260px] snap-start flex flex-col group relative"
-            >
-              <div className="relative overflow-hidden bg-[#F4F1EB] border border-[#E5E3DB] aspect-[3/4] mb-3 rounded-sm">
-                <HomeMediaPlaceholder label="EĞİTMEN" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" light />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-              
-              <div className="flex flex-col">
-                <div className="flex justify-between items-start gap-2">
-                  <h3 className="text-sm md:text-base font-bold tracking-tight uppercase leading-none break-words">
-                    {trainer.name}
-                  </h3>
-                  {trainer.instagram && (
-                    <a 
-                      href={trainer.instagram} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[#0A0A0A]/50 hover:text-[#851C35] transition-colors shrink-0"
-                      aria-label={`${trainer.name} Instagram`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
-                    </a>
-                  )}
-                </div>
-                <p className="text-[10px] md:text-xs font-semibold text-[#0A0A0A]/50 uppercase tracking-widest mt-1">
-                  {trainer.discipline}
-                </p>
-              </div>
-            </div>
+      {/* States */}
+      {loading && (
+        <div className="flex overflow-hidden gap-3 md:gap-4 px-4 sm:px-6 lg:px-12 pb-8">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="flex-none w-[calc(100vw/1.4)] sm:w-[calc(100vw/2.8)] md:w-[calc(100vw/4.5)] lg:w-[calc(100vw/4.8)] max-w-[280px] aspect-[3/4] bg-[#0A0A0A]/5 animate-pulse rounded-sm border border-[#0A0A0A]/10"></div>
           ))}
         </div>
-      </div>
+      )}
+
+      {!loading && error && (
+        <div className="w-full px-4 sm:px-6 lg:px-12">
+          <div className="py-16 flex items-center justify-center border border-[#0A0A0A]/10 rounded-sm bg-[#0A0A0A]/5">
+            <p className="text-[#0A0A0A]/50 font-medium">Eğitmen kadrosu şu anda görüntülenemiyor.</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && trainers.length === 0 && (
+        <div className="w-full px-4 sm:px-6 lg:px-12">
+          <div className="py-16 flex items-center justify-center border border-[#0A0A0A]/10 rounded-sm bg-[#0A0A0A]/5">
+            <p className="text-[#0A0A0A]/50 font-medium">Şu anda görüntülenecek aktif eğitmen bulunmuyor.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Full Bleed Rail Container */}
+      {!loading && !error && trainers.length > 0 && (
+        <div 
+          className="w-full relative px-4 sm:px-6 lg:px-12 mx-auto max-w-[2560px]"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={() => setIsPaused(true)}
+          onTouchEnd={() => setIsPaused(false)}
+          onFocus={() => setIsPaused(true)}
+          onBlur={() => setIsPaused(false)}
+        >
+          <div 
+            ref={scrollRef}
+            className="flex overflow-x-auto gap-3 md:gap-4 pb-8 snap-x snap-mandatory hide-scrollbar"
+          >
+            {[...trainers, ...trainers].map((trainer, index) => (
+              <div 
+                key={`${trainer.slug}-${index}`} 
+                className="flex-none w-[calc(100vw/1.4)] sm:w-[calc(100vw/2.8)] md:w-[calc(100vw/4.5)] lg:w-[calc(100vw/4.8)] min-[1366px]:w-[calc(100vw/6.5)] 2xl:w-[calc(100vw/9)] max-w-[280px] min-[1366px]:max-w-[260px] snap-start flex flex-col group relative"
+              >
+                <div className="relative overflow-hidden bg-[#F4F1EB] border border-[#E5E3DB] aspect-[3/4] mb-3 rounded-sm">
+                  {trainer.profile?.url ? (
+                    <img src={trainer.profile.url} alt={trainer.profile.alt_text || `${trainer.name} profil fotoğrafı`} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
+                  ) : (
+                    <HomeMediaPlaceholder label="EĞİTMEN" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" light />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </div>
+                
+                <div className="flex flex-col">
+                  <div className="flex justify-between items-start gap-2">
+                    <h3 className="text-sm md:text-base font-bold tracking-tight uppercase leading-none break-words">
+                      {trainer.name}
+                    </h3>
+                    {trainer.instagram_username && (
+                      <a 
+                        href={`https://www.instagram.com/${trainer.instagram_username}/`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[#0A0A0A]/50 hover:text-[#851C35] transition-colors shrink-0"
+                        aria-label={`${trainer.name} Instagram`}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[10px] md:text-xs font-semibold text-[#0A0A0A]/50 uppercase tracking-widest mt-1">
+                    {trainer.role_title}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -52,6 +52,54 @@ class TrainerController {
         return json_decode($raw, true);
     }
 
+
+    public function publicIndex() {
+        $sql = "SELECT 
+                    t.slug, t.name, t.role_title, t.bio, t.instagram_username, t.profile_media_id,
+                    b.slug as branch_slug, b.name as branch_name
+                FROM trainers t
+                JOIN branches b ON t.branch_id = b.id
+                WHERE t.is_active = 1 
+                  AND t.deleted_at IS NULL
+                  AND b.is_active = 1 
+                  AND b.deleted_at IS NULL
+                ORDER BY t.sort_order ASC, t.id ASC";
+        
+        $trainers = $this->db->fetchAll($sql);
+        $result = [];
+        
+        foreach ($trainers as $t) {
+            $trainer = [
+                'slug' => $t['slug'],
+                'name' => $t['name'],
+                'role_title' => $t['role_title'],
+                'bio' => $t['bio'],
+                'instagram_username' => $t['instagram_username'],
+                'branch' => [
+                    'slug' => $t['branch_slug'],
+                    'name' => $t['branch_name']
+                ],
+                'profile' => null
+            ];
+            
+            if ($t['profile_media_id']) {
+                $profile = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$t['profile_media_id']]);
+                if ($profile) {
+                    \Core\MediaHelper::appendUrls($profile);
+                    $trainer['profile'] = [
+                        'url' => $profile['url'] ?? null,
+                        'thumbnail_url' => $profile['thumbnail_url'] ?? null,
+                        'alt_text' => $profile['alt_text'] ?? null
+                    ];
+                }
+            }
+            
+            $result[] = $trainer;
+        }
+        
+        \Core\Response::json($result);
+    }
+
     public function index() {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         
