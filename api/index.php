@@ -79,6 +79,9 @@ $routes = [
         '/api/public/branches' => function() {
             (new \Controllers\BranchController())->publicIndex();
         },
+        '/api/public/homepage' => function() {
+            (new \Controllers\PublicHomepageController())->index();
+        },
         '/api/public/trainers' => function() {
             (new \Controllers\TrainerController())->publicIndex();
         }
