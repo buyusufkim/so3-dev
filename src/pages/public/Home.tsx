@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { HomeHero } from "@/features/marketing/home/HomeHero";
 import { HomeBrandBand } from "@/features/marketing/home/HomeBrandBand";
 import { HomeAbout } from "@/features/marketing/home/HomeAbout";
@@ -17,49 +17,81 @@ import {
   parsePublicHomepageResponse, 
   DEFAULT_HOME_SECTION_ORDER 
 } from "@/features/homepage/publicHomepage";
+import {
+  type PublicHomepageContent,
+  parsePublicHomepageContentResponse
+} from "@/features/homepage/publicHomepageContent";
 
-const SECTION_COMPONENTS: Record<HomepageSectionId, React.ComponentType> = {
-  hero: HomeHero,
-  brand_band: HomeBrandBand,
-  branches: HomeBranches,
-  about: HomeAbout,
-  why_so3: HomeWhySO3,
-  process: HomeProcess,
-  trainers: HomeTrainers,
-  performance: HomePerformance,
-  community: HomeCommunity,
-  instagram: HomeInstagram,
-  tour: HomeTour,
-  contact: HomeContact
+type SectionRenderer = (content: PublicHomepageContent | null) => React.ReactNode;
+
+const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
+  hero: (content) => content ? <HomeHero content={content.hero} /> : null,
+  brand_band: (content) => content ? <HomeBrandBand content={content.brand_band} /> : null,
+  branches: () => <HomeBranches />,
+  about: (content) => content ? <HomeAbout content={content.about} /> : null,
+  why_so3: (content) => content ? <HomeWhySO3 content={content.why_so3} /> : null,
+  process: (content) => content ? <HomeProcess content={content.process} /> : null,
+  trainers: () => <HomeTrainers />,
+  performance: () => <HomePerformance />,
+  community: () => <HomeCommunity />,
+  instagram: () => <HomeInstagram />,
+  tour: () => <HomeTour />,
+  contact: () => <HomeContact />
 };
 
 export function Home() {
   const [sections, setSections] = useState<HomepageSectionId[]>([]);
+  const [content, setContent] = useState<PublicHomepageContent | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    async function fetchStructure() {
+
+    async function fetchData() {
       try {
         setLoading(true);
-        const res = await fetch("/api/public/homepage");
-        if (!res.ok) throw new Error("Failed to fetch homepage structure");
-        
-        const json: unknown = await res.json();
-        const parsed = parsePublicHomepageResponse(json);
-        
+
+        const [structureRes, contentRes] = await Promise.all([
+          fetch("/api/public/homepage").catch(() => null),
+          fetch("/api/public/homepage/content").catch(() => null)
+        ]);
+
+        let parsedStructure = DEFAULT_HOME_SECTION_ORDER;
+        if (structureRes && structureRes.ok) {
+          try {
+            const structureJson = await structureRes.json();
+            parsedStructure = parsePublicHomepageResponse(structureJson).map(s => s.section_id);
+          } catch (err) {
+            // structure error, keep default
+          }
+        }
+
+        let parsedContent: PublicHomepageContent | null = null;
+        if (contentRes && contentRes.ok) {
+          try {
+            const contentJson = await contentRes.json();
+            parsedContent = parsePublicHomepageContentResponse(contentJson);
+          } catch (err) {
+            // content error, keep null
+          }
+        }
+
         if (mounted) {
-          setSections(parsed.map(s => s.section_id));
+          setSections(parsedStructure);
+          setContent(parsedContent);
         }
       } catch (err) {
         if (mounted) {
           setSections(DEFAULT_HOME_SECTION_ORDER);
+          setContent(null);
         }
       } finally {
         if (mounted) setLoading(false);
       }
     }
-    fetchStructure();
+
+    fetchData();
+
     return () => { mounted = false; };
   }, []);
 
@@ -71,9 +103,10 @@ export function Home() {
         canonical="https://so3pt.com.tr/"
         ogType="website"
       />
+      
       {!loading && sections.map((sectionId) => {
-        const Component = SECTION_COMPONENTS[sectionId];
-        return <Component key={sectionId} />;
+        const renderSection = SECTION_RENDERERS[sectionId];
+        return <React.Fragment key={sectionId}>{renderSection(content)}</React.Fragment>;
       })}
     </div>
   );

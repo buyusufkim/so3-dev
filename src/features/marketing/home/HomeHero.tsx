@@ -1,11 +1,22 @@
 import { Link } from "react-router-dom";
+import { type PublicHeroContent } from "@/features/homepage/publicHomepageContent";
 
-export function HomeHero() {
+interface HomeHeroProps {
+  content: PublicHeroContent;
+}
+
+export function HomeHero({ content }: HomeHeroProps) {
   return (
     <section id="so3" className="relative h-[90svh] min-h-[600px] flex items-center justify-center bg-[#050505] overflow-hidden scroll-mt-20 min-[1366px]:scroll-mt-28">
       {/* Background Image / Placeholder */}
       <div className="absolute inset-0 z-0">
-        <img src="/media/so3/hero-so3.webp" alt="SO3 Personal Training antrenman alanı" className="w-full h-full object-cover opacity-60 mix-blend-luminosity" />
+        {content.background ? (
+          <img 
+            src={content.background.url} 
+            alt={content.background.alt_text ?? ""} 
+            className="w-full h-full object-cover opacity-60 mix-blend-luminosity" 
+          />
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
         <div className="absolute inset-0 bg-gradient-to-r from-[#050505]/80 via-transparent to-transparent"></div>
       </div>
@@ -15,7 +26,7 @@ export function HomeHero() {
         <div className="mb-4 md:mb-6 min-[1366px]:mb-8 flex items-center gap-3">
           <span className="w-2 h-2 rounded-full bg-[#851C35]"></span>
           <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/70">
-            SO3 / PERSONAL TRAINING
+            {content.eyebrow}
           </span>
         </div>
 
@@ -25,42 +36,46 @@ export function HomeHero() {
           <div className="max-w-4xl">
             <h1 className="flex flex-col gap-1 md:gap-2">
               <span className="text-4xl sm:text-5xl md:text-6xl min-[1366px]:text-[6.5rem] font-medium tracking-tighter leading-[1] text-transparent [-webkit-text-stroke:1.5px_rgba(255,255,255,0.7)]">
-                Herkese göre değil.
+                {content.headline_primary}
               </span>
               <span className="text-5xl sm:text-6xl md:text-7xl min-[1366px]:text-[8rem] font-bold tracking-tighter leading-[0.9] text-white">
-                SANA GÖRE.
+                {content.headline_emphasis}
               </span>
             </h1>
             
             <div className="mt-6 min-[1366px]:mt-10 max-w-xl">
               <p className="text-lg md:text-2xl text-white/90 font-medium leading-snug">
-                Kalabalığa değil, gelişimine odaklan.
+                {content.support_text}
               </p>
               <div className="flex items-center gap-2 mt-3 text-sm md:text-base text-white/50 font-medium">
-                <span>Kişiye özel antrenman</span>
+                <span>{content.feature_left}</span>
                 <span className="text-[#851C35] font-bold">·</span>
-                <span>Birebir takip</span>
+                <span>{content.feature_right}</span>
               </div>
             </div>
           </div>
 
           {/* CTA Actions */}
           <div className="flex flex-col sm:flex-row lg:flex-col gap-4 w-full sm:w-auto min-w-[220px]">
-            <Link 
-               to="/#iletisim" 
-               className="flex items-center justify-center bg-white text-black px-6 py-3.5 min-[1366px]:py-5 rounded text-sm font-semibold hover:bg-[#851C35] hover:text-white transition-all group"
-            >
-              <span>Ön görüşme planla</span>
-              <span className="ml-3 transform transition-transform group-hover:translate-x-1">→</span>
-            </Link>
-            <Link 
-               to="/#branslar" 
-               className="flex items-center justify-center bg-transparent border border-white/20 text-white px-6 py-3.5 min-[1366px]:py-5 rounded text-sm font-semibold hover:bg-white/10 transition-colors group"
-            >
-              <span>SO3'ü keşfet</span>
-            </Link>
+            {content.primary_cta_label && content.primary_cta_target && (
+              <Link
+                to={content.primary_cta_target}
+                className="flex items-center justify-center bg-white text-black px-6 py-3.5 min-[1366px]:py-5 rounded text-sm font-semibold hover:bg-[#851C35] hover:text-white transition-all group"
+              >
+                <span>{content.primary_cta_label}</span>
+                <span className="ml-3 transform transition-transform group-hover:translate-x-1">→</span>
+              </Link>
+            )}
+            
+            {content.secondary_cta_label && content.secondary_cta_target && (
+              <Link
+                to={content.secondary_cta_target}
+                className="flex items-center justify-center bg-transparent border border-white/20 text-white px-6 py-3.5 min-[1366px]:py-5 rounded text-sm font-semibold hover:bg-white/10 transition-colors group"
+              >
+                <span>{content.secondary_cta_label}</span>
+              </Link>
+            )}
           </div>
-
         </div>
       </div>
     </section>

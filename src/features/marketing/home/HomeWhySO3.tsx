@@ -1,27 +1,10 @@
-export function HomeWhySO3() {
-  const values = [
-    {
-      num: "01",
-      title: "Birebir Takip",
-      desc: "Antrenmanın her anında antrenör gözetiminde her bir tekrarda en doğru ve sağlıklı sonuç"
-    },
-    {
-      num: "02",
-      title: "Kişiye Özel Program",
-      desc: "Kalıplaşmış antrenman programları değil, size özel hazırlanmış en verimli antrenman programı ile çalışın"
-    },
-    {
-      num: "03",
-      title: "Özel Takip",
-      desc: "Antrenörün sadece salonda değil günlük beslenme, takviye kullanımı ve su tüketimini her öğün ilgiyle birebir WhatsApp üzerinden takip eder"
-    },
-    {
-      num: "04",
-      title: "Sürekli Güncel",
-      desc: "Programın her ay düzenli ölçümlerle kişisel gelişimin ve vücut tipinize en uygun şekilde güncellenir."
-    }
-  ];
+import { type PublicWhySo3Content } from "@/features/homepage/publicHomepageContent";
 
+interface HomeWhySO3Props {
+  content: PublicWhySo3Content;
+}
+
+export function HomeWhySO3({ content }: HomeWhySO3Props) {
   return (
     <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A]">
       <div className="container mx-auto max-w-7xl">
@@ -32,47 +15,49 @@ export function HomeWhySO3() {
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-                NEDEN SO3
+                {content.eyebrow}
               </span>
             </div>
             <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-[4.5rem] font-medium tracking-tight leading-[1.05]">
-              Tek tip program yok.<br />
-              <span className="font-bold">Sana göre bir sistem var.</span>
+              {content.headline_primary}<br />
+              <span className="font-bold">{content.headline_emphasis}</span>
             </h2>
           </div>
           
           <div className="max-w-sm lg:pb-4">
             <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium leading-relaxed">
-              SO3'te antrenman, kişiye göre planlanır ve çalıştığın eğitmenle birlikte takip edilir.
+              {content.intro}
             </p>
           </div>
         </div>
 
         {/* Value Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {values.map((val) => (
-            <div 
-              key={val.num} 
-              className="bg-white rounded-lg p-8 md:p-10 border border-[#E5E3DB] flex flex-col group hover:border-[#851C35]/30 hover:shadow-xl hover:shadow-[#0A0A0A]/5 transition-all duration-300"
-            >
-              <div className="mb-12 md:mb-16">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[#851C35]">
-                  {val.num}
-                </span>
+          {content.items.map((val, idx) => {
+            const num = (idx + 1).toString().padStart(2, '0');
+            return (
+              <div 
+                key={idx} 
+                className="bg-white rounded-lg p-8 md:p-10 border border-[#E5E3DB] flex flex-col group hover:border-[#851C35]/30 hover:shadow-xl hover:shadow-[#0A0A0A]/5 transition-all duration-300"
+              >
+                <div className="mb-12 md:mb-16">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-[#851C35]">
+                    {num}
+                  </span>
+                </div>
+                
+                <div className="mt-auto">
+                  <h3 className="text-2xl font-bold tracking-tight mb-4">
+                    {val.title}
+                  </h3>
+                  <p className="text-[#0A0A0A]/60 font-medium leading-relaxed text-sm md:text-base">
+                    {val.description}
+                  </p>
+                </div>
               </div>
-              
-              <div className="mt-auto">
-                <h3 className="text-2xl font-bold tracking-tight mb-4">
-                  {val.title}
-                </h3>
-                <p className="text-[#0A0A0A]/60 font-medium leading-relaxed text-sm md:text-base">
-                  {val.desc}
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-
       </div>
     </section>
   );
