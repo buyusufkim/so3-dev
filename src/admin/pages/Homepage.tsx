@@ -67,8 +67,8 @@ export function Homepage() {
       if (Array.isArray(res)) {
         setSections(res as HomepageSection[]);
       }
-    } catch (err: any) {
-      console.error('Metadata update failed', err);
+    } catch (err) {
+      // Failed to refresh metadata silently
     }
   };
 
@@ -215,7 +215,7 @@ export function Homepage() {
 
 
             <div className="flex items-center gap-6">
-              {['hero', 'brand_band', 'about'].includes(section.section_id) && (
+              {['hero', 'brand_band', 'about', 'why_so3', 'process'].includes(section.section_id) && (
                 <button
                   onClick={() => setEditingSection(section.section_id)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white hover:bg-white/20 transition"

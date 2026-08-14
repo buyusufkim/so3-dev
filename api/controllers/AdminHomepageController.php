@@ -273,7 +273,7 @@ class AdminHomepageController {
 
         if ($section_id === 'hero') {
             foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'support_text', 'feature_left', 'feature_right', 'primary_cta_label', 'secondary_cta_label', 'primary_cta_target', 'secondary_cta_target'] as $field) {
-                if (isset($content[$field]) && !is_string($content[$field])) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
                     Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
             }
@@ -346,7 +346,7 @@ class AdminHomepageController {
         }
         elseif ($section_id === 'about') {
             foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'paragraph_primary', 'paragraph_secondary', 'youtube_title', 'youtube_video_id'] as $field) {
-                if (isset($content[$field]) && !is_string($content[$field])) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
                     Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
             }
@@ -368,7 +368,7 @@ class AdminHomepageController {
         }
         elseif ($section_id === 'why_so3') {
             foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'intro'] as $field) {
-                if (isset($content[$field]) && !is_string($content[$field])) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
                     Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
             }
@@ -411,7 +411,7 @@ class AdminHomepageController {
         }
         elseif ($section_id === 'process') {
             foreach (['eyebrow', 'headline_primary', 'headline_emphasis'] as $field) {
-                if (isset($content[$field]) && !is_string($content[$field])) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
                     Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
             }
