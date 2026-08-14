@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
 import { BranchLightbox } from "./BranchLightbox";
+import { type PublicBranchesSectionContent } from "@/features/homepage/publicHomepageContent";
 import { type PublicBranch, parsePublicBranchesResponse } from "@/features/branches/publicBranches";
 import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 
-export function HomeBranches() {
+interface HomeBranchesProps {
+  content: PublicBranchesSectionContent;
+}
+
+export function HomeBranches({ content }: HomeBranchesProps) {
   const [activeBranch, setActiveBranch] = useState<PublicBranch | null>(null);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,12 +49,12 @@ export function HomeBranches() {
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/50">
-                SO3 / BRANŞLAR
+                {content.eyebrow}
               </span>
             </div>
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-tight">
-              Sana uygun olanı seç.<br />
-              <span className="font-bold">Harekete geç.</span>
+              {content.headline_primary}<br />
+              <span className="font-bold">{content.headline_emphasis}</span>
             </h2>
           </div>
         </div>
@@ -147,7 +152,7 @@ export function HomeBranches() {
                     </div>
                     {hasGallery && (
                       <div className="flex-none flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 group-hover:text-white transition-colors">
-                        <span className="hidden sm:inline-block">Galeriyi Gör</span>
+                        {content.gallery_cta_label && <span className="hidden sm:inline-block">{content.gallery_cta_label}</span>}
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform group-hover:translate-x-1 transition-transform"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                       </div>
                     )}

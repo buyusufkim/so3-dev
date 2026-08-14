@@ -27,7 +27,7 @@ type SectionRenderer = (content: PublicHomepageContent | null) => React.ReactNod
 const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
   hero: (content) => content ? <HomeHero content={content.hero} /> : null,
   brand_band: (content) => content ? <HomeBrandBand content={content.brand_band} /> : null,
-  branches: () => <HomeBranches />,
+  branches: (content) => content ? <HomeBranches content={content.branches} /> : null,
   about: (content) => content ? <HomeAbout content={content.about} /> : null,
   why_so3: (content) => content ? <HomeWhySO3 content={content.why_so3} /> : null,
   process: (content) => content ? <HomeProcess content={content.process} /> : null,

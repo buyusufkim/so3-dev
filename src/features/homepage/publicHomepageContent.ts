@@ -63,6 +63,13 @@ export interface PublicPerformanceContent {
   background: PublicHeroBackground | null;
 }
 
+export interface PublicBranchesSectionContent {
+  eyebrow: string;
+  headline_primary: string;
+  headline_emphasis: string;
+  gallery_cta_label: string;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -70,6 +77,7 @@ export interface PublicHomepageContent {
   why_so3: PublicWhySo3Content;
   process: PublicProcessContent;
   performance: PublicPerformanceContent;
+  branches: PublicBranchesSectionContent;
 }
 
 function isString(value: unknown): value is string {
@@ -183,6 +191,18 @@ export function isPerformanceContent(value: unknown): value is PublicPerformance
   return true;
 }
 
+export function isBranchesSectionContent(value: unknown): value is PublicBranchesSectionContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.eyebrow)) return false;
+  if (!isString(obj.headline_primary)) return false;
+  if (!isString(obj.headline_emphasis)) return false;
+  if (!isString(obj.gallery_cta_label)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -200,6 +220,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isWhySo3Content(data.why_so3)) throw new Error('Malformed content payload: why_so3');
   if (!isProcessContent(data.process)) throw new Error('Malformed content payload: process');
   if (!isPerformanceContent(data.performance)) throw new Error('Malformed content payload: performance');
+  if (!isBranchesSectionContent(data.branches)) throw new Error('Malformed content payload: branches');
   
   return {
     hero: data.hero,
@@ -207,6 +228,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
     about: data.about,
     why_so3: data.why_so3,
     process: data.process,
-    performance: data.performance
+    performance: data.performance,
+    branches: data.branches
   };
 }
