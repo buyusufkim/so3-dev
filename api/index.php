@@ -63,6 +63,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\TrainerController())->index();
         },
+        '/api/admin/site-settings' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\SiteSettingsController())->index();
+        },
         '/api/public/event-categories' => function() {
             (new \Controllers\PublicEventController())->categories();
         },
@@ -288,6 +292,19 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         } elseif ($method === 'DELETE') {
             $controller->delete($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/site-settings/([^/]+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $key = $matches[1];
+        $controller = new \Controllers\SiteSettingsController();
+        if ($method === 'GET') {
+            $controller->show($key);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($key);
             $matched = true;
         }
     }
