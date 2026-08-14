@@ -17,6 +17,8 @@ const AdminEventsList = lazy(() => import("../admin/pages/events/AdminEventsList
 const AdminEventEditor = lazy(() => import("../admin/pages/events/AdminEventEditor").then(m => ({ default: m.AdminEventEditor })));
 const AdminBranchesList = lazy(() => import("../admin/pages/branches/AdminBranchesList").then(m => ({ default: m.AdminBranchesList })));
 const AdminBranchEditor = lazy(() => import("../admin/pages/branches/AdminBranchEditor").then(m => ({ default: m.AdminBranchEditor })));
+const AdminTrainersList = lazy(() => import("../admin/pages/trainers/AdminTrainersList").then(m => ({ default: m.AdminTrainersList })));
+const AdminTrainerEditor = lazy(() => import("../admin/pages/trainers/AdminTrainerEditor").then(m => ({ default: m.AdminTrainerEditor })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -111,6 +113,18 @@ const router = createBrowserRouter([
       {
         path: "branches/:id",
         element: <AdminSuspense><AdminBranchEditor /></AdminSuspense>,
+      },
+      {
+        path: "trainers",
+        element: <AdminSuspense><AdminTrainersList /></AdminSuspense>,
+      },
+      {
+        path: "trainers/new",
+        element: <AdminSuspense><AdminTrainerEditor /></AdminSuspense>,
+      },
+      {
+        path: "trainers/:id",
+        element: <AdminSuspense><AdminTrainerEditor /></AdminSuspense>,
       },
     ]
   }
