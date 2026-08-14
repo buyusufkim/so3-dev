@@ -307,6 +307,25 @@ class EventController {
         }
     }
 
+
+    private function assertFeaturedCapacity(?int $excludeEventId = null): void {
+        $sql = "SELECT COUNT(id) as cnt FROM events WHERE status = 'published' AND deleted_at IS NULL AND featured_on_home = 1";
+        $params = [];
+        if ($excludeEventId !== null) {
+            $sql .= " AND id != ?";
+            $params[] = $excludeEventId;
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row && (int)$row['cnt'] >= 6) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Ana sayfa vitrininde en fazla 6 etkinlik olabilir.', 'FEATURED_LIMIT_REACHED', 422);
+        }
+    }
+
     public function create() {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $adminId = $_SESSION['admin_id'] ?? null;
@@ -321,6 +340,11 @@ class EventController {
 
         try {
             $this->db->beginTransaction();
+            
+            if ($val['status'] === 'published' && $val['featured_on_home'] === true) {
+                $this->assertFeaturedCapacity();
+            }
+
             $stmt = $this->db->prepare("
                 INSERT INTO events 
                 (uuid, title, slug, category_id, excerpt, content, event_date, location, cover_media_id, status, featured_on_home, featured_order, seo_title, seo_description, published_at, created_by)
@@ -384,6 +408,11 @@ class EventController {
             }
 
             $this->db->beginTransaction();
+            
+            if ($val['status'] === 'published' && $val['featured_on_home'] === true) {
+                $this->assertFeaturedCapacity($id);
+            }
+
             $stmt = $this->db->prepare("
                 UPDATE events SET 
                     title = ?, slug = ?, category_id = ?, excerpt = ?, content = ?, event_date = ?, location = ?, 
@@ -562,6 +591,8 @@ class EventController {
             }
 
             $this->db->beginTransaction();
+            
+
             $stmt = $this->db->prepare("UPDATE event_media SET sort_order = ? WHERE event_id = ? AND media_id = ?");
             
             foreach ($orders as $o) {
