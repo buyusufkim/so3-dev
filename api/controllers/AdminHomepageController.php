@@ -45,6 +45,10 @@ class AdminHomepageController {
 
     private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process'];
 
+    public static function getEditableSections(): array {
+        return self::EDITABLE_SECTIONS;
+    }
+
     private const DEFAULTS = [
         'hero' => [
             'eyebrow' => 'SO3 / PERSONAL TRAINING',

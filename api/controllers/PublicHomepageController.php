@@ -55,7 +55,7 @@ class PublicHomepageController
 
     public function content()
     {
-        $editableSections = ['hero', 'brand_band', 'about', 'why_so3', 'process'];
+        $editableSections = AdminHomepageController::getEditableSections();
         $allowedList = "'" . implode("','", $editableSections) . "'";
 
         $sql = "SELECT section_id, content_json
@@ -70,7 +70,11 @@ class PublicHomepageController
             $rawStored[$sec] = [];
         }
         foreach ($sections as $row) {
-            $rawStored[$row['section_id']] = json_decode($row['content_json'], true) ?: [];
+            $decoded = json_decode($row['content_json'], true);
+            if (!is_array($decoded)) {
+                $decoded = [];
+            }
+            $rawStored[$row['section_id']] = $decoded;
         }
 
         $result = [];
