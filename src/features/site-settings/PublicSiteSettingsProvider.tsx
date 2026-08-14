@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { SiteSettingsResponse } from './types';
 
+interface ApiEnvelope<T> {
+  data: T;
+}
+
 interface SiteSettingsContextType {
   settings: SiteSettingsResponse | null;
   loading: boolean;
@@ -29,13 +33,37 @@ export function PublicSiteSettingsProvider({ children }: { children: ReactNode }
         if (!res.ok) {
           throw new Error('Failed to fetch settings');
         }
-        const data = await res.json();
-        if (mounted) {
-          setSettings(data as SiteSettingsResponse);
+        
+        const json: unknown = await res.json();
+        
+        // Runtime validation
+        if (
+          json &&
+          typeof json === 'object' &&
+          'data' in json &&
+          json.data &&
+          typeof json.data === 'object'
+        ) {
+          const payload = (json as ApiEnvelope<SiteSettingsResponse>).data;
+          
+          if (
+            'contact' in payload &&
+            'location' in payload &&
+            'social' in payload &&
+            'tour' in payload &&
+            'business_hours' in payload
+          ) {
+            if (mounted) {
+              setSettings(payload);
+            }
+          } else {
+            throw new Error('Malformed settings payload');
+          }
+        } else {
+          throw new Error('Malformed response envelope');
         }
       } catch (err) {
         if (mounted) {
-          console.error('Failed to load public site settings', err);
           setError(true);
         }
       } finally {

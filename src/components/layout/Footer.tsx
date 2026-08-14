@@ -27,13 +27,13 @@ export function Footer() {
              {businessHours?.enabled && !loading && (
                <div className="flex flex-col md:items-end">
                  <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-white/50 mb-3">Çalışma Saatleri</span>
-                 {businessHours.schedule.map((item, idx) => (
+                 {businessHours.items.map((item, idx) => (
                    <span key={idx} className="text-sm md:text-base text-white/80 font-medium flex gap-2">
                      <span className="w-20 inline-block">{dayTranslations[item.day]}:</span>
                      {item.is_closed ? (
                        <span>Kapalı</span>
                      ) : (
-                       <span>{item.open_time} – {item.close_time}</span>
+                       <span>{item.open} – {item.close}</span>
                      )}
                    </span>
                  ))}

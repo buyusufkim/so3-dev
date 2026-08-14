@@ -1,34 +1,42 @@
 export interface ContactSettings {
-  phone_primary: string | null;
+  phone_primary: string;
   phone_secondary: string | null;
-  whatsapp: string | null;
-  email: string | null;
+  whatsapp: string;
 }
 
 export interface LocationSettings {
-  address: string | null;
-  maps_embed_url: string | null;
-  maps_directions_url: string | null;
+  address: string;
+  maps_directions_url: string;
+  maps_embed_url: string;
 }
 
 export interface SocialSettings {
-  instagram_username: string | null;
+  instagram_username: string;
 }
 
 export interface TourSettings {
-  matterport_model_id: string | null;
+  matterport_model_id: string;
 }
 
+export type BusinessDay =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
 export interface BusinessHoursItem {
-  day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+  day: BusinessDay;
   is_closed: boolean;
-  open_time: string | null;
-  close_time: string | null;
+  open: string | null;
+  close: string | null;
 }
 
 export interface BusinessHoursSettings {
   enabled: boolean;
-  schedule: BusinessHoursItem[];
+  items: BusinessHoursItem[];
 }
 
 export interface SiteSettingsResponse {
