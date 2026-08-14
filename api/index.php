@@ -82,6 +82,9 @@ $routes = [
         '/api/public/homepage' => function() {
             (new \Controllers\PublicHomepageController())->index();
         },
+        '/api/public/homepage/content' => function() {
+            (new \Controllers\PublicHomepageController())->content();
+        },
         '/api/public/trainers' => function() {
             (new \Controllers\TrainerController())->publicIndex();
         }

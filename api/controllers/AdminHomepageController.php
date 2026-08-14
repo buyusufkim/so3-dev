@@ -103,6 +103,98 @@ class AdminHomepageController {
         ]
     ];
 
+        public static function normalizeStoredContent(string $section_id, array $stored): array {
+        $defaults = self::DEFAULTS[$section_id];
+            $merged = [];
+            foreach ($defaults as $k => $v) {
+                if (array_key_exists($k, $stored)) {
+                    $storedVal = $stored[$k];
+                    if ($section_id === 'hero' && $k === 'background_media_id') {
+                        if (is_null($storedVal)) {
+                            $merged[$k] = null;
+                        } elseif (is_int($storedVal) && $storedVal > 0) {
+                            $merged[$k] = $storedVal;
+                        } else {
+                            $merged[$k] = $v;
+                        }
+                    } elseif (is_array($v)) {
+                        if ($section_id === 'why_so3' && $k === 'items') {
+                            $validItems = [];
+                            if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 6) {
+                                $allValid = true;
+                                foreach ($storedVal as $item) {
+                                    if (!is_array($item)) { $allValid = false; break; }
+                                    $keys = array_keys($item);
+                                    sort($keys);
+                                    if ($keys !== ['description', 'title']) { $allValid = false; break; }
+                                    if (!is_string($item['title']) || !is_string($item['description'])) { $allValid = false; break; }
+                                    $t = trim($item['title']);
+                                    $d = trim($item['description']);
+                                    if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) { $allValid = false; break; }
+                                    $validItems[] = ['title' => $t, 'description' => $d];
+                                }
+                                if ($allValid && count($validItems) > 0) {
+                                    $merged[$k] = $validItems;
+                                } else {
+                                    $merged[$k] = $v;
+                                }
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } elseif ($section_id === 'process' && $k === 'steps') {
+                            $validSteps = [];
+                            if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 8) {
+                                $allValid = true;
+                                foreach ($storedVal as $step) {
+                                    if (!is_array($step)) { $allValid = false; break; }
+                                    $keys = array_keys($step);
+                                    if ($keys !== ['title']) { $allValid = false; break; }
+                                    if (!is_string($step['title'])) { $allValid = false; break; }
+                                    $t = trim($step['title']);
+                                    if (mb_strlen($t) < 1 || mb_strlen($t) > 180) { $allValid = false; break; }
+                                    $validSteps[] = ['title' => $t];
+                                }
+                                if ($allValid && count($validSteps) > 0) {
+                                    $merged[$k] = $validSteps;
+                                } else {
+                                    $merged[$k] = $v;
+                                }
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } elseif ($section_id === 'brand_band' && $k === 'items') {
+                            $validItems = [];
+                            if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 12) {
+                                $allValid = true;
+                                foreach ($storedVal as $item) {
+                                    if (!is_string($item)) { $allValid = false; break; }
+                                    $t = trim($item);
+                                    if (mb_strlen($t) < 1 || mb_strlen($t) > 100) { $allValid = false; break; }
+                                    $validItems[] = $t;
+                                }
+                                if ($allValid && count($validItems) > 0) {
+                                    $merged[$k] = $validItems;
+                                } else {
+                                    $merged[$k] = $v;
+                                }
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } else {
+                            $merged[$k] = $v;
+                        }
+                    } elseif (gettype($storedVal) === gettype($v)) {
+                        $merged[$k] = $storedVal;
+                    } else {
+                        $merged[$k] = $v;
+                    }
+                } else {
+                    $merged[$k] = $v;
+                }
+            }
+        return $merged;
+    }
+
     public function getContent(string $section_id) {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 
@@ -124,94 +216,7 @@ class AdminHomepageController {
             $stored = [];
         }
         
-        $defaults = self::DEFAULTS[$section_id];
-        $merged = [];
-        foreach ($defaults as $k => $v) {
-            if (array_key_exists($k, $stored)) {
-                $storedVal = $stored[$k];
-                if ($section_id === 'hero' && $k === 'background_media_id') {
-                    if (is_null($storedVal)) {
-                        $merged[$k] = null;
-                    } elseif (is_int($storedVal) && $storedVal > 0) {
-                        $merged[$k] = $storedVal;
-                    } else {
-                        $merged[$k] = $v;
-                    }
-                } elseif (is_array($v)) {
-                    if ($section_id === 'why_so3' && $k === 'items') {
-                        $validItems = [];
-                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 6) {
-                            $allValid = true;
-                            foreach ($storedVal as $item) {
-                                if (!is_array($item)) { $allValid = false; break; }
-                                $keys = array_keys($item);
-                                sort($keys);
-                                if ($keys !== ['description', 'title']) { $allValid = false; break; }
-                                if (!is_string($item['title']) || !is_string($item['description'])) { $allValid = false; break; }
-                                $t = trim($item['title']);
-                                $d = trim($item['description']);
-                                if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) { $allValid = false; break; }
-                                $validItems[] = ['title' => $t, 'description' => $d];
-                            }
-                            if ($allValid && count($validItems) > 0) {
-                                $merged[$k] = $validItems;
-                            } else {
-                                $merged[$k] = $v;
-                            }
-                        } else {
-                            $merged[$k] = $v;
-                        }
-                    } elseif ($section_id === 'process' && $k === 'steps') {
-                        $validSteps = [];
-                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 8) {
-                            $allValid = true;
-                            foreach ($storedVal as $step) {
-                                if (!is_array($step)) { $allValid = false; break; }
-                                $keys = array_keys($step);
-                                if ($keys !== ['title']) { $allValid = false; break; }
-                                if (!is_string($step['title'])) { $allValid = false; break; }
-                                $t = trim($step['title']);
-                                if (mb_strlen($t) < 1 || mb_strlen($t) > 180) { $allValid = false; break; }
-                                $validSteps[] = ['title' => $t];
-                            }
-                            if ($allValid && count($validSteps) > 0) {
-                                $merged[$k] = $validSteps;
-                            } else {
-                                $merged[$k] = $v;
-                            }
-                        } else {
-                            $merged[$k] = $v;
-                        }
-                    } elseif ($section_id === 'brand_band' && $k === 'items') {
-                        $validItems = [];
-                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 12) {
-                            $allValid = true;
-                            foreach ($storedVal as $item) {
-                                if (!is_string($item)) { $allValid = false; break; }
-                                $t = trim($item);
-                                if (mb_strlen($t) < 1 || mb_strlen($t) > 100) { $allValid = false; break; }
-                                $validItems[] = $t;
-                            }
-                            if ($allValid && count($validItems) > 0) {
-                                $merged[$k] = $validItems;
-                            } else {
-                                $merged[$k] = $v;
-                            }
-                        } else {
-                            $merged[$k] = $v;
-                        }
-                    } else {
-                        $merged[$k] = $v;
-                    }
-                } elseif (gettype($storedVal) === gettype($v)) {
-                    $merged[$k] = $storedVal;
-                } else {
-                    $merged[$k] = $v;
-                }
-            } else {
-                $merged[$k] = $v;
-            }
-        }
+        $merged = self::normalizeStoredContent($section_id, $stored);
 
         $response = [
             'section_id' => $section_id,

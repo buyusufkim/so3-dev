@@ -4,6 +4,7 @@ namespace Controllers;
 
 use Core\Database;
 use Core\Response;
+use Core\MediaHelper;
 
 class PublicHomepageController
 {
@@ -47,6 +48,59 @@ class PublicHomepageController
             $result[] = [
                 'section_id' => $section['section_id']
             ];
+        }
+
+        Response::json($result);
+    }
+
+    public function content()
+    {
+        $editableSections = ['hero', 'brand_band', 'about', 'why_so3', 'process'];
+        $allowedList = "'" . implode("','", $editableSections) . "'";
+
+        $sql = "SELECT section_id, content_json
+                FROM homepage_sections
+                WHERE section_id IN ($allowedList)";
+
+        $stmt = $this->db->query($sql);
+        $sections = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        $rawStored = [];
+        foreach ($editableSections as $sec) {
+            $rawStored[$sec] = [];
+        }
+        foreach ($sections as $row) {
+            $rawStored[$row['section_id']] = json_decode($row['content_json'], true) ?: [];
+        }
+
+        $result = [];
+
+        foreach ($editableSections as $secId) {
+            $normalized = AdminHomepageController::normalizeStoredContent($secId, $rawStored[$secId]);
+
+            if ($secId === 'hero') {
+                $mediaId = $normalized['background_media_id'] ?? null;
+                unset($normalized['background_media_id']);
+                $normalized['background'] = null;
+
+                if ($mediaId) {
+                    $mediaSql = "SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL";
+                    $mStmt = $this->db->prepare($mediaSql);
+                    $mStmt->execute([$mediaId]);
+                    $media = $mStmt->fetch(\PDO::FETCH_ASSOC);
+                    
+                    if ($media) {
+                        MediaHelper::appendUrls($media);
+                        $normalized['background'] = [
+                            'url' => $media['url'] ?? null,
+                            'thumbnail_url' => $media['thumbnail_url'] ?? null,
+                            'alt_text' => $media['alt_text'] ?? null
+                        ];
+                    }
+                }
+            }
+
+            $result[$secId] = $normalized;
         }
 
         Response::json($result);
