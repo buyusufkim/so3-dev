@@ -55,17 +55,34 @@ class TrainerController {
 
     public function publicIndex() {
         $sql = "SELECT 
-                    t.slug, t.name, t.role_title, t.bio, t.instagram_username, t.profile_media_id,
-                    b.slug as branch_slug, b.name as branch_name
+                    t.slug, 
+                    t.name, 
+                    t.role_title, 
+                    t.bio, 
+                    t.instagram_username,
+                    b.slug AS branch_slug, 
+                    b.name AS branch_name,
+                    m.id AS media_id,
+                    m.storage_path,
+                    m.thumbnail_path,
+                    m.alt_text AS media_alt
                 FROM trainers t
-                JOIN branches b ON t.branch_id = b.id
+                JOIN branches b 
+                    ON t.branch_id = b.id
+                LEFT JOIN media_assets m 
+                    ON t.profile_media_id = m.id
+                    AND m.media_type = 'image'
+                    AND m.status = 'active'
+                    AND m.deleted_at IS NULL
                 WHERE t.is_active = 1 
                   AND t.deleted_at IS NULL
                   AND b.is_active = 1 
                   AND b.deleted_at IS NULL
                 ORDER BY t.sort_order ASC, t.id ASC";
         
-        $trainers = $this->db->fetchAll($sql);
+        $stmt = $this->db->query($sql);
+        $trainers = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        
         $result = [];
         
         foreach ($trainers as $t) {
@@ -82,16 +99,20 @@ class TrainerController {
                 'profile' => null
             ];
             
-            if ($t['profile_media_id']) {
-                $profile = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$t['profile_media_id']]);
-                if ($profile) {
-                    \Core\MediaHelper::appendUrls($profile);
-                    $trainer['profile'] = [
-                        'url' => $profile['url'] ?? null,
-                        'thumbnail_url' => $profile['thumbnail_url'] ?? null,
-                        'alt_text' => $profile['alt_text'] ?? null
-                    ];
-                }
+            if ($t['media_id']) {
+                $profile = [
+                    'storage_path' => $t['storage_path'],
+                    'thumbnail_path' => $t['thumbnail_path'],
+                    'alt_text' => $t['media_alt']
+                ];
+                
+                \Core\MediaHelper::appendUrls($profile);
+                
+                $trainer['profile'] = [
+                    'url' => $profile['url'] ?? null,
+                    'thumbnail_url' => $profile['thumbnail_url'] ?? null,
+                    'alt_text' => $profile['alt_text'] ?? null
+                ];
             }
             
             $result[] = $trainer;
