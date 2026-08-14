@@ -8,7 +8,6 @@ use Core\AuditLogger;
 use Middleware\AuthMiddleware;
 use PDO;
 use Throwable;
-use Exception;
 
 class SiteSettingsController {
     private $db;
@@ -41,40 +40,187 @@ class SiteSettingsController {
         return json_decode($raw, true);
     }
 
+    private function isValidGoogleMapsDirectionsUrl(string $url): bool {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) return false;
+        $parsed = parse_url($url);
+        if (($parsed['scheme'] ?? '') !== 'https') return false;
+        $host = strtolower($parsed['host'] ?? '');
+        if (!in_array($host, ['google.com', 'www.google.com', 'maps.google.com'], true)) return false;
+        
+        $path = $parsed['path'] ?? '';
+        if ($host !== 'maps.google.com' && strpos($path, '/maps/') !== 0) return false;
+
+        return true; 
+    }
+
+    private function isValidGoogleMapsEmbedUrl(string $url): bool {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) return false;
+        $parsed = parse_url($url);
+        if (($parsed['scheme'] ?? '') !== 'https') return false;
+        $host = strtolower($parsed['host'] ?? '');
+        if (!in_array($host, ['google.com', 'www.google.com', 'maps.google.com'], true)) return false;
+        
+        $path = $parsed['path'] ?? '';
+        if (strpos($path, '/maps/embed') !== 0) return false;
+
+        return true;
+    }
+
     private function normalizeContact(?array $data): array {
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        $phonePrimary = '05539573738';
+        if (array_key_exists('phone_primary', $data) && is_string($data['phone_primary']) && preg_match('/^0[0-9]{10}$/', $data['phone_primary'])) {
+            $phonePrimary = $data['phone_primary'];
+        }
+
+        $phoneSecondary = '05072077797';
+        if (array_key_exists('phone_secondary', $data)) {
+            if ($data['phone_secondary'] === null) {
+                $phoneSecondary = null;
+            } elseif (is_string($data['phone_secondary']) && preg_match('/^0[0-9]{10}$/', $data['phone_secondary'])) {
+                $phoneSecondary = $data['phone_secondary'];
+            }
+        }
+
+        $whatsapp = '05523790777';
+        if (array_key_exists('whatsapp', $data) && is_string($data['whatsapp']) && preg_match('/^0[0-9]{10}$/', $data['whatsapp'])) {
+            $whatsapp = $data['whatsapp'];
+        }
+
         return [
-            'phone_primary' => $data['phone_primary'] ?? '05539573738',
-            'phone_secondary' => $data['phone_secondary'] ?? '05072077797',
-            'whatsapp' => $data['whatsapp'] ?? '05523790777'
+            'phone_primary' => $phonePrimary,
+            'phone_secondary' => $phoneSecondary,
+            'whatsapp' => $whatsapp
         ];
     }
 
     private function normalizeLocation(?array $data): array {
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        $address = 'Yıldırım Beyazıt, Aşık Veysel Blv. No:69/4, 38030 Melikgazi / Kayseri';
+        if (array_key_exists('address', $data) && is_string($data['address'])) {
+            $addr = trim($data['address']);
+            if (mb_strlen($addr) >= 1 && mb_strlen($addr) <= 500) {
+                $address = $addr;
+            }
+        }
+
+        $mapsDirectionsUrl = 'https://www.google.com/maps/place/SO3+Selami+%C3%96zy%C4%B1ld%C4%B1r%C4%B1m+Personal+Trainer/@38.7129364,35.5318726,17z/data=!3m1!4b1!4m6!3m5!1s0x152b136a06abeb6b:0x572b063e20953544!8m2!3d38.7129364!4d35.5318726!16s%2Fg%2F11st_bxb2b';
+        if (array_key_exists('maps_directions_url', $data) && is_string($data['maps_directions_url'])) {
+            $dirUrl = trim($data['maps_directions_url']);
+            if (strlen($dirUrl) <= 2000 && $this->isValidGoogleMapsDirectionsUrl($dirUrl)) {
+                $mapsDirectionsUrl = $dirUrl;
+            }
+        }
+
+        $mapsEmbedUrl = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3112.5937107116843!2d35.5292976756857!3d38.71293637176466!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x152b136a06abeb6b%3A0x572b063e20953544!2sSO3%20Selami%20%C3%96zy%C4%B1ld%C4%B1r%C4%B1m%20Personal%20Trainer!5e0!3m2!1sen!2str!4v1700000000000!5m2!1sen!2str';
+        if (array_key_exists('maps_embed_url', $data) && is_string($data['maps_embed_url'])) {
+            $embedUrl = trim($data['maps_embed_url']);
+            if (strlen($embedUrl) <= 4000 && $this->isValidGoogleMapsEmbedUrl($embedUrl)) {
+                $mapsEmbedUrl = $embedUrl;
+            }
+        }
+
         return [
-            'address' => $data['address'] ?? 'Yıldırım Beyazıt, Aşık Veysel Blv. No:69/4, 38030 Melikgazi / Kayseri',
-            'maps_directions_url' => $data['maps_directions_url'] ?? 'https://www.google.com/maps/place/SO3+Selami+%C3%96zy%C4%B1ld%C4%B1r%C4%B1m+Personal+Trainer/@38.7129364,35.5318726,17z/data=!3m1!4b1!4m6!3m5!1s0x152b136a06abeb6b:0x572b063e20953544!8m2!3d38.7129364!4d35.5318726!16s%2Fg%2F11st_bxb2b',
-            'maps_embed_url' => $data['maps_embed_url'] ?? 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3112.5937107116843!2d35.5292976756857!3d38.71293637176466!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x152b136a06abeb6b%3A0x572b063e20953544!2sSO3%20Selami%20%C3%96zy%C4%B1ld%C4%B1r%C4%B1m%20Personal%20Trainer!5e0!3m2!1sen!2str!4v1700000000000!5m2!1sen!2str'
+            'address' => $address,
+            'maps_directions_url' => $mapsDirectionsUrl,
+            'maps_embed_url' => $mapsEmbedUrl
         ];
     }
 
     private function normalizeSocial(?array $data): array {
+        if (!is_array($data)) {
+            $data = [];
+        }
+        $username = 'so3pt';
+        if (array_key_exists('instagram_username', $data) && is_string($data['instagram_username'])) {
+            $val = trim($data['instagram_username']);
+            if (strpos($val, '@') === false && preg_match('/^[A-Za-z0-9._]{1,30}$/', $val)) {
+                $username = $val;
+            }
+        }
         return [
-            'instagram_username' => $data['instagram_username'] ?? 'so3pt'
+            'instagram_username' => $username
         ];
     }
 
     private function normalizeTour(?array $data): array {
+        if (!is_array($data)) {
+            $data = [];
+        }
+        $modelId = 'sXAzAwRLnGs';
+        if (array_key_exists('matterport_model_id', $data) && is_string($data['matterport_model_id'])) {
+            $val = trim($data['matterport_model_id']);
+            if (preg_match('/^[A-Za-z0-9_-]{1,100}$/', $val)) {
+                $modelId = $val;
+            }
+        }
         return [
-            'matterport_model_id' => $data['matterport_model_id'] ?? 'sXAzAwRLnGs'
+            'matterport_model_id' => $modelId
+        ];
+    }
+
+    private function tryNormalizeBusinessHours(?array $data): ?array {
+        if (!is_array($data)) return null;
+        if (!array_key_exists('enabled', $data) || !is_bool($data['enabled'])) return null;
+        if (!array_key_exists('items', $data) || !is_array($data['items'])) return null;
+
+        $enabled = $data['enabled'];
+        $items = $data['items'];
+
+        if ($enabled && count($items) !== 7) return null;
+        if (!$enabled && count($items) > 7) return null;
+
+        $validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        $seenDays = [];
+        $validatedItems = [];
+        
+        $expectedKeys = ['close', 'day', 'is_closed', 'open'];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) return null;
+            
+            $keys = array_keys($item);
+            sort($keys);
+            if ($keys !== $expectedKeys) return null;
+
+            if (!in_array($item['day'], $validDays, true)) return null;
+            if (in_array($item['day'], $seenDays, true)) return null;
+            $seenDays[] = $item['day'];
+
+            if (!is_bool($item['is_closed'])) return null;
+
+            if ($item['is_closed']) {
+                if ($item['open'] !== null || $item['close'] !== null) return null;
+            } else {
+                if (!is_string($item['open']) || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $item['open'])) return null;
+                if (!is_string($item['close']) || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $item['close'])) return null;
+            }
+
+            $validatedItems[] = [
+                'day' => $item['day'],
+                'is_closed' => $item['is_closed'],
+                'open' => $item['open'],
+                'close' => $item['close']
+            ];
+        }
+
+        return [
+            'enabled' => $enabled,
+            'items' => $validatedItems
         ];
     }
 
     private function normalizeBusinessHours(?array $data): array {
-        $enabled = isset($data['enabled']) && is_bool($data['enabled']) ? $data['enabled'] : false;
-        $items = isset($data['items']) && is_array($data['items']) ? $data['items'] : [];
-        return [
-            'enabled' => $enabled,
-            'items' => $items
+        $normalized = $this->tryNormalizeBusinessHours($data);
+        return $normalized ?? [
+            'enabled' => false,
+            'items' => []
         ];
     }
 
@@ -168,7 +314,7 @@ class SiteSettingsController {
         try {
             $this->db->beginTransaction();
 
-            $jsonValue = json_encode($validatedData, JSON_UNESCAPED_UNICODE);
+            $jsonValue = json_encode($validatedData, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
             $stmt = $this->db->prepare("
                 INSERT INTO site_settings (setting_key, setting_value, updated_by)
@@ -245,7 +391,7 @@ class SiteSettingsController {
         if (strlen($dirUrl) > 2000) {
             Response::error('Yol tarifi linki çok uzun.', 'VALIDATION_ERROR', 422);
         }
-        if (!preg_match('/^https:\/\/(www\.)?(maps\.google\.com|google\.com\/maps)/i', $dirUrl)) {
+        if (!$this->isValidGoogleMapsDirectionsUrl($dirUrl)) {
             Response::error('Geçersiz Google Maps yol tarifi linki.', 'VALIDATION_ERROR', 422);
         }
 
@@ -256,7 +402,7 @@ class SiteSettingsController {
         if (strlen($embedUrl) > 4000) {
             Response::error('Embed linki çok uzun.', 'VALIDATION_ERROR', 422);
         }
-        if (!preg_match('/^https:\/\/(www\.)?(maps\.google\.com|google\.com\/maps)\/embed/i', $embedUrl)) {
+        if (!$this->isValidGoogleMapsEmbedUrl($embedUrl)) {
             Response::error('Geçersiz Google Maps embed linki.', 'VALIDATION_ERROR', 422);
         }
 
@@ -333,9 +479,15 @@ class SiteSettingsController {
             if (!is_array($item)) {
                 Response::error("Öğe $index geçersiz formatta.", 'VALIDATION_ERROR', 422);
             }
-            $this->rejectUnknownFields($item, ['day', 'is_closed', 'open', 'close']);
+            
+            $expectedKeys = ['close', 'day', 'is_closed', 'open'];
+            $keys = array_keys($item);
+            sort($keys);
+            if ($keys !== $expectedKeys) {
+                Response::error("Öğe $index eksik veya fazla alan içeriyor (day, is_closed, open, close olmalı).", 'VALIDATION_ERROR', 422);
+            }
 
-            if (!isset($item['day']) || !in_array($item['day'], $validDays, true)) {
+            if (!in_array($item['day'], $validDays, true)) {
                 Response::error("Öğe $index için geçersiz gün.", 'VALIDATION_ERROR', 422);
             }
             if (in_array($item['day'], $seenDays, true)) {
@@ -343,7 +495,7 @@ class SiteSettingsController {
             }
             $seenDays[] = $item['day'];
 
-            if (!isset($item['is_closed']) || !is_bool($item['is_closed'])) {
+            if (!is_bool($item['is_closed'])) {
                 Response::error("Öğe $index için 'is_closed' boolean olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             
@@ -352,7 +504,7 @@ class SiteSettingsController {
             $close = null;
 
             if ($isClosed) {
-                if ((array_key_exists('open', $item) && $item['open'] !== null) || (array_key_exists('close', $item) && $item['close'] !== null)) {
+                if ($item['open'] !== null || $item['close'] !== null) {
                     Response::error("Kapalı günde ( {$item['day']} ) açılış/kapanış saatleri boş (null) olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
             } else {
