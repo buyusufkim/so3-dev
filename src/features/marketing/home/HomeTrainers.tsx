@@ -1,8 +1,13 @@
+import { type PublicTrainersSectionContent } from "@/features/homepage/publicHomepageContent";
 import { type PublicTrainer, parsePublicTrainersResponse } from "@/features/trainers/publicTrainers";
 import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 import { useRef, useEffect, useState } from "react";
 
-export function HomeTrainers() {
+interface HomeTrainersProps {
+  content: PublicTrainersSectionContent;
+}
+
+export function HomeTrainers({ content }: HomeTrainersProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -121,15 +126,17 @@ export function HomeTrainers() {
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-                SO3 / EKİP
+                {content.eyebrow}
               </span>
             </div>
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight mb-6 leading-tight">
-              Profesyonel Eğitim Kadrosu
+              {content.headline}
             </h2>
-            <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium leading-relaxed">
-              SO3 antrenör kadromuzla tanışın.
-            </p>
+            {content.intro && (
+              <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium leading-relaxed">
+                {content.intro}
+              </p>
+            )}
           </div>
           
           <div className="hidden md:flex gap-4 items-center" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>

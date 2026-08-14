@@ -70,6 +70,12 @@ export interface PublicBranchesSectionContent {
   gallery_cta_label: string;
 }
 
+export interface PublicTrainersSectionContent {
+  eyebrow: string;
+  headline: string;
+  intro: string;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -78,6 +84,7 @@ export interface PublicHomepageContent {
   process: PublicProcessContent;
   performance: PublicPerformanceContent;
   branches: PublicBranchesSectionContent;
+  trainers: PublicTrainersSectionContent;
 }
 
 function isString(value: unknown): value is string {
@@ -203,6 +210,17 @@ export function isBranchesSectionContent(value: unknown): value is PublicBranche
   return true;
 }
 
+export function isTrainersSectionContent(value: unknown): value is PublicTrainersSectionContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.eyebrow)) return false;
+  if (!isString(obj.headline)) return false;
+  if (!isString(obj.intro)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -221,6 +239,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isProcessContent(data.process)) throw new Error('Malformed content payload: process');
   if (!isPerformanceContent(data.performance)) throw new Error('Malformed content payload: performance');
   if (!isBranchesSectionContent(data.branches)) throw new Error('Malformed content payload: branches');
+  if (!isTrainersSectionContent(data.trainers)) throw new Error('Malformed content payload: trainers');
   
   return {
     hero: data.hero,
@@ -229,6 +248,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
     why_so3: data.why_so3,
     process: data.process,
     performance: data.performance,
-    branches: data.branches
+    branches: data.branches,
+    trainers: data.trainers
   };
 }

@@ -31,7 +31,7 @@ const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
   about: (content) => content ? <HomeAbout content={content.about} /> : null,
   why_so3: (content) => content ? <HomeWhySO3 content={content.why_so3} /> : null,
   process: (content) => content ? <HomeProcess content={content.process} /> : null,
-  trainers: () => <HomeTrainers />,
+  trainers: (content) => content ? <HomeTrainers content={content.trainers} /> : null,
   performance: (content) => content ? <HomePerformance content={content.performance} /> : null,
   community: () => <HomeCommunity />,
   instagram: () => <HomeInstagram />,
