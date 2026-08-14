@@ -78,6 +78,7 @@ export function AdminLayout() {
             <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">İçerik</h3>
             <div className="space-y-1">
               <Link to="/admin/homepage" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Ana Sayfa</Link>
+              <Link to="/admin/branches" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Branşlar</Link>
               <Link to="/admin/events" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Etkinlikler</Link>
               <Link to="/admin/media" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Medya</Link>
             </div>

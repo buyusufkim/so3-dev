@@ -334,7 +334,7 @@ class BranchController {
         try {
             $this->db->beginTransaction();
             
-            if (!empty($updates)) {
+            if (!empty($updates) || $coverChanged || $galleryChanged) {
                 $updates[] = "updated_by = ?";
                 $params[] = $adminId;
                 $updates[] = "updated_at = NOW()";
@@ -447,7 +447,7 @@ class BranchController {
         
         $ids = $input['branch_ids'];
         
-        $current = $this->db->fetchAll("SELECT id FROM branches WHERE deleted_at IS NULL");
+        $current = $this->db->fetchAll("SELECT id FROM branches WHERE deleted_at IS NULL ORDER BY sort_order ASC, id ASC");
         $currentIds = array_column($current, 'id');
         
         if (count($ids) !== count($currentIds)) {
@@ -472,7 +472,7 @@ class BranchController {
             
             $this->db->commit();
             
-            AuditLogger::log('branches.reorder', $adminId, 'branches', null);
+            AuditLogger::log('branches.reorder', $adminId, 'branches', null, ['old_order' => $currentIds, 'new_order' => $cleanIds]);
             
             Response::json(['success' => true]);
         } catch (\Throwable $e) {
