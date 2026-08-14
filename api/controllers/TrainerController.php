@@ -15,7 +15,7 @@ class TrainerController {
     private $db;
 
     public function __construct() {
-        $this->db = Database::getInstance();
+        $this->db = Database::getInstance()->getConnection();
     }
 
     private function getAdminId(): int {
@@ -26,8 +26,8 @@ class TrainerController {
         return (int)$adminId;
     }
 
-    private function logAudit(string $action, int $entityId, ?int $adminId, array $metadata = []): void {
-        AuditLogger::log($action, 'trainer', $entityId, $adminId, $metadata);
+    private function logAudit(string $action, ?int $entityId, ?int $adminId, array $metadata = []): void {
+        AuditLogger::log($action, $adminId, 'trainer', $entityId, $metadata);
     }
 
     private function generateUuid(): string {
@@ -62,7 +62,7 @@ class TrainerController {
                     m.id as media_id, m.storage_path as media_path, m.thumbnail_path as media_thumb, m.alt_text as media_alt
                 FROM trainers t
                 INNER JOIN branches b ON t.branch_id = b.id
-                LEFT JOIN media_assets m ON t.profile_media_id = m.id
+                LEFT JOIN media_assets m ON t.profile_media_id = m.id AND m.media_type = 'image' AND m.status = 'active' AND m.deleted_at IS NULL
                 WHERE t.deleted_at IS NULL
                 ORDER BY t.sort_order ASC, t.id ASC";
                 
@@ -73,12 +73,14 @@ class TrainerController {
         foreach ($rows as $r) {
             $profile = null;
             if ($r['media_id']) {
-                $profile = [
+                $asset = [
                     'id' => (int)$r['media_id'],
-                    'url' => MediaHelper::getFullUrl($r['media_path']),
-                    'thumbnail_url' => MediaHelper::getFullUrl($r['media_thumb']),
+                    'storage_path' => $r['media_path'],
+                    'thumbnail_path' => $r['media_thumb'],
                     'alt_text' => $r['media_alt']
                 ];
+                MediaHelper::appendUrls($asset);
+                $profile = $asset;
             }
 
             $trainers[] = [
@@ -113,7 +115,7 @@ class TrainerController {
                     m.id as media_id, m.storage_path as media_path, m.thumbnail_path as media_thumb, m.alt_text as media_alt
                 FROM trainers t
                 INNER JOIN branches b ON t.branch_id = b.id
-                LEFT JOIN media_assets m ON t.profile_media_id = m.id
+                LEFT JOIN media_assets m ON t.profile_media_id = m.id AND m.media_type = 'image' AND m.status = 'active' AND m.deleted_at IS NULL
                 WHERE t.id = ? AND t.deleted_at IS NULL";
                 
         $stmt = $this->db->prepare($sql);
@@ -126,12 +128,14 @@ class TrainerController {
 
         $profile = null;
         if ($r['media_id']) {
-            $profile = [
+            $asset = [
                 'id' => (int)$r['media_id'],
-                'url' => MediaHelper::getFullUrl($r['media_path']),
-                'thumbnail_url' => MediaHelper::getFullUrl($r['media_thumb']),
+                'storage_path' => $r['media_path'],
+                'thumbnail_path' => $r['media_thumb'],
                 'alt_text' => $r['media_alt']
             ];
+            MediaHelper::appendUrls($asset);
+            $profile = $asset;
         }
 
         $trainer = [
@@ -170,7 +174,7 @@ class TrainerController {
         if (!$isUpdate) {
             $required = ['name', 'slug', 'role_title', 'branch_id', 'is_active'];
             foreach ($required as $req) {
-                if (!isset($data[$req])) {
+                if (!array_key_exists($req, $data) || $data[$req] === null) {
                     Response::error("{$req} alanı zorunludur.", 'VALIDATION_ERROR', 422);
                 }
             }
@@ -182,19 +186,19 @@ class TrainerController {
 
         $val = [];
 
-        if (isset($data['name'])) {
-            if (!is_string($data['name'])) {
+        if (array_key_exists('name', $data)) {
+            if ($data['name'] === null || !is_string($data['name'])) {
                 Response::error("İsim metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $name = trim($data['name']);
-            if (strlen($name) < 1 || strlen($name) > 120) {
+            if (mb_strlen($name) < 1 || mb_strlen($name) > 120) {
                 Response::error("İsim 1-120 karakter arasında olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $val['name'] = $name;
         }
 
-        if (isset($data['slug'])) {
-            if (!is_string($data['slug'])) {
+        if (array_key_exists('slug', $data)) {
+            if ($data['slug'] === null || !is_string($data['slug'])) {
                 Response::error("Slug metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $slug = trim($data['slug']);
@@ -220,19 +224,19 @@ class TrainerController {
             $val['slug'] = $slug;
         }
 
-        if (isset($data['role_title'])) {
-            if (!is_string($data['role_title'])) {
+        if (array_key_exists('role_title', $data)) {
+            if ($data['role_title'] === null || !is_string($data['role_title'])) {
                 Response::error("Rol metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $role = trim($data['role_title']);
-            if (strlen($role) < 1 || strlen($role) > 160) {
+            if (mb_strlen($role) < 1 || mb_strlen($role) > 160) {
                 Response::error("Rol 1-160 karakter arasında olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $val['role_title'] = $role;
         }
 
-        if (isset($data['branch_id'])) {
-            if (!is_int($data['branch_id']) || $data['branch_id'] <= 0) {
+        if (array_key_exists('branch_id', $data)) {
+            if ($data['branch_id'] === null || !is_int($data['branch_id']) || $data['branch_id'] <= 0) {
                 Response::error("Geçersiz branş ID.", 'VALIDATION_ERROR', 422);
             }
             $branchId = (int)$data['branch_id'];
@@ -250,7 +254,7 @@ class TrainerController {
                     Response::error("Biyografi metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
                 $bio = trim($data['bio']);
-                if (strlen($bio) > 1200) {
+                if (mb_strlen($bio) > 1200) {
                     Response::error("Biyografi en fazla 1200 karakter olabilir.", 'VALIDATION_ERROR', 422);
                 }
                 $val['bio'] = $bio === '' ? null : $bio;
@@ -295,8 +299,8 @@ class TrainerController {
             }
         }
 
-        if (isset($data['is_active'])) {
-            if (!is_bool($data['is_active'])) {
+        if (array_key_exists('is_active', $data)) {
+            if ($data['is_active'] === null || !is_bool($data['is_active'])) {
                 Response::error("is_active boolean (true/false) olmalıdır.", 'VALIDATION_ERROR', 422);
             }
             $val['is_active'] = $data['is_active'] ? 1 : 0;
@@ -386,6 +390,11 @@ class TrainerController {
         if (!$trainer) {
             Response::error('Eğitmen bulunamadı.', 'NOT_FOUND', 404);
         }
+
+        // Normalize numeric/boolean fields to strictly match validation types before comparison
+        $trainer['branch_id'] = (int)$trainer['branch_id'];
+        $trainer['profile_media_id'] = $trainer['profile_media_id'] !== null ? (int)$trainer['profile_media_id'] : null;
+        $trainer['is_active'] = (int)$trainer['is_active'];
 
         $data = $this->getJsonInput();
         $val = $this->validateTrainerData($data, true, $id);
@@ -505,8 +514,13 @@ class TrainerController {
             }
         }
 
-        $stmt = $this->db->query("SELECT id FROM trainers WHERE deleted_at IS NULL");
+        $stmt = $this->db->query("SELECT id FROM trainers WHERE deleted_at IS NULL ORDER BY sort_order ASC, id ASC");
         $dbIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        $oldOrder = [];
+        foreach ($dbIds as $did) {
+            $oldOrder[] = (int)$did;
+        }
         
         if (count($uniqueIds) !== count($dbIds) || count(array_diff($uniqueIds, $dbIds)) > 0 || count(array_diff($dbIds, $uniqueIds)) > 0) {
              Response::error("Gönderilen liste mevcut aktif eğitmenlerle birebir eşleşmiyor.", 'VALIDATION_ERROR', 422);
@@ -523,7 +537,7 @@ class TrainerController {
             }
 
             $this->db->commit();
-            $this->logAudit('trainers.reorder', 0, $adminId, ['new_order' => $trainerIds]);
+            $this->logAudit('trainers.reorder', null, $adminId, ['old_order' => $oldOrder, 'new_order' => $trainerIds]);
 
             Response::json(['message' => 'Sıralama başarıyla güncellendi.']);
         } catch (Throwable $e) {

@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS `trainers` (
     CONSTRAINT `fk_trainer_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX idx_trainers_slug ON trainers(slug);
 CREATE INDEX idx_trainers_branch_id ON trainers(branch_id);
 CREATE INDEX idx_trainers_is_active ON trainers(is_active);
 CREATE INDEX idx_trainers_sort_order ON trainers(sort_order);
