@@ -75,6 +75,9 @@ $routes = [
         },
         '/api/public/site-settings' => function() {
             (new \Controllers\SiteSettingsController())->publicIndex();
+        },
+        '/api/public/branches' => function() {
+            (new \Controllers\BranchController())->publicIndex();
         }
     ],
     'POST' => [

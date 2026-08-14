@@ -48,6 +48,61 @@ class BranchController {
     }
 
 
+    
+    public function publicIndex() {
+        $sql = "SELECT b.id, b.slug, b.name, b.description, b.cover_media_id
+                FROM branches b
+                WHERE b.is_active = 1 AND b.deleted_at IS NULL
+                ORDER BY b.sort_order ASC, b.id ASC";
+        $branches = $this->db->fetchAll($sql);
+
+        $result = [];
+        
+        foreach ($branches as $b) {
+            $branch = [
+                'slug' => $b['slug'],
+                'name' => $b['name'],
+                'description' => $b['description'],
+                'cover' => null,
+                'gallery' => []
+            ];
+
+            if ($b['cover_media_id']) {
+                $cover = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$b['cover_media_id']]);
+                if ($cover) {
+                    \Core\MediaHelper::appendUrls($cover);
+                    $branch['cover'] = [
+                        'url' => $cover['url'],
+                        'thumbnail_url' => $cover['thumbnail_url'],
+                        'alt_text' => $cover['alt_text']
+                    ];
+                }
+            }
+
+            $sqlGallery = "
+                SELECT ma.storage_path, ma.thumbnail_path, ma.alt_text, bm.caption
+                FROM branch_media bm
+                JOIN media_assets ma ON bm.media_id = ma.id
+                WHERE bm.branch_id = ? AND ma.media_type = 'image' AND ma.status = 'active' AND ma.deleted_at IS NULL
+                ORDER BY bm.sort_order ASC, bm.id ASC
+            ";
+            $galleryItems = $this->db->fetchAll($sqlGallery, [$b['id']]);
+            foreach ($galleryItems as $item) {
+                \Core\MediaHelper::appendUrls($item);
+                $branch['gallery'][] = [
+                    'url' => $item['url'],
+                    'thumbnail_url' => $item['thumbnail_url'],
+                    'alt_text' => $item['alt_text'],
+                    'caption' => $item['caption']
+                ];
+            }
+
+            $result[] = $branch;
+        }
+
+        Response::json($result);
+    }
+
     public function getAdminList() {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         

@@ -88,18 +88,12 @@ export function BranchLightbox({ isOpen, onClose, images, title }: BranchLightbo
       {/* Main Image Container */}
       <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4 md:p-12" onClick={handleBackdropClick}>
         {currentImage ? (
-          currentImage.startsWith('/') ? (
-             <img 
-               src={currentImage} 
-               alt={`${title} - Görsel ${safeIndex + 1}`} 
-               className="max-w-full max-h-full object-contain select-none" 
-               loading="lazy"
+             <img
+                src={currentImage}
+                alt={`${title} - Görsel ${safeIndex + 1}`}
+                className="max-w-full max-h-full object-contain select-none"
+                loading="lazy"
              />
-          ) : (
-             <div className="w-full h-full flex items-center justify-center max-w-4xl aspect-[4/3]">
-               <HomeMediaPlaceholder label="GALERİ GÖRSELİ" className="w-full h-full object-cover" />
-             </div>
-          )
         ) : null}
       </div>
 
