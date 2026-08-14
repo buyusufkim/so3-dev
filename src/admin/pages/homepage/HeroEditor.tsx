@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { MediaPicker } from "../../components/MediaPicker";
 import { X, Image as ImageIcon } from "lucide-react";
-import { MediaAsset } from "../../pages/Media"; // Ensure MediaAsset is exported there, wait, check types.
 
 export interface HomepageMediaInfo {
   id: number;
@@ -52,7 +51,7 @@ export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
     }
   };
 
-  const handleChange = (field: keyof HeroContent, value: any) => {
+  const handleChange = <K extends keyof HeroContent>(field: K, value: HeroContent[K]) => {
     setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
   };
@@ -73,7 +72,8 @@ export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
       setError(null);
       await apiClient.patch('/api/admin/homepage/sections/hero/content', { content: data });
       setIsDirty(false);
-      alert('Başarıyla kaydedildi.'); // restrained success feedback
+      alert('Başarıyla kaydedildi.');
+      onSaved?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');

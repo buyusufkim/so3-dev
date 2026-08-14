@@ -41,7 +41,7 @@ export function BrandBandEditor({ onClose, onSaved }: { onClose: () => void, onS
       await apiClient.patch('/api/admin/homepage/sections/brand_band/content', { content: { items } });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
-      if (onSaved) onSaved();
+      onSaved?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');

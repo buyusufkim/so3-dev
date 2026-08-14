@@ -61,6 +61,17 @@ export function Homepage() {
     }
   };
 
+  const refreshSectionsMetadata = async () => {
+    try {
+      const res = await apiClient.get('/api/admin/homepage/sections');
+      if (Array.isArray(res)) {
+        setSections(res as HomepageSection[]);
+      }
+    } catch (err: any) {
+      console.error('Metadata update failed', err);
+    }
+  };
+
   const handleToggleActive = async (sectionId: string, currentActive: number) => {
     // Optimistic update
     const newActive = currentActive ? 0 : 1;
@@ -230,9 +241,12 @@ export function Homepage() {
         ))}
       </div>
 
-      {editingSection === 'hero' && <HeroEditor onClose={() => setEditingSection(null)} />}
-      {editingSection === 'brand_band' && <BrandBandEditor onClose={() => setEditingSection(null)} />}
-      {editingSection === 'about' && <AboutEditor onClose={() => setEditingSection(null)} />}
+
+      {editingSection === 'hero' && <HeroEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'brand_band' && <BrandBandEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'about' && <AboutEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'why_so3' && <WhySo3Editor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'process' && <ProcessEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
     </div>
   );
 }

@@ -2,9 +2,6 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X, ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
 
-export interface ProcessStep {
-  title: string;
-}
 
 export interface WhySo3Content {
   eyebrow: string;
@@ -62,7 +59,7 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
       await apiClient.patch('/api/admin/homepage/sections/why_so3/content', { content: data });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
-      if (onSaved) onSaved();
+      onSaved?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');
@@ -156,7 +153,7 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
 
             <div className="border-t border-white/10 pt-4 mt-2">
               <div className="flex items-center justify-between mb-4">
-                <label className="block text-xs text-white/50">Maddelar (Min: 1, Max: 6)</label>
+                <label className="block text-xs text-white/50">Maddeler (Min: 1, Max: 6)</label>
               </div>
 
               <div className="space-y-4">

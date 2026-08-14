@@ -57,7 +57,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
       await apiClient.patch('/api/admin/homepage/sections/process/content', { content: data });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
-      if (onSaved) onSaved();
+      onSaved?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');

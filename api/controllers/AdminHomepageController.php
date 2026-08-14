@@ -127,42 +127,86 @@ class AdminHomepageController {
         $defaults = self::DEFAULTS[$section_id];
         $merged = [];
         foreach ($defaults as $k => $v) {
-            if (isset($stored[$k]) && gettype($stored[$k]) === gettype($v)) {
-                if (is_array($v)) {
-                    if ($section_id === 'why_so3' && $k === 'items') {
-                        $validItems = [];
-                        foreach ($stored[$k] as $item) {
-                            if (is_array($item) && isset($item['title']) && isset($item['description'])) {
-                                $validItems[] = [
-                                    'title' => (string)$item['title'],
-                                    'description' => (string)$item['description']
-                                ];
-                            }
-                        }
-                        $merged[$k] = !empty($validItems) ? $validItems : $v;
-                    } elseif ($section_id === 'process' && $k === 'steps') {
-                        $validSteps = [];
-                        foreach ($stored[$k] as $step) {
-                            if (is_array($step) && isset($step['title'])) {
-                                $validSteps[] = [
-                                    'title' => (string)$step['title']
-                                ];
-                            }
-                        }
-                        $merged[$k] = !empty($validSteps) ? $validSteps : $v;
-                    } elseif ($section_id === 'brand_band' && $k === 'items') {
-                        $validItems = [];
-                        foreach ($stored[$k] as $item) {
-                            if (is_string($item)) {
-                                $validItems[] = $item;
-                            }
-                        }
-                        $merged[$k] = !empty($validItems) ? $validItems : $v;
+            if (array_key_exists($k, $stored)) {
+                $storedVal = $stored[$k];
+                if ($section_id === 'hero' && $k === 'background_media_id') {
+                    if (is_null($storedVal)) {
+                        $merged[$k] = null;
+                    } elseif (is_int($storedVal) && $storedVal > 0) {
+                        $merged[$k] = $storedVal;
                     } else {
                         $merged[$k] = $v;
                     }
+                } elseif (is_array($v)) {
+                    if ($section_id === 'why_so3' && $k === 'items') {
+                        $validItems = [];
+                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 6) {
+                            $allValid = true;
+                            foreach ($storedVal as $item) {
+                                if (!is_array($item)) { $allValid = false; break; }
+                                $keys = array_keys($item);
+                                sort($keys);
+                                if ($keys !== ['description', 'title']) { $allValid = false; break; }
+                                if (!is_string($item['title']) || !is_string($item['description'])) { $allValid = false; break; }
+                                $t = trim($item['title']);
+                                $d = trim($item['description']);
+                                if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) { $allValid = false; break; }
+                                $validItems[] = ['title' => $t, 'description' => $d];
+                            }
+                            if ($allValid && count($validItems) > 0) {
+                                $merged[$k] = $validItems;
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } else {
+                            $merged[$k] = $v;
+                        }
+                    } elseif ($section_id === 'process' && $k === 'steps') {
+                        $validSteps = [];
+                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 8) {
+                            $allValid = true;
+                            foreach ($storedVal as $step) {
+                                if (!is_array($step)) { $allValid = false; break; }
+                                $keys = array_keys($step);
+                                if ($keys !== ['title']) { $allValid = false; break; }
+                                if (!is_string($step['title'])) { $allValid = false; break; }
+                                $t = trim($step['title']);
+                                if (mb_strlen($t) < 1 || mb_strlen($t) > 180) { $allValid = false; break; }
+                                $validSteps[] = ['title' => $t];
+                            }
+                            if ($allValid && count($validSteps) > 0) {
+                                $merged[$k] = $validSteps;
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } else {
+                            $merged[$k] = $v;
+                        }
+                    } elseif ($section_id === 'brand_band' && $k === 'items') {
+                        $validItems = [];
+                        if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 12) {
+                            $allValid = true;
+                            foreach ($storedVal as $item) {
+                                if (!is_string($item)) { $allValid = false; break; }
+                                $t = trim($item);
+                                if (mb_strlen($t) < 1 || mb_strlen($t) > 100) { $allValid = false; break; }
+                                $validItems[] = $t;
+                            }
+                            if ($allValid && count($validItems) > 0) {
+                                $merged[$k] = $validItems;
+                            } else {
+                                $merged[$k] = $v;
+                            }
+                        } else {
+                            $merged[$k] = $v;
+                        }
+                    } else {
+                        $merged[$k] = $v;
+                    }
+                } elseif (gettype($storedVal) === gettype($v)) {
+                    $merged[$k] = $storedVal;
                 } else {
-                    $merged[$k] = $stored[$k];
+                    $merged[$k] = $v;
                 }
             } else {
                 $merged[$k] = $v;
@@ -228,6 +272,11 @@ class AdminHomepageController {
         }
 
         if ($section_id === 'hero') {
+            foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'support_text', 'feature_left', 'feature_right', 'primary_cta_label', 'secondary_cta_label', 'primary_cta_target', 'secondary_cta_target'] as $field) {
+                if (isset($content[$field]) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
             $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
             $validated['headline_primary'] = trim($content['headline_primary'] ?? '');
             $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? '');
@@ -255,16 +304,16 @@ class AdminHomepageController {
             $validated['primary_cta_target'] = $pcta;
             $validated['secondary_cta_target'] = $scta;
 
-            if (!empty($content['background_media_id'])) {
+            if (array_key_exists('background_media_id', $content) && !is_null($content['background_media_id'])) {
                 $bgId = $content['background_media_id'];
-                if (!is_numeric($bgId)) {
+                if (!is_int($bgId) || $bgId <= 0) {
                     Response::error('Geçersiz medya ID.', 'VALIDATION_ERROR', 422);
                 }
                 $media = $db->fetch("SELECT id FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$bgId]);
                 if (!$media) {
                     Response::error('Geçersiz veya silinmiş medya.', 'VALIDATION_ERROR', 422);
                 }
-                $validated['background_media_id'] = (int)$bgId;
+                $validated['background_media_id'] = $bgId;
             } else {
                 $validated['background_media_id'] = null;
             }
@@ -296,6 +345,11 @@ class AdminHomepageController {
             $validated['items'] = $cleanItems;
         }
         elseif ($section_id === 'about') {
+            foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'paragraph_primary', 'paragraph_secondary', 'youtube_title', 'youtube_video_id'] as $field) {
+                if (isset($content[$field]) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
             $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
             $validated['headline_primary'] = trim($content['headline_primary'] ?? $defaults['headline_primary']);
             $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']);
@@ -313,6 +367,11 @@ class AdminHomepageController {
             $validated['youtube_video_id'] = $yid;
         }
         elseif ($section_id === 'why_so3') {
+            foreach (['eyebrow', 'headline_primary', 'headline_emphasis', 'intro'] as $field) {
+                if (isset($content[$field]) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
             $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
             $validated['headline_primary'] = trim($content['headline_primary'] ?? $defaults['headline_primary']);
             $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']);
@@ -332,12 +391,17 @@ class AdminHomepageController {
                 }
                 
                 $itemKeys = array_keys($item);
-                if (count($itemKeys) !== 2 || !in_array('title', $itemKeys) || !in_array('description', $itemKeys)) {
+                sort($itemKeys);
+                if ($itemKeys !== ['description', 'title']) {
                     Response::error('Geçersiz veri tipi. Fazla veya eksik anahtar.', 'VALIDATION_ERROR', 422);
                 }
 
-                $t = trim($item['title'] ?? '');
-                $d = trim($item['description'] ?? '');
+                if (!is_string($item['title']) || !is_string($item['description'])) {
+                    Response::error('Geçersiz veri tipi. Metin olmalı.', 'VALIDATION_ERROR', 422);
+                }
+
+                $t = trim($item['title']);
+                $d = trim($item['description']);
                 if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) {
                     Response::error('Madde başlığı 1-100, açıklaması 1-500 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
@@ -346,6 +410,11 @@ class AdminHomepageController {
             $validated['items'] = $cleanItems;
         }
         elseif ($section_id === 'process') {
+            foreach (['eyebrow', 'headline_primary', 'headline_emphasis'] as $field) {
+                if (isset($content[$field]) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
             $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
             $validated['headline_primary'] = trim($content['headline_primary'] ?? '');
             $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? '');
@@ -364,11 +433,15 @@ class AdminHomepageController {
                 }
                 
                 $stepKeys = array_keys($step);
-                if (count($stepKeys) !== 1 || !in_array('title', $stepKeys)) {
+                if ($stepKeys !== ['title']) {
                     Response::error('Geçersiz veri tipi. Fazla veya eksik anahtar.', 'VALIDATION_ERROR', 422);
                 }
+                
+                if (!is_string($step['title'])) {
+                    Response::error('Geçersiz veri tipi. Metin olmalı.', 'VALIDATION_ERROR', 422);
+                }
 
-                $t = trim($step['title'] ?? '');
+                $t = trim($step['title']);
                 if (mb_strlen($t) < 1 || mb_strlen($t) > 180) {
                     Response::error('Adım metni 1-180 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
@@ -378,6 +451,64 @@ class AdminHomepageController {
         }
 
         try {
+            $db->beginTransaction();
+
+            $db->query(
+                "UPDATE homepage_sections
+                 SET content_json = ?, updated_by = ?, updated_at = NOW()
+                 WHERE id = ?",
+                [
+                    json_encode($validated, JSON_UNESCAPED_UNICODE),
+                    $adminId,
+                    $sectionDbId
+                ]
+            );
+
+            if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
+                if ($oldMediaId !== null) {
+                    $db->query(
+                        "DELETE FROM media_usages WHERE media_id = ? AND entity_type = 'homepage_section' AND entity_id = ? AND field_name = 'background'",
+                        [$oldMediaId, $sectionDbId]
+                    );
+                }
+                if ($newMediaId !== null) {
+                    $db->query(
+                        "INSERT IGNORE INTO media_usages (media_id, entity_type, entity_id, field_name) VALUES (?, 'homepage_section', ?, 'background')",
+                        [$newMediaId, $sectionDbId]
+                    );
+                }
+            }
+
+            $db->commit();
+            
+            $changed = [];
+            foreach ($validated as $k => $v) {
+                $ov = $oldMerged[$k] ?? null;
+                if ($v !== $ov) {
+                    $changed[] = $k;
+                }
+            }
+            
+            $auditData = [
+                'section_id' => $section_id,
+                'changed_fields' => $changed
+            ];
+            
+            if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
+                $auditData['old_media_id'] = $oldMediaId;
+                $auditData['new_media_id'] = $newMediaId;
+            }
+
+            AuditLogger::log(
+                'homepage.section.content.update',
+                $adminId,
+                'homepage_section',
+                $sectionDbId,
+                $auditData
+            );
+
+            Response::json(['success' => true]);
+        } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }

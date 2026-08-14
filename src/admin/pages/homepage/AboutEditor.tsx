@@ -56,7 +56,7 @@ export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved
       await apiClient.patch('/api/admin/homepage/sections/about/content', { content: data });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
-      if (onSaved) onSaved();
+      onSaved?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');
