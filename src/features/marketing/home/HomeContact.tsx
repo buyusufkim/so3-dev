@@ -1,6 +1,14 @@
 import { ConsultationForm } from "../contact/ConsultationForm";
+import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
+import { formatTurkishPhone, toTelHref, toWhatsappUrl } from "@/features/site-settings/utils";
 
 export function HomeContact() {
+  const { settings, loading } = useSiteSettings();
+  const contact = settings?.contact;
+  const location = settings?.location;
+
+  // Default address text if API returns empty but we still want to render structure safely
+  const addressText = location?.address || "Kayseri, Türkiye";
   return (
     <section id="iletisim" className="py-24 md:py-32 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 border-t border-black/5">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
@@ -24,37 +32,50 @@ export function HomeContact() {
               <div className="flex flex-col gap-4">
                 <span className="text-xs font-bold uppercase tracking-widest text-[#0A0A0A]/40">TELEFON</span>
                 <div className="flex flex-col gap-2">
-                  <a href="tel:+905539573738" className="text-2xl md:text-3xl font-semibold hover:text-[#851C35] transition-colors">0553 957 37 38</a>
-                  <a href="tel:+905072077797" className="text-2xl md:text-3xl font-semibold hover:text-[#851C35] transition-colors">0507 207 77 97</a>
+                  {!loading && contact?.phone_primary && (
+                    <a href={toTelHref(contact.phone_primary)} className="text-2xl md:text-3xl font-semibold hover:text-[#851C35] transition-colors">
+                      {formatTurkishPhone(contact.phone_primary)}
+                    </a>
+                  )}
+                  {!loading && contact?.phone_secondary && (
+                    <a href={toTelHref(contact.phone_secondary)} className="text-2xl md:text-3xl font-semibold hover:text-[#851C35] transition-colors">
+                      {formatTurkishPhone(contact.phone_secondary)}
+                    </a>
+                  )}
+                  {loading && (
+                    <span className="text-2xl md:text-3xl font-semibold text-gray-300 animate-pulse">...</span>
+                  )}
                 </div>
               </div>
               
-              <div className="flex flex-col gap-4">
-                <span className="text-xs font-bold uppercase tracking-widest text-[#0A0A0A]/40">WHATSAPP</span>
-                <a href="https://wa.me/905523790777" target="_blank" rel="noopener noreferrer" className="text-xl md:text-2xl font-semibold hover:text-[#851C35] transition-colors">
-                  0552 379 07 77
-                </a>
-              </div>
+              {(!loading && contact?.whatsapp) && (
+                <div className="flex flex-col gap-4">
+                  <span className="text-xs font-bold uppercase tracking-widest text-[#0A0A0A]/40">WHATSAPP</span>
+                  <a href={toWhatsappUrl(contact.whatsapp)} target="_blank" rel="noopener noreferrer" className="text-xl md:text-2xl font-semibold hover:text-[#851C35] transition-colors">
+                    {formatTurkishPhone(contact.whatsapp)}
+                  </a>
+                </div>
+              )}
               
               <div className="flex flex-col gap-4">
                 <span className="text-xs font-bold uppercase tracking-widest text-[#0A0A0A]/40">ADRES</span>
-                <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/80 leading-relaxed max-w-sm">
-                  Yıldırım Beyazıt,<br />
-                  Aşık Veysel Blv. No:69/4,<br />
-                  38030 Melikgazi / Kayseri
+                <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/80 leading-relaxed max-w-sm whitespace-pre-line">
+                  {loading ? "..." : addressText}
                 </p>
-                <a 
-                  href="https://www.google.com/maps/place/SO3+Selami+%C3%96zy%C4%B1ld%C4%B1r%C4%B1m+Personal+Trainer/@38.7129364,35.5318726,17z/data=!3m1!4b1!4m6!3m5!1s0x152b136a06abeb6b:0x572b063e20953544!8m2!3d38.7129364!4d35.5318726!16s%2Fg%2F11st_bxb2b" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-2 text-sm font-semibold text-[#851C35] mt-2"
-                >
+                {!loading && location?.maps_directions_url && (
+                  <a 
+                    href={location.maps_directions_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-2 text-sm font-semibold text-[#851C35] mt-2"
+                  >
                   <span className="relative">
                     Yol Tarifi Al
                     <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-[#851C35] transition-all group-hover:w-full"></span>
                   </span>
                   <span className="transform group-hover:translate-x-1 transition-transform">→</span>
-                </a>
+                  </a>
+                )}
               </div>
             </div>
             

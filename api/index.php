@@ -72,6 +72,9 @@ $routes = [
         },
         '/api/public/events' => function() {
             (new \Controllers\PublicEventController())->index();
+        },
+        '/api/public/site-settings' => function() {
+            (new \Controllers\SiteSettingsController())->publicIndex();
         }
     ],
     'POST' => [

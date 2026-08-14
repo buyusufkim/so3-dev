@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
+import { toWhatsappUrl } from "@/features/site-settings/utils";
 
 export function ConsultationForm() {
+  const { settings, loading } = useSiteSettings();
+  const whatsappPhone = settings?.contact?.whatsapp;
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
@@ -29,7 +33,8 @@ export function ConsultationForm() {
     }
     
     // Redirect to WhatsApp
-    const whatsappUrl = `https://wa.me/905523790777?text=${encodeURIComponent(messageBody)}`;
+    if (!whatsappPhone) return;
+    const whatsappUrl = `${toWhatsappUrl(whatsappPhone)}?text=${encodeURIComponent(messageBody)}`;
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -141,9 +146,15 @@ export function ConsultationForm() {
         <div className="mt-4 pt-6 border-t border-[#0A0A0A]/10">
           <button
             type="submit"
-            className="w-full py-4 rounded text-sm font-semibold transition-all flex items-center justify-center gap-2 bg-[#25D366] text-white hover:bg-[#1EBE5A]"
+            disabled={loading || !whatsappPhone}
+            className={cn(
+              "w-full py-4 rounded text-sm font-semibold transition-all flex items-center justify-center gap-2",
+              loading || !whatsappPhone 
+                ? "bg-[#E5E3DB] text-[#0A0A0A]/40 cursor-not-allowed"
+                : "bg-[#25D366] text-white hover:bg-[#1EBE5A]"
+            )}
           >
-            WhatsApp'tan Ön Görüşme Planla
+            {loading ? "Yükleniyor..." : !whatsappPhone ? "Geçici olarak kullanım dışı" : "WhatsApp'tan Ön Görüşme Planla"}
           </button>
         </div>
       </form>

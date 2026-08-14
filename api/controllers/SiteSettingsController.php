@@ -244,6 +244,17 @@ class SiteSettingsController {
         }
     }
 
+    public function publicIndex() {
+        $settings = [
+            'contact' => $this->fetchSetting('contact'),
+            'location' => $this->fetchSetting('location'),
+            'social' => $this->fetchSetting('social'),
+            'tour' => $this->fetchSetting('tour'),
+            'business_hours' => $this->fetchSetting('business_hours')
+        ];
+        Response::json($settings);
+    }
+
     public function index() {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 

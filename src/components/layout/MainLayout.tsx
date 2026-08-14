@@ -3,6 +3,7 @@ import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { useEffect } from "react";
 import { WhatsAppButton } from "../ui/WhatsAppButton";
+import { PublicSiteSettingsProvider } from "@/features/site-settings/PublicSiteSettingsProvider";
 
 export function MainLayout() {
   const { pathname, hash } = useLocation();
@@ -26,13 +27,15 @@ export function MainLayout() {
   }, [pathname, hash]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-brand-black text-brand-off-white selection:bg-brand-off-white selection:text-brand-black">
-      <Header />
-      <main className="flex-1 flex flex-col">
-        <Outlet />
-      </main>
-      <Footer />
-      <WhatsAppButton />
-    </div>
+    <PublicSiteSettingsProvider>
+      <div className="flex min-h-screen flex-col bg-brand-black text-brand-off-white selection:bg-brand-off-white selection:text-brand-black">
+        <Header />
+        <main className="flex-1 flex flex-col">
+          <Outlet />
+        </main>
+        <Footer />
+        <WhatsAppButton />
+      </div>
+    </PublicSiteSettingsProvider>
   );
 }

@@ -1,4 +1,8 @@
+import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
+
 export function HomeInstagram() {
+  const { settings, loading } = useSiteSettings();
+  const username = settings?.social?.instagram_username;
   return (
     <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-white text-[#0A0A0A]">
       <div className="container mx-auto max-w-7xl">
@@ -19,17 +23,19 @@ export function HomeInstagram() {
           </div>
           
           <div className="shrink-0 w-full md:w-auto">
-            <a 
-              href="https://www.instagram.com/so3pt/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="group flex items-center justify-center bg-[#0A0A0A] text-white px-8 py-4 rounded text-sm font-semibold hover:bg-[#851C35] transition-colors w-full md:w-auto"
-            >
-              Instagram'da Takip Et
-              <svg className="ml-2 w-4 h-4 transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </a>
+            {!loading && username && (
+              <a 
+                href={`https://www.instagram.com/${username}/`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="group flex items-center justify-center bg-[#0A0A0A] text-white px-8 py-4 rounded text-sm font-semibold hover:bg-[#851C35] transition-colors w-full md:w-auto"
+              >
+                Instagram'da Takip Et
+                <svg className="ml-2 w-4 h-4 transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </a>
+            )}
           </div>
         </div>
 

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
+import { toWhatsappUrl } from "@/features/site-settings/utils";
 
 export function WhatsAppButton() {
   const [isFooterVisible, setIsFooterVisible] = useState(false);
+  const { settings, loading } = useSiteSettings();
 
   useEffect(() => {
     const footer = document.querySelector('[data-site-footer]');
@@ -13,28 +16,30 @@ export function WhatsAppButton() {
       },
       {
         root: null,
-        threshold: 0, // as soon as even 1px is visible
+        threshold: 0,
         rootMargin: "0px",
       }
     );
-
     observer.observe(footer);
-
     return () => {
       observer.unobserve(footer);
       observer.disconnect();
     };
   }, []);
 
+  const whatsappPhone = settings?.contact?.whatsapp;
+  if (loading || !whatsappPhone) return null;
+  const whatsappUrl = `${toWhatsappUrl(whatsappPhone)}?text=Merhaba,%20SO3%20PT%20hakk%C4%B1nda%20bilgi%20almak%20istiyorum.`;
+
   return (
     <a
-      href="https://wa.me/905523790777?text=Merhaba,%20SO3%20PT%20hakk%C4%B1nda%20bilgi%20almak%20istiyorum."
+      href={whatsappUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="fixed right-6 md:right-8 z-50 w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-lg hover:bg-[#1EBE5A] hover:scale-105 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-[#25D366]/50 group"
       style={{ 
         bottom: isFooterVisible 
-          ? "max(6rem, calc(env(safe-area-inset-bottom) + 6rem))" // ~96px to clear footer links nicely
+          ? "max(6rem, calc(env(safe-area-inset-bottom) + 6rem))" 
           : "max(1.5rem, calc(env(safe-area-inset-bottom) + 1.5rem))" 
       }}
       aria-label="SO3 PT WhatsApp ile iletişime geç"
