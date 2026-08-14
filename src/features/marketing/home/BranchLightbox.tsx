@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 
 interface BranchLightboxProps {
   isOpen: boolean;

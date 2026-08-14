@@ -80,7 +80,7 @@ class BranchController {
             }
 
             $sqlGallery = "
-                SELECT ma.storage_path, ma.thumbnail_path, ma.alt_text, bm.caption
+                SELECT ma.storage_path, ma.thumbnail_path, ma.alt_text, ma.caption
                 FROM branch_media bm
                 JOIN media_assets ma ON bm.media_id = ma.id
                 WHERE bm.branch_id = ? AND ma.media_type = 'image' AND ma.status = 'active' AND ma.deleted_at IS NULL

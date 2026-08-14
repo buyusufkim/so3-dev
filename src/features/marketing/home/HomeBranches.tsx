@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { BranchLightbox } from "./BranchLightbox";
-import type { PublicBranch } from "@/features/branches/publicBranches";
+import { type PublicBranch, parsePublicBranchesResponse } from "@/features/branches/publicBranches";
 import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
 
 export function HomeBranches() {
@@ -19,17 +19,9 @@ export function HomeBranches() {
         if (!res.ok) throw new Error("Failed to fetch branches");
         
         const json: unknown = await res.json();
-        if (
-          json &&
-          typeof json === 'object' &&
-          'data' in json &&
-          Array.isArray((json as { data: unknown }).data)
-        ) {
-          if (mounted) {
-            setBranches((json as { data: PublicBranch[] }).data);
-          }
-        } else {
-          throw new Error('Malformed branches payload');
+        const parsedBranches = parsePublicBranchesResponse(json);
+        if (mounted) {
+          setBranches(parsedBranches);
         }
       } catch (err) {
         if (mounted) setError(true);
