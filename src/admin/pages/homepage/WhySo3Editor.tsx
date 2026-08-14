@@ -6,15 +6,20 @@ export interface ProcessStep {
   title: string;
 }
 
-export interface ProcessContent {
-  eyebrow?: string;
-  headline_primary?: string;
-  headline_emphasis?: string;
-  steps?: ProcessStep[];
+export interface WhySo3Content {
+  eyebrow: string;
+  headline_primary: string;
+  headline_emphasis: string;
+  intro: string;
+  items: {
+    title: string;
+    description: string;
+  }[];
 }
 
-export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
-  const [data, setData] = useState<ProcessContent | null>(null);
+
+export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
+  const [data, setData] = useState<WhySo3Content | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +31,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
 
   const fetchContent = async () => {
     try {
-      const res = await apiClient.get('/api/admin/homepage/sections/process/content');
+      const res = await apiClient.get('/api/admin/homepage/sections/why_so3/content');
       setData(res.content);
     } catch (err: any) {
       setError(err.message || 'Yükleme başarısız.');
@@ -35,7 +40,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
     }
   };
 
-  const handleFieldChange = (field: keyof ProcessContent, value: string) => {
+  const handleFieldChange = (field: keyof WhySo3Content, value: string) => {
     setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
   };
@@ -54,7 +59,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
     try {
       setSaving(true);
       setError(null);
-      await apiClient.patch('/api/admin/homepage/sections/process/content', { content: data });
+      await apiClient.patch('/api/admin/homepage/sections/why_so3/content', { content: data });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
       if (onSaved) onSaved();
@@ -67,43 +72,43 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
   };
 
   const moveUp = (index: number) => {
-    if (index === 0 || !data?.steps) return;
-    const newSteps = [...data.steps];
-    const temp = newSteps[index - 1];
-    newSteps[index - 1] = newSteps[index];
-    newSteps[index] = temp;
-    setData({ ...data, steps: newSteps });
+    if (index === 0 || !data?.items) return;
+    const newItems = [...data.items];
+    const temp = newItems[index - 1];
+    newItems[index - 1] = newItems[index];
+    newItems[index] = temp;
+    setData({ ...data, items: newItems });
     setIsDirty(true);
   };
 
   const moveDown = (index: number) => {
-    if (!data?.steps || index === data.steps.length - 1) return;
-    const newSteps = [...data.steps];
-    const temp = newSteps[index + 1];
-    newSteps[index + 1] = newSteps[index];
-    newSteps[index] = temp;
-    setData({ ...data, steps: newSteps });
+    if (!data?.items || index === data.items.length - 1) return;
+    const newItems = [...data.items];
+    const temp = newItems[index + 1];
+    newItems[index + 1] = newItems[index];
+    newItems[index] = temp;
+    setData({ ...data, items: newItems });
     setIsDirty(true);
   };
 
-  const removeStep = (index: number) => {
-    if (!data?.steps) return;
-    const newSteps = data.steps.filter((_, i) => i !== index);
-    setData({ ...data, steps: newSteps });
+  const removeItem = (index: number) => {
+    if (!data?.items) return;
+    const newItems = data.items.filter((_, i) => i !== index);
+    setData({ ...data, items: newItems });
     setIsDirty(true);
   };
 
-  const updateStep = (index: number, val: string) => {
-    if (!data?.steps) return;
-    const newSteps = [...data.steps];
-    newSteps[index] = { ...newSteps[index], title: val };
-    setData({ ...data, steps: newSteps });
+  const updateItem = (index: number, field: 'title'|'description', val: string) => {
+    if (!data?.items) return;
+    const newItems = [...data.items];
+    newItems[index] = { ...newItems[index], [field]: val };
+    setData({ ...data, items: newItems });
     setIsDirty(true);
   };
 
-  const addStep = () => {
-    if (!data || !data.steps || data.steps.length >= 8) return;
-    setData({ ...data, steps: [...data.steps, { title: "Yeni Adım" }] });
+  const addItem = () => {
+    if (!data || !data.items || data.items.length >= 6) return;
+    setData({ ...data, items: [...data.items, { title: "Yeni Madde", description: "Açıklama metni" }] });
     setIsDirty(true);
   };
 
@@ -114,7 +119,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-[#111] border border-white/10 rounded-lg w-full max-w-2xl my-auto">
         <div className="sticky top-0 bg-[#111] border-b border-white/10 p-4 flex items-center justify-between z-10 rounded-t-lg">
-          <h2 className="text-lg font-bold text-white">Nasıl Çalışır Düzenle</h2>
+          <h2 className="text-lg font-bold text-white">Neden SO3 Düzenle</h2>
           <button onClick={handleClose} className="p-1 text-white/50 hover:text-white transition">
             <X className="w-5 h-5" />
           </button>
@@ -129,11 +134,14 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
               <input type="text" maxLength={80} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                 value={data.eyebrow || ''} onChange={e => handleFieldChange('eyebrow', e.target.value)} />
             </div>
+
+            <div>
+              <label className="block text-xs text-white/50 mb-1">Kısa Açıklama</label>
+              <textarea maxLength={400} rows={3} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
+                value={data.intro || ''} onChange={e => handleFieldChange('intro', e.target.value)} />
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 text-xs text-white/40 mb-1">
-                Başlık alanlarını boş bırakırsanız bölüm yalnızca üst etiket ve adımlarla gösterilebilir.
-              </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1">Ana Başlık</label>
                 <input type="text" maxLength={140} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
@@ -148,17 +156,17 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
 
             <div className="border-t border-white/10 pt-4 mt-2">
               <div className="flex items-center justify-between mb-4">
-                <label className="block text-xs text-white/50">Adımlar (Min: 1, Max: 8)</label>
+                <label className="block text-xs text-white/50">Maddelar (Min: 1, Max: 6)</label>
               </div>
 
               <div className="space-y-4">
-                {data.steps?.map((step, index) => (
+                {data.items?.map((item, index) => (
                   <div key={index} className="flex gap-3 bg-white/5 p-4 rounded border border-white/10 items-center">
                     <div className="flex flex-col gap-1">
                       <button onClick={() => moveUp(index)} disabled={index === 0} className="text-white/30 hover:text-white disabled:opacity-30">
                         <ArrowUp className="w-4 h-4" />
                       </button>
-                      <button onClick={() => moveDown(index)} disabled={index === (data.steps?.length ?? 0) - 1} className="text-white/30 hover:text-white disabled:opacity-30">
+                      <button onClick={() => moveDown(index)} disabled={index === (data.items?.length ?? 0) - 1} className="text-white/30 hover:text-white disabled:opacity-30">
                         <ArrowDown className="w-4 h-4" />
                       </button>
                     </div>
@@ -166,17 +174,27 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
                       {index + 1}
                     </div>
                     <div className="flex-1">
-                      <input 
-                        type="text" 
-                        maxLength={180}
-                        className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition"
-                        value={step.title}
-                        onChange={(e) => updateStep(index, e.target.value)}
-                        placeholder="Adım Metni"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input 
+                          type="text" 
+                          maxLength={100}
+                          className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition"
+                          value={item.title}
+                          onChange={(e) => updateItem(index, 'title', e.target.value)}
+                          placeholder="Başlık"
+                        />
+                        <textarea
+                          maxLength={500}
+                          rows={2}
+                          className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition resize-none"
+                          value={item.description}
+                          onChange={(e) => updateItem(index, 'description', e.target.value)}
+                          placeholder="Açıklama"
+                        />
+                      </div>
                     </div>
                     <div>
-                      <button onClick={() => removeStep(index)} className="p-2 text-red-500/50 hover:text-red-400 hover:bg-red-500/10 rounded transition">
+                      <button onClick={() => removeItem(index)} className="p-2 text-red-500/50 hover:text-red-400 hover:bg-red-500/10 rounded transition">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -185,14 +203,14 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
               </div>
 
               <div className="mt-4 flex items-center justify-between">
-                <div className="text-sm text-white/50">Adım Sayısı: {data.steps?.length || 0}/8</div>
+                <div className="text-sm text-white/50">Madde Sayısı: {data.items?.length || 0}/6</div>
                 <button 
-                  onClick={addStep}
-                  disabled={(data.steps?.length || 0) >= 8}
+                  onClick={addItem}
+                  disabled={(data.items?.length || 0) >= 6}
                   className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded text-sm font-medium transition disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4" />
-                  Yeni Adım Ekle
+                  Yeni Madde Ekle
                 </button>
               </div>
             </div>

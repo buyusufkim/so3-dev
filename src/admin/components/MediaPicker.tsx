@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Search, Image as ImageIcon, Video, Filter } from "lucide-react";
+import { X, Search, Image as ImageIcon, Video } from "lucide-react";
 import { apiClient } from "../api/client";
 
 interface MediaAsset {
@@ -112,7 +112,7 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
 
         <div className="flex-1 overflow-y-auto p-4 relative" onScroll={(e) => {
           const target = e.target as HTMLDivElement;
-          if (target.scrollHeight - target.scrollTop === target.clientHeight) {
+          if (target.scrollHeight - target.scrollTop <= target.clientHeight + 4) {
             if (!loading && page < totalPages) {
               fetchAssets(page + 1);
             }

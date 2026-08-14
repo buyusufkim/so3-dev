@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X, ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
 
-export function BrandBandEditor({ onClose }: { onClose: () => void }) {
+export function BrandBandEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
   const [items, setItems] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,6 +41,7 @@ export function BrandBandEditor({ onClose }: { onClose: () => void }) {
       await apiClient.patch('/api/admin/homepage/sections/brand_band/content', { content: { items } });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
+      if (onSaved) onSaved();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');

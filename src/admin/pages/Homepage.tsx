@@ -4,6 +4,8 @@ import { MoveUp, MoveDown, Eye, EyeOff, Save, Edit2 } from "lucide-react";
 import { HeroEditor } from "./homepage/HeroEditor";
 import { BrandBandEditor } from "./homepage/BrandBandEditor";
 import { AboutEditor } from "./homepage/AboutEditor";
+import { WhySo3Editor } from "./homepage/WhySo3Editor";
+import { ProcessEditor } from "./homepage/ProcessEditor";
 
 
 type HomepageSection = {

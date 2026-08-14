@@ -6,6 +6,7 @@ use Core\Database;
 use Core\Response;
 use Core\AuditLogger;
 use Middleware\AuthMiddleware;
+use Core\MediaHelper;
 
 class AdminHomepageController {
     
@@ -126,7 +127,46 @@ class AdminHomepageController {
         $defaults = self::DEFAULTS[$section_id];
         $merged = [];
         foreach ($defaults as $k => $v) {
-            $merged[$k] = $stored[$k] ?? $v;
+            if (isset($stored[$k]) && gettype($stored[$k]) === gettype($v)) {
+                if (is_array($v)) {
+                    if ($section_id === 'why_so3' && $k === 'items') {
+                        $validItems = [];
+                        foreach ($stored[$k] as $item) {
+                            if (is_array($item) && isset($item['title']) && isset($item['description'])) {
+                                $validItems[] = [
+                                    'title' => (string)$item['title'],
+                                    'description' => (string)$item['description']
+                                ];
+                            }
+                        }
+                        $merged[$k] = !empty($validItems) ? $validItems : $v;
+                    } elseif ($section_id === 'process' && $k === 'steps') {
+                        $validSteps = [];
+                        foreach ($stored[$k] as $step) {
+                            if (is_array($step) && isset($step['title'])) {
+                                $validSteps[] = [
+                                    'title' => (string)$step['title']
+                                ];
+                            }
+                        }
+                        $merged[$k] = !empty($validSteps) ? $validSteps : $v;
+                    } elseif ($section_id === 'brand_band' && $k === 'items') {
+                        $validItems = [];
+                        foreach ($stored[$k] as $item) {
+                            if (is_string($item)) {
+                                $validItems[] = $item;
+                            }
+                        }
+                        $merged[$k] = !empty($validItems) ? $validItems : $v;
+                    } else {
+                        $merged[$k] = $v;
+                    }
+                } else {
+                    $merged[$k] = $stored[$k];
+                }
+            } else {
+                $merged[$k] = $v;
+            }
         }
 
         $response = [
@@ -136,9 +176,10 @@ class AdminHomepageController {
         ];
 
         if ($section_id === 'hero' && !empty($merged['background_media_id'])) {
-            $media = $db->fetch("SELECT id, url, thumbnail_url, alt_text FROM media_assets WHERE id = ?", [$merged['background_media_id']]);
+            $media = $db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$merged['background_media_id']]);
             if ($media) {
-                $response['content']['background_media_info'] = $media;
+                MediaHelper::appendUrls($media);
+                $response['media'] = ['background' => $media];
             }
         }
 
@@ -180,6 +221,12 @@ class AdminHomepageController {
         $oldMediaId = null;
         $newMediaId = null;
 
+        $allowedKeys = array_keys($defaults);
+        $extraKeys = array_diff(array_keys($content), $allowedKeys);
+        if (!empty($extraKeys)) {
+            Response::error('Geçersiz alanlar tespit edildi.', 'VALIDATION_ERROR', 422);
+        }
+
         if ($section_id === 'hero') {
             $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
             $validated['headline_primary'] = trim($content['headline_primary'] ?? '');
@@ -196,7 +243,6 @@ class AdminHomepageController {
             if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 100 || mb_strlen($validated['headline_emphasis']) > 100 || mb_strlen($validated['support_text']) > 180 || mb_strlen($validated['feature_left']) > 80 || mb_strlen($validated['feature_right']) > 80 || mb_strlen($validated['primary_cta_label']) > 60 || mb_strlen($validated['secondary_cta_label']) > 60 || mb_strlen($pcta) > 200 || mb_strlen($scta) > 200) {
                 Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
             }
-
             if (empty($validated['headline_primary']) || empty($validated['headline_emphasis'])) {
                 Response::error('Ana başlık ve vurgulu başlık zorunludur.', 'VALIDATION_ERROR', 422);
             }
@@ -209,8 +255,8 @@ class AdminHomepageController {
             $validated['primary_cta_target'] = $pcta;
             $validated['secondary_cta_target'] = $scta;
 
-            $bgId = $content['background_media_id'] ?? null;
-            if ($bgId !== null) {
+            if (!empty($content['background_media_id'])) {
+                $bgId = $content['background_media_id'];
                 if (!is_numeric($bgId)) {
                     Response::error('Geçersiz medya ID.', 'VALIDATION_ERROR', 422);
                 }
@@ -222,7 +268,6 @@ class AdminHomepageController {
             } else {
                 $validated['background_media_id'] = null;
             }
-
             $oldMediaId = $oldMerged['background_media_id'] ?? null;
             $newMediaId = $validated['background_media_id'];
         }
@@ -261,9 +306,8 @@ class AdminHomepageController {
             if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 120 || mb_strlen($validated['headline_emphasis']) > 120 || mb_strlen($validated['paragraph_primary']) > 1200 || mb_strlen($validated['paragraph_secondary']) > 1200 || mb_strlen($validated['youtube_title']) > 120) {
                 Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
             }
-
             $yid = trim($content['youtube_video_id'] ?? $defaults['youtube_video_id']);
-            if ($yid !== '' && !preg_match('/^[A-Za-z0-9_-]{6,20}$$/', $yid)) {
+            if ($yid !== '' && !preg_match('/^[A-Za-z0-9_-]{6,20}$/', $yid)) {
                 Response::error('Geçersiz YouTube Video ID.', 'VALIDATION_ERROR', 422);
             }
             $validated['youtube_video_id'] = $yid;
@@ -277,7 +321,6 @@ class AdminHomepageController {
             if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 140 || mb_strlen($validated['headline_emphasis']) > 140 || mb_strlen($validated['intro']) > 400) {
                 Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
             }
-
             $items = $content['items'] ?? [];
             if (!is_array($items) || count($items) < 1 || count($items) > 6) {
                 Response::error('1 ile 6 arasında madde eklemelisiniz.', 'VALIDATION_ERROR', 422);
@@ -287,6 +330,12 @@ class AdminHomepageController {
                 if (!is_array($item)) {
                     Response::error('Geçersiz veri tipi.', 'VALIDATION_ERROR', 422);
                 }
+                
+                $itemKeys = array_keys($item);
+                if (count($itemKeys) !== 2 || !in_array('title', $itemKeys) || !in_array('description', $itemKeys)) {
+                    Response::error('Geçersiz veri tipi. Fazla veya eksik anahtar.', 'VALIDATION_ERROR', 422);
+                }
+
                 $t = trim($item['title'] ?? '');
                 $d = trim($item['description'] ?? '');
                 if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) {
@@ -304,7 +353,6 @@ class AdminHomepageController {
             if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 140 || mb_strlen($validated['headline_emphasis']) > 140) {
                 Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
             }
-
             $steps = $content['steps'] ?? [];
             if (!is_array($steps) || count($steps) < 1 || count($steps) > 8) {
                 Response::error('1 ile 8 arasında adım eklemelisiniz.', 'VALIDATION_ERROR', 422);
@@ -314,6 +362,12 @@ class AdminHomepageController {
                 if (!is_array($step)) {
                     Response::error('Geçersiz veri tipi.', 'VALIDATION_ERROR', 422);
                 }
+                
+                $stepKeys = array_keys($step);
+                if (count($stepKeys) !== 1 || !in_array('title', $stepKeys)) {
+                    Response::error('Geçersiz veri tipi. Fazla veya eksik anahtar.', 'VALIDATION_ERROR', 422);
+                }
+
                 $t = trim($step['title'] ?? '');
                 if (mb_strlen($t) < 1 || mb_strlen($t) > 180) {
                     Response::error('Adım metni 1-180 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
@@ -324,54 +378,6 @@ class AdminHomepageController {
         }
 
         try {
-            $db->beginTransaction();
-
-            // Using json_encode directly works since we don't use replacement strings
-            $jsonStr = json_encode($validated, JSON_UNESCAPED_UNICODE);
-            $db->query(
-                "UPDATE homepage_sections SET content_json = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-                [$jsonStr, $adminId, $sectionDbId]
-            );
-
-            if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
-                if ($oldMediaId) {
-                    $db->query(
-                        "DELETE FROM media_usages WHERE media_id = ? AND entity_type = 'homepage_section' AND entity_id = ? AND field_name = 'background'",
-                        [$oldMediaId, $sectionDbId]
-                    );
-                }
-                if ($newMediaId) {
-                    $db->query(
-                        "INSERT IGNORE INTO media_usages (media_id, entity_type, entity_id, field_name) VALUES (?, 'homepage_section', ?, 'background')",
-                        [$newMediaId, $sectionDbId]
-                    );
-                }
-            }
-
-            $db->commit();
-
-            $changed = [];
-            foreach ($validated as $k => $v) {
-                $ov = $oldMerged[$k] ?? null;
-                if ($v !== $ov) {
-                    $changed[] = $k;
-                }
-            }
-
-            AuditLogger::log(
-                'homepage.section.content.update',
-                $adminId,
-                'homepage_section',
-                $sectionDbId,
-                [
-                    'section_id' => $section_id,
-                    'changed_fields' => $changed
-                ]
-            );
-
-            Response::json(['success' => true]);
-
-        } catch (\Exception $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }

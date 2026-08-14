@@ -2,8 +2,18 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
 
-export function AboutEditor({ onClose }: { onClose: () => void }) {
-  const [data, setData] = useState<any>(null);
+export interface AboutContent {
+  eyebrow: string;
+  headline_primary: string;
+  headline_emphasis: string;
+  paragraph_primary: string;
+  paragraph_secondary: string;
+  youtube_video_id: string;
+  youtube_title: string;
+}
+
+export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
+  const [data, setData] = useState<AboutContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +34,8 @@ export function AboutEditor({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleChange = (field: string, value: any) => {
-    setData((prev: any) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof AboutContent, value: any) => {
+    setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
   };
 
@@ -46,6 +56,7 @@ export function AboutEditor({ onClose }: { onClose: () => void }) {
       await apiClient.patch('/api/admin/homepage/sections/about/content', { content: data });
       setIsDirty(false);
       alert('Başarıyla kaydedildi.');
+      if (onSaved) onSaved();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Kaydedilemedi.');

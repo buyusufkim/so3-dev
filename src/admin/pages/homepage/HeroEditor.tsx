@@ -4,8 +4,30 @@ import { MediaPicker } from "../../components/MediaPicker";
 import { X, Image as ImageIcon } from "lucide-react";
 import { MediaAsset } from "../../pages/Media"; // Ensure MediaAsset is exported there, wait, check types.
 
-export function HeroEditor({ onClose }: { onClose: () => void }) {
-  const [data, setData] = useState<any>(null);
+export interface HomepageMediaInfo {
+  id: number;
+  url: string;
+  thumbnail_url: string;
+  alt_text: string | null;
+}
+
+export interface HeroContent {
+  eyebrow: string;
+  headline_primary: string;
+  headline_emphasis: string;
+  support_text: string;
+  feature_left: string;
+  feature_right: string;
+  primary_cta_label: string;
+  primary_cta_target: string;
+  secondary_cta_label: string;
+  secondary_cta_target: string;
+  background_media_id: number | null;
+}
+
+export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
+  const [data, setData] = useState<HeroContent | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<HomepageMediaInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +42,9 @@ export function HeroEditor({ onClose }: { onClose: () => void }) {
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/hero/content');
       setData(res.content);
+      if (res.media?.background) {
+        setMediaPreview(res.media.background);
+      }
     } catch (err: any) {
       setError(err.message || 'Yükleme başarısız.');
     } finally {
@@ -27,8 +52,8 @@ export function HeroEditor({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleChange = (field: string, value: any) => {
-    setData((prev: any) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof HeroContent, value: any) => {
+    setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
   };
 
@@ -143,10 +168,15 @@ export function HeroEditor({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-4">
                 {data.background_media_id ? (
                   <div className="flex items-center gap-4 bg-white/5 p-3 rounded border border-white/10 w-full">
+                    {mediaPreview && (
+                      <div className="w-16 h-16 rounded overflow-hidden shrink-0 bg-[#000]">
+                         <img src={mediaPreview.thumbnail_url || mediaPreview.url} alt={mediaPreview.alt_text || 'Hero Media'} className="w-full h-full object-cover" />
+                      </div>
+                    )}
                     <div className="text-sm text-white/80">Medya ID: {data.background_media_id}</div>
                     <div className="flex gap-2 ml-auto">
                       <button onClick={() => setMediaPickerOpen(true)} className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-xs transition">Görsel Seç</button>
-                      <button onClick={() => handleChange('background_media_id', null)} className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition">Görseli Kaldır</button>
+                      <button onClick={() => { handleChange('background_media_id', null); setMediaPreview(null); }} className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition">Görseli Kaldır</button>
                     </div>
                   </div>
                 ) : (
@@ -175,9 +205,16 @@ export function HeroEditor({ onClose }: { onClose: () => void }) {
       <MediaPicker 
         open={mediaPickerOpen} 
         mode="image"
+        selectedIds={data.background_media_id ? [data.background_media_id] : []}
         onClose={() => setMediaPickerOpen(false)} 
         onSelect={(media) => {
           handleChange('background_media_id', media.id);
+          setMediaPreview({
+            id: media.id,
+            url: media.url,
+            thumbnail_url: media.thumbnail_url || media.url,
+            alt_text: media.alt_text || null
+          });
           setMediaPickerOpen(false);
         }} 
       />
