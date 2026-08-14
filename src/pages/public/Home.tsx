@@ -32,7 +32,7 @@ const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
   why_so3: (content) => content ? <HomeWhySO3 content={content.why_so3} /> : null,
   process: (content) => content ? <HomeProcess content={content.process} /> : null,
   trainers: () => <HomeTrainers />,
-  performance: () => <HomePerformance />,
+  performance: (content) => content ? <HomePerformance content={content.performance} /> : null,
   community: () => <HomeCommunity />,
   instagram: () => <HomeInstagram />,
   tour: () => <HomeTour />,

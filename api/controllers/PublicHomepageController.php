@@ -53,6 +53,28 @@ class PublicHomepageController
         Response::json($result);
     }
 
+
+    private function resolvePublicBackground(?int $mediaId): ?array
+    {
+        if (!$mediaId) {
+            return null;
+        }
+        $mediaSql = "SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL";
+        $mStmt = $this->db->prepare($mediaSql);
+        $mStmt->execute([$mediaId]);
+        $media = $mStmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($media) {
+            MediaHelper::appendUrls($media);
+            return [
+                'url' => $media['url'] ?? null,
+                'thumbnail_url' => $media['thumbnail_url'] ?? null,
+                'alt_text' => $media['alt_text'] ?? null
+            ];
+        }
+        return null;
+    }
+
     public function content()
     {
         $editableSections = AdminHomepageController::getEditableSections();

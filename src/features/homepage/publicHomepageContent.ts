@@ -56,12 +56,20 @@ export interface PublicProcessContent {
   steps: PublicProcessStep[];
 }
 
+export interface PublicPerformanceContent {
+  headline_primary: string;
+  headline_emphasis: string;
+  description: string;
+  background: PublicHeroBackground | null;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
   about: PublicAboutContent;
   why_so3: PublicWhySo3Content;
   process: PublicProcessContent;
+  performance: PublicPerformanceContent;
 }
 
 function isString(value: unknown): value is string {
@@ -162,6 +170,19 @@ export function isProcessContent(value: unknown): value is PublicProcessContent 
   return true;
 }
 
+export function isPerformanceContent(value: unknown): value is PublicPerformanceContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.headline_primary)) return false;
+  if (!isString(obj.headline_emphasis)) return false;
+  if (!isString(obj.description)) return false;
+  
+  if (obj.background !== null && !isHeroBackground(obj.background)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -178,12 +199,14 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isAboutContent(data.about)) throw new Error('Malformed content payload: about');
   if (!isWhySo3Content(data.why_so3)) throw new Error('Malformed content payload: why_so3');
   if (!isProcessContent(data.process)) throw new Error('Malformed content payload: process');
+  if (!isPerformanceContent(data.performance)) throw new Error('Malformed content payload: performance');
   
   return {
     hero: data.hero,
     brand_band: data.brand_band,
     about: data.about,
     why_so3: data.why_so3,
-    process: data.process
+    process: data.process,
+    performance: data.performance
   };
 }

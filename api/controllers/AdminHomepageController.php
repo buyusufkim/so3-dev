@@ -43,7 +43,7 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process'];
+    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance'];
 
     public static function getEditableSections(): array {
         return self::EDITABLE_SECTIONS;
@@ -61,6 +61,12 @@ class AdminHomepageController {
             'primary_cta_target' => '/#iletisim',
             'secondary_cta_label' => 'SO3\'ü keşfet',
             'secondary_cta_target' => '/#branslar',
+            'background_media_id' => null
+        ],
+                'performance' => [
+            'headline_primary' => 'PERFORMANS',
+            'headline_emphasis' => 'TESADÜF DEĞİLDİR.',
+            'description' => 'Disiplinli çalışmanın yarışma ve sportif başarıya uzanan tarafı da SO3 kültürünün bir parçası.',
             'background_media_id' => null
         ],
         'brand_band' => [
@@ -228,7 +234,7 @@ class AdminHomepageController {
             'updated_at' => $record['updated_at']
         ];
 
-        if ($section_id === 'hero' && !empty($merged['background_media_id'])) {
+        if (in_array($section_id, ['hero', 'performance']) && !empty($merged['background_media_id'])) {
             $media = $db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$merged['background_media_id']]);
             if ($media) {
                 MediaHelper::appendUrls($media);
@@ -459,6 +465,41 @@ class AdminHomepageController {
             $validated['steps'] = $cleanSteps;
         }
 
+        elseif ($section_id === 'performance') {
+            foreach (['headline_primary', 'headline_emphasis', 'description'] as $field) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
+            $validated['headline_primary'] = trim($content['headline_primary'] ?? $defaults['headline_primary']);
+            $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']);
+            $validated['description'] = trim($content['description'] ?? $defaults['description']);
+            
+            if (mb_strlen($validated['headline_primary']) < 1 || mb_strlen($validated['headline_emphasis']) < 1 || mb_strlen($validated['description']) < 1) {
+                Response::error('Tüm alanların doldurulması zorunludur.', 'VALIDATION_ERROR', 422);
+            }
+            
+            if (mb_strlen($validated['headline_primary']) > 140 || mb_strlen($validated['headline_emphasis']) > 140 || mb_strlen($validated['description']) > 500) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+            
+            $mid = $content['background_media_id'] ?? null;
+            if ($mid !== null) {
+                if (!is_int($mid) || $mid <= 0) {
+                    Response::error('Geçersiz görsel seçimi.', 'VALIDATION_ERROR', 422);
+                }
+                $mediaRecord = $db->fetch("SELECT id FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$mid]);
+                if (!$mediaRecord) {
+                    Response::error('Seçilen görsel bulunamadı veya kullanılamaz durumda.', 'VALIDATION_ERROR', 422);
+                }
+                $validated['background_media_id'] = $mid;
+            } else {
+                $validated['background_media_id'] = null;
+            }
+            $oldMediaId = $oldMerged['background_media_id'];
+            $newMediaId = $validated['background_media_id'];
+        }
+
         try {
             $db->beginTransaction();
 
@@ -473,7 +514,7 @@ class AdminHomepageController {
                 ]
             );
 
-            if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
+            if (in_array($section_id, ['hero', 'performance']) && $oldMediaId !== $newMediaId) {
                 if ($oldMediaId !== null) {
                     $db->query(
                         "DELETE FROM media_usages WHERE media_id = ? AND entity_type = 'homepage_section' AND entity_id = ? AND field_name = 'background'",
@@ -503,7 +544,7 @@ class AdminHomepageController {
                 'changed_fields' => $changed
             ];
             
-            if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
+            if (in_array($section_id, ['hero', 'performance']) && $oldMediaId !== $newMediaId) {
                 $auditData['old_media_id'] = $oldMediaId;
                 $auditData['new_media_id'] = $newMediaId;
             }

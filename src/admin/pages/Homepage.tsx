@@ -6,6 +6,7 @@ import { BrandBandEditor } from "./homepage/BrandBandEditor";
 import { AboutEditor } from "./homepage/AboutEditor";
 import { WhySo3Editor } from "./homepage/WhySo3Editor";
 import { ProcessEditor } from "./homepage/ProcessEditor";
+import { PerformanceEditor } from "./homepage/PerformanceEditor";
 
 
 type HomepageSection = {
@@ -215,7 +216,7 @@ export function Homepage() {
 
 
             <div className="flex items-center gap-6">
-              {['hero', 'brand_band', 'about', 'why_so3', 'process'].includes(section.section_id) && (
+              {['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance'].includes(section.section_id) && (
                 <button
                   onClick={() => setEditingSection(section.section_id)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white hover:bg-white/20 transition"
@@ -247,6 +248,7 @@ export function Homepage() {
       {editingSection === 'about' && <AboutEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
       {editingSection === 'why_so3' && <WhySo3Editor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
       {editingSection === 'process' && <ProcessEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'performance' && <PerformanceEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
     </div>
   );
 }
