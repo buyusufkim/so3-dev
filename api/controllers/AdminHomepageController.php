@@ -42,7 +42,7 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about'];
+    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process'];
 
     private const DEFAULTS = [
         'hero' => [
@@ -54,7 +54,7 @@ class AdminHomepageController {
             'feature_right' => 'Birebir takip',
             'primary_cta_label' => 'Ön görüşme planla',
             'primary_cta_target' => '/#iletisim',
-            'secondary_cta_label' => 'SO3'ü keşfet',
+            'secondary_cta_label' => 'SO3\'ü keşfet',
             'secondary_cta_target' => '/#branslar',
             'background_media_id' => null
         ],
@@ -76,6 +76,29 @@ class AdminHomepageController {
             'paragraph_secondary' => 'SO3 deneyimi yalnızca ders saatinden ibaret değildir. Antrenman süreci düzenli takip, kişiye özel program güncellemeleri ve sosyal etkinliklerle devam eder. Salon içinde başlayan birliktelik, SO3 topluluğuyla salon dışında da sürer.',
             'youtube_video_id' => '0ojUK4qD8yE',
             'youtube_title' => 'SO3 PT Tanıtım Filmi'
+        ],
+        'why_so3' => [
+            'eyebrow' => 'NEDEN SO3',
+            'headline_primary' => 'Tek tip program yok.',
+            'headline_emphasis' => 'Sana göre bir sistem var.',
+            'intro' => 'SO3\'te antrenman, kişiye göre planlanır ve çalıştığın eğitmenle birlikte takip edilir.',
+            'items' => [
+                ['title' => 'Birebir Takip', 'description' => 'Antrenmanın her anında antrenör gözetiminde her bir tekrarda en doğru ve sağlıklı sonuç'],
+                ['title' => 'Kişiye Özel Program', 'description' => 'Kalıplaşmış antrenman programları değil, size özel hazırlanmış en verimli antrenman programı ile çalışın'],
+                ['title' => 'Özel Takip', 'description' => 'Antrenörün sadece salonda değil günlük beslenme, takviye kullanımı ve su tüketimini her öğün ilgiyle birebir WhatsApp üzerinden takip eder'],
+                ['title' => 'Sürekli Güncel', 'description' => 'Programın her ay düzenli ölçümlerle kişisel gelişimin ve vücut tipinize en uygun şekilde güncellenir.']
+            ]
+        ],
+        'process' => [
+            'eyebrow' => 'NASIL ÇALIŞIR?',
+            'headline_primary' => '',
+            'headline_emphasis' => '',
+            'steps' => [
+                ['title' => 'Seni tanırız.'],
+                ['title' => 'Sana göre planlarız.'],
+                ['title' => 'Birlikte çalışırız.'],
+                ['title' => 'Sen geliştikçe süreci güncelleriz.']
+            ]
         ]
     ];
 
@@ -95,17 +118,31 @@ class AdminHomepageController {
             Response::error('Bölüm bulunamadı.', 'NOT_FOUND', 404);
         }
 
-        $stored = json_decode($record['content_json'], true) ?: [];
-        $merged = array_merge(self::DEFAULTS[$section_id], $stored);
+        $stored = json_decode($record['content_json'], true);
+        if (!is_array($stored)) {
+            $stored = [];
+        }
+        
+        $defaults = self::DEFAULTS[$section_id];
+        $merged = [];
+        foreach ($defaults as $k => $v) {
+            $merged[$k] = $stored[$k] ?? $v;
+        }
 
-        // API envelope fix: do not double wrap, but match the requirement:
-        // { "data": { "section_id": "...", "content": {}, "updated_at": "..." } }
-        // Response::json() wraps in "data" by default, so we pass just the inner object.
-        Response::json([
+        $response = [
             'section_id' => $section_id,
             'content' => $merged,
             'updated_at' => $record['updated_at']
-        ]);
+        ];
+
+        if ($section_id === 'hero' && !empty($merged['background_media_id'])) {
+            $media = $db->fetch("SELECT id, url, thumbnail_url, alt_text FROM media_assets WHERE id = ?", [$merged['background_media_id']]);
+            if ($media) {
+                $response['content']['background_media_info'] = $media;
+            }
+        }
+
+        Response::json($response);
     }
 
     public function updateContent(string $section_id) {
@@ -120,8 +157,8 @@ class AdminHomepageController {
         }
 
         $input = $this->getJsonInput();
-        if (!isset($input['content']) || !is_array($input['content'])) {
-            Response::error('Geçersiz veri formatı. content objesi gerekli.', 'VALIDATION_ERROR', 422);
+        if (count($input) !== 1 || !array_key_exists('content', $input) || !is_array($input['content'])) {
+            Response::error('Geçersiz veri formatı. Sadece content objesi gönderilebilir.', 'VALIDATION_ERROR', 422);
         }
 
         $content = $input['content'];
@@ -135,36 +172,42 @@ class AdminHomepageController {
         }
         $sectionDbId = $record['id'];
         $oldStored = json_decode($record['content_json'], true) ?: [];
-        $oldMerged = array_merge($defaults, $oldStored);
+        $oldMerged = [];
+        foreach ($defaults as $k => $v) {
+            $oldMerged[$k] = $oldStored[$k] ?? $v;
+        }
 
         $oldMediaId = null;
         $newMediaId = null;
 
         if ($section_id === 'hero') {
-            $validated['eyebrow'] = mb_substr(trim($content['eyebrow'] ?? $defaults['eyebrow']), 0, 80);
-            $validated['headline_primary'] = mb_substr(trim($content['headline_primary'] ?? ''), 0, 100);
-            $validated['headline_emphasis'] = mb_substr(trim($content['headline_emphasis'] ?? ''), 0, 100);
-            $validated['support_text'] = mb_substr(trim($content['support_text'] ?? $defaults['support_text']), 0, 180);
-            $validated['feature_left'] = mb_substr(trim($content['feature_left'] ?? $defaults['feature_left']), 0, 80);
-            $validated['feature_right'] = mb_substr(trim($content['feature_right'] ?? $defaults['feature_right']), 0, 80);
-            
-            $validated['primary_cta_label'] = mb_substr(trim($content['primary_cta_label'] ?? $defaults['primary_cta_label']), 0, 60);
-            $validated['secondary_cta_label'] = mb_substr(trim($content['secondary_cta_label'] ?? $defaults['secondary_cta_label']), 0, 60);
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline_primary'] = trim($content['headline_primary'] ?? '');
+            $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? '');
+            $validated['support_text'] = trim($content['support_text'] ?? $defaults['support_text']);
+            $validated['feature_left'] = trim($content['feature_left'] ?? $defaults['feature_left']);
+            $validated['feature_right'] = trim($content['feature_right'] ?? $defaults['feature_right']);
+            $validated['primary_cta_label'] = trim($content['primary_cta_label'] ?? $defaults['primary_cta_label']);
+            $validated['secondary_cta_label'] = trim($content['secondary_cta_label'] ?? $defaults['secondary_cta_label']);
             
             $pcta = trim($content['primary_cta_target'] ?? $defaults['primary_cta_target']);
             $scta = trim($content['secondary_cta_target'] ?? $defaults['secondary_cta_target']);
             
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 100 || mb_strlen($validated['headline_emphasis']) > 100 || mb_strlen($validated['support_text']) > 180 || mb_strlen($validated['feature_left']) > 80 || mb_strlen($validated['feature_right']) > 80 || mb_strlen($validated['primary_cta_label']) > 60 || mb_strlen($validated['secondary_cta_label']) > 60 || mb_strlen($pcta) > 200 || mb_strlen($scta) > 200) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+
             if (empty($validated['headline_primary']) || empty($validated['headline_emphasis'])) {
                 Response::error('Ana başlık ve vurgulu başlık zorunludur.', 'VALIDATION_ERROR', 422);
             }
             if (!preg_match('#^/(?:[a-zA-Z0-9\-\_]+)*(?:\#[a-zA-Z0-9\-\_]+)?$#', $pcta)) {
-                $pcta = '/';
+                Response::error('Geçersiz birincil CTA URL.', 'VALIDATION_ERROR', 422);
             }
             if (!preg_match('#^/(?:[a-zA-Z0-9\-\_]+)*(?:\#[a-zA-Z0-9\-\_]+)?$#', $scta)) {
-                $scta = '/';
+                Response::error('Geçersiz ikincil CTA URL.', 'VALIDATION_ERROR', 422);
             }
-            $validated['primary_cta_target'] = mb_substr($pcta, 0, 200);
-            $validated['secondary_cta_target'] = mb_substr($scta, 0, 200);
+            $validated['primary_cta_target'] = $pcta;
+            $validated['secondary_cta_target'] = $scta;
 
             $bgId = $content['background_media_id'] ?? null;
             if ($bgId !== null) {
@@ -197,45 +240,97 @@ class AdminHomepageController {
                 if (mb_strlen($t) < 1 || mb_strlen($t) > 100) {
                     Response::error('Her madde 1-100 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
                 }
-                // Case-insensitive duplicate check
                 $lower = mb_strtolower($t);
-                $isDup = false;
                 foreach ($cleanItems as $c) {
                     if (mb_strtolower($c) === $lower) {
-                        $isDup = true;
-                        break;
+                        Response::error('Aynı hizmet tekrar eklenemez.', 'VALIDATION_ERROR', 422);
                     }
                 }
-                if (!$isDup) {
-                    $cleanItems[] = $t;
-                }
-            }
-            if (count($cleanItems) < 1) {
-                Response::error('En az 1 geçerli madde gerekli.', 'VALIDATION_ERROR', 422);
+                $cleanItems[] = $t;
             }
             $validated['items'] = $cleanItems;
         }
         elseif ($section_id === 'about') {
-            $validated['eyebrow'] = mb_substr(trim($content['eyebrow'] ?? $defaults['eyebrow']), 0, 80);
-            $validated['headline_primary'] = mb_substr(trim($content['headline_primary'] ?? $defaults['headline_primary']), 0, 120);
-            $validated['headline_emphasis'] = mb_substr(trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']), 0, 120);
-            $validated['paragraph_primary'] = mb_substr(trim($content['paragraph_primary'] ?? $defaults['paragraph_primary']), 0, 1200);
-            $validated['paragraph_secondary'] = mb_substr(trim($content['paragraph_secondary'] ?? $defaults['paragraph_secondary']), 0, 1200);
-            $validated['youtube_title'] = mb_substr(trim($content['youtube_title'] ?? $defaults['youtube_title']), 0, 120);
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline_primary'] = trim($content['headline_primary'] ?? $defaults['headline_primary']);
+            $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']);
+            $validated['paragraph_primary'] = trim($content['paragraph_primary'] ?? $defaults['paragraph_primary']);
+            $validated['paragraph_secondary'] = trim($content['paragraph_secondary'] ?? $defaults['paragraph_secondary']);
+            $validated['youtube_title'] = trim($content['youtube_title'] ?? $defaults['youtube_title']);
             
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 120 || mb_strlen($validated['headline_emphasis']) > 120 || mb_strlen($validated['paragraph_primary']) > 1200 || mb_strlen($validated['paragraph_secondary']) > 1200 || mb_strlen($validated['youtube_title']) > 120) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+
             $yid = trim($content['youtube_video_id'] ?? $defaults['youtube_video_id']);
-            if ($yid !== '' && !preg_match('/^[A-Za-z0-9_-]{6,20}$/', $yid)) {
+            if ($yid !== '' && !preg_match('/^[A-Za-z0-9_-]{6,20}$$/', $yid)) {
                 Response::error('Geçersiz YouTube Video ID.', 'VALIDATION_ERROR', 422);
             }
             $validated['youtube_video_id'] = $yid;
+        }
+        elseif ($section_id === 'why_so3') {
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline_primary'] = trim($content['headline_primary'] ?? $defaults['headline_primary']);
+            $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? $defaults['headline_emphasis']);
+            $validated['intro'] = trim($content['intro'] ?? $defaults['intro']);
+            
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 140 || mb_strlen($validated['headline_emphasis']) > 140 || mb_strlen($validated['intro']) > 400) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+
+            $items = $content['items'] ?? [];
+            if (!is_array($items) || count($items) < 1 || count($items) > 6) {
+                Response::error('1 ile 6 arasında madde eklemelisiniz.', 'VALIDATION_ERROR', 422);
+            }
+            $cleanItems = [];
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    Response::error('Geçersiz veri tipi.', 'VALIDATION_ERROR', 422);
+                }
+                $t = trim($item['title'] ?? '');
+                $d = trim($item['description'] ?? '');
+                if (mb_strlen($t) < 1 || mb_strlen($t) > 100 || mb_strlen($d) < 1 || mb_strlen($d) > 500) {
+                    Response::error('Madde başlığı 1-100, açıklaması 1-500 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+                $cleanItems[] = ['title' => $t, 'description' => $d];
+            }
+            $validated['items'] = $cleanItems;
+        }
+        elseif ($section_id === 'process') {
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline_primary'] = trim($content['headline_primary'] ?? '');
+            $validated['headline_emphasis'] = trim($content['headline_emphasis'] ?? '');
+            
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline_primary']) > 140 || mb_strlen($validated['headline_emphasis']) > 140) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+
+            $steps = $content['steps'] ?? [];
+            if (!is_array($steps) || count($steps) < 1 || count($steps) > 8) {
+                Response::error('1 ile 8 arasında adım eklemelisiniz.', 'VALIDATION_ERROR', 422);
+            }
+            $cleanSteps = [];
+            foreach ($steps as $step) {
+                if (!is_array($step)) {
+                    Response::error('Geçersiz veri tipi.', 'VALIDATION_ERROR', 422);
+                }
+                $t = trim($step['title'] ?? '');
+                if (mb_strlen($t) < 1 || mb_strlen($t) > 180) {
+                    Response::error('Adım metni 1-180 karakter olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+                $cleanSteps[] = ['title' => $t];
+            }
+            $validated['steps'] = $cleanSteps;
         }
 
         try {
             $db->beginTransaction();
 
+            // Using json_encode directly works since we don't use replacement strings
+            $jsonStr = json_encode($validated, JSON_UNESCAPED_UNICODE);
             $db->query(
                 "UPDATE homepage_sections SET content_json = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-                [json_encode($validated, JSON_UNESCAPED_UNICODE), $adminId, $sectionDbId]
+                [$jsonStr, $adminId, $sectionDbId]
             );
 
             if ($section_id === 'hero' && $oldMediaId !== $newMediaId) {
@@ -255,11 +350,9 @@ class AdminHomepageController {
 
             $db->commit();
 
-            // Detect changed fields for audit
             $changed = [];
             foreach ($validated as $k => $v) {
                 $ov = $oldMerged[$k] ?? null;
-                // strict compare arrays/values
                 if ($v !== $ov) {
                     $changed[] = $k;
                 }
@@ -272,9 +365,7 @@ class AdminHomepageController {
                 $sectionDbId,
                 [
                     'section_id' => $section_id,
-                    'changed_fields' => $changed,
-                    'old_media_id' => $oldMediaId,
-                    'new_media_id' => $newMediaId
+                    'changed_fields' => $changed
                 ]
             );
 
@@ -285,144 +376,6 @@ class AdminHomepageController {
                 $db->rollBack();
             }
             Response::error('İçerik güncellenirken bir hata oluştu.', 'DATABASE_ERROR', 500);
-        }
-    }
-
-    public function index() {
-        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-
-        $db = Database::getInstance();
-        $sections = $db->fetchAll(
-            "SELECT section_id, is_active, sort_order, updated_at 
-             FROM homepage_sections 
-             ORDER BY sort_order ASC"
-        );
-
-        // API envelope fix: do not double wrap
-        Response::json($sections);
-    }
-
-    public function update(string $section_id) {
-        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-        $adminId = $this->getAdminId();
-
-        if (!in_array($section_id, self::ALLOWED_SECTIONS)) {
-            Response::error('Geçersiz bölüm.', 'INVALID_SECTION', 422);
-        }
-
-        $input = $this->getJsonInput();
-
-        // Strict JSON boolean validation, and reject extra fields
-        if (count($input) !== 1 || !array_key_exists('is_active', $input) || !is_bool($input['is_active'])) {
-            Response::error('Sadece boolean is_active alanı gönderilebilir.', 'VALIDATION_ERROR', 422);
-        }
-
-        $db = Database::getInstance();
-        $is_active = $input['is_active'] ? 1 : 0;
-        
-        $current = $db->fetch(
-            "SELECT is_active FROM homepage_sections WHERE section_id = ?", 
-            [$section_id]
-        );
-        
-        if (!$current) {
-            Response::error('Bölüm bulunamadı.', 'NOT_FOUND', 404);
-        }
-
-        $old_is_active = (bool)$current['is_active'];
-
-        $db->query(
-            "UPDATE homepage_sections 
-             SET is_active = ?, updated_by = ?, updated_at = NOW() 
-             WHERE section_id = ?",
-            [$is_active, $adminId, $section_id]
-        );
-
-        AuditLogger::log(
-            'homepage.section.toggle',
-            $adminId,
-            'homepage_section',
-            $section_id,
-            [
-                'old_is_active' => $old_is_active,
-                'new_is_active' => (bool)$is_active
-            ]
-        );
-
-        Response::json(['success' => true]);
-    }
-
-    public function reorder() {
-        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-        $adminId = $this->getAdminId();
-
-        $input = $this->getJsonInput();
-        
-        if (!isset($input['sections']) || !is_array($input['sections'])) {
-            Response::error('Geçersiz veri formatı.', 'VALIDATION_ERROR', 422);
-        }
-
-        $sections = $input['sections'];
-        
-        if (count($sections) !== count(self::ALLOWED_SECTIONS)) {
-            Response::error('Eksik veya fazla bölüm gönderildi.', 'VALIDATION_ERROR', 422);
-        }
-
-        // Validate that every item is a string before any string operations
-        foreach ($sections as $sec) {
-            if (!is_string($sec)) {
-                Response::error('Geçersiz bölüm tipi, metin olmalıdır.', 'VALIDATION_ERROR', 422);
-            }
-        }
-
-        $diff1 = array_diff($sections, self::ALLOWED_SECTIONS);
-        $diff2 = array_diff(self::ALLOWED_SECTIONS, $sections);
-        
-        if (!empty($diff1) || !empty($diff2)) {
-            Response::error('Bölüm listesi hatalı (tanımsız bölüm).', 'VALIDATION_ERROR', 422);
-        }
-
-        if (count(array_unique($sections)) !== count($sections)) {
-            Response::error('Tekrarlayan bölümler mevcut.', 'VALIDATION_ERROR', 422);
-        }
-
-        $db = Database::getInstance();
-        
-        // Fetch old order for audit logger
-        $oldRecords = $db->fetchAll("SELECT section_id FROM homepage_sections ORDER BY sort_order ASC");
-        $oldOrder = array_column($oldRecords, 'section_id');
-
-        try {
-            $db->beginTransaction();
-
-            $order = 10;
-            foreach ($sections as $section_id) {
-                $db->query(
-                    "UPDATE homepage_sections SET sort_order = ?, updated_by = ?, updated_at = NOW() WHERE section_id = ?",
-                    [$order, $adminId, $section_id]
-                );
-                $order += 10;
-            }
-
-            $db->commit();
-
-            AuditLogger::log(
-                'homepage.sections.reorder',
-                $adminId,
-                'homepage',
-                null,
-                [
-                    'old_order' => $oldOrder,
-                    'new_order' => $sections
-                ]
-            );
-
-            Response::json(['success' => true]);
-        } catch (\Exception $e) {
-            if ($db->inTransaction()) {
-                $db->rollBack();
-            }
-            Response::error('Sıralama güncellenirken bir hata oluştu.', 'DATABASE_ERROR', 500);
         }
     }
 }

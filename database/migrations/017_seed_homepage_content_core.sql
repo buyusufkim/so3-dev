@@ -12,7 +12,7 @@ SET content_json = '{
   "secondary_cta_target": "/#branslar",
   "background_media_id": null
 }'
-WHERE section_id = 'hero' AND JSON_EXTRACT(content_json, '$.headline_primary') IS NULL;
+WHERE section_id = 'hero' AND JSON_LENGTH(content_json) = 0;
 
 UPDATE homepage_sections 
 SET content_json = '{
@@ -25,7 +25,7 @@ SET content_json = '{
     "Profesyonel Eğitmenler"
   ]
 }'
-WHERE section_id = 'brand_band' AND JSON_EXTRACT(content_json, '$.items') IS NULL;
+WHERE section_id = 'brand_band' AND JSON_LENGTH(content_json) = 0;
 
 UPDATE homepage_sections 
 SET content_json = '{
@@ -37,4 +37,4 @@ SET content_json = '{
   "youtube_video_id": "0ojUK4qD8yE",
   "youtube_title": "SO3 PT Tanıtım Filmi"
 }'
-WHERE section_id = 'about' AND JSON_EXTRACT(content_json, '$.headline_primary') IS NULL;
+WHERE section_id = 'about' AND JSON_LENGTH(content_json) = 0;

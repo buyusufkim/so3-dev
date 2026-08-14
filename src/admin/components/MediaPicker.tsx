@@ -37,9 +37,12 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
       if (p === 1) {
         setAssets(res.data);
       } else {
-        setAssets(prev => [...prev, ...res.data]);
+        setAssets(prev => {
+          const newAssets = res.data.filter((a: MediaAsset) => !prev.some(p => p.id === a.id));
+          return [...prev, ...newAssets];
+        });
       }
-      setTotalPages(res.meta?.total_pages || 1);
+      setTotalPages(res.meta?.last_page || res.meta?.total_pages || 1);
       setPage(p);
     } catch (err) {
       // API call failed
