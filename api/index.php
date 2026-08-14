@@ -59,6 +59,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\BranchController())->getAdminList();
         },
+        '/api/admin/trainers' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\TrainerController())->index();
+        },
         '/api/public/event-categories' => function() {
             (new \Controllers\PublicEventController())->categories();
         },
@@ -87,6 +91,10 @@ $routes = [
         '/api/admin/branches' => function() {
             AuthMiddleware::handle();
             (new \Controllers\BranchController())->create();
+        },
+        '/api/admin/trainers' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\TrainerController())->create();
         }
     ]
 ];
@@ -250,6 +258,30 @@ if (isset($routes[$method][$requestUri])) {
         $controller = new \Controllers\BranchController();
         if ($method === 'GET') {
             $controller->getAdminDetail($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/trainers/order$#', $requestUri)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\TrainerController())->reorder();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/trainers/(\d+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainerController();
+        if ($method === 'GET') {
+            $controller->show($id);
             $matched = true;
         } elseif ($method === 'PATCH') {
             $controller->update($id);
