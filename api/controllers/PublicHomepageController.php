@@ -104,26 +104,10 @@ class PublicHomepageController
         foreach ($editableSections as $secId) {
             $normalized = AdminHomepageController::normalizeStoredContent($secId, $rawStored[$secId]);
 
-            if ($secId === 'hero') {
+            if (in_array($secId, ['hero', 'performance'], true)) {
                 $mediaId = $normalized['background_media_id'] ?? null;
                 unset($normalized['background_media_id']);
-                $normalized['background'] = null;
-
-                if ($mediaId) {
-                    $mediaSql = "SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL";
-                    $mStmt = $this->db->prepare($mediaSql);
-                    $mStmt->execute([$mediaId]);
-                    $media = $mStmt->fetch(\PDO::FETCH_ASSOC);
-                    
-                    if ($media) {
-                        MediaHelper::appendUrls($media);
-                        $normalized['background'] = [
-                            'url' => $media['url'] ?? null,
-                            'thumbnail_url' => $media['thumbnail_url'] ?? null,
-                            'alt_text' => $media['alt_text'] ?? null
-                        ];
-                    }
-                }
+                $normalized['background'] = $this->resolvePublicBackground($mediaId);
             }
 
             $result[$secId] = $normalized;

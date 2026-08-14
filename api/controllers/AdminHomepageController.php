@@ -119,7 +119,7 @@ class AdminHomepageController {
             foreach ($defaults as $k => $v) {
                 if (array_key_exists($k, $stored)) {
                     $storedVal = $stored[$k];
-                    if ($section_id === 'hero' && $k === 'background_media_id') {
+                    if (in_array($section_id, ['hero', 'performance'], true) && $k === 'background_media_id') {
                         if (is_null($storedVal)) {
                             $merged[$k] = null;
                         } elseif (is_int($storedVal) && $storedVal > 0) {
