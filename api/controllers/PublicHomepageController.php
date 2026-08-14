@@ -9,6 +9,21 @@ class PublicHomepageController
 {
     private $db;
 
+    private const ALLOWED_SECTIONS = [
+        'hero',
+        'brand_band',
+        'branches',
+        'about',
+        'why_so3',
+        'process',
+        'trainers',
+        'performance',
+        'community',
+        'instagram',
+        'tour',
+        'contact'
+    ];
+
     public function __construct()
     {
         $this->db = Database::getInstance()->getConnection();
@@ -16,9 +31,12 @@ class PublicHomepageController
 
     public function index()
     {
+        $allowedList = "'" . implode("','", self::ALLOWED_SECTIONS) . "'";
+
         $sql = "SELECT section_id
                 FROM homepage_sections
                 WHERE is_active = 1
+                  AND section_id IN ($allowedList)
                 ORDER BY sort_order ASC, id ASC";
 
         $stmt = $this->db->query($sql);
