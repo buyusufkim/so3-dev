@@ -23,15 +23,30 @@ class BranchController {
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
     
+    
+    private function getAdminId(): int {
+        $adminId = $_SESSION['admin_id'] ?? null;
+        if (!$adminId) {
+            Response::error('Oturum bilgisi eksik.', 'UNAUTHORIZED', 401);
+        }
+        return (int)$adminId;
+    }
+    
     private function getJsonInput() {
         $raw = file_get_contents('php://input');
-        if (empty($raw)) return [];
-        $data = json_decode($raw, true);
+        if (empty(trim($raw))) {
+            Response::error('Boş istek.', 'BAD_REQUEST', 400);
+        }
+        $dataObj = json_decode($raw);
         if (json_last_error() !== JSON_ERROR_NONE) {
             Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
         }
-        return is_array($data) ? $data : [];
+        if (!is_object($dataObj)) {
+            Response::error('JSON nesnesi (object) bekleniyor.', 'BAD_REQUEST', 400);
+        }
+        return json_decode($raw, true);
     }
+
 
     public function getAdminList() {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
@@ -47,7 +62,7 @@ class BranchController {
             $b['is_active'] = (bool)$b['is_active'];
             $b['cover'] = null;
             if ($b['cover_media_id']) {
-                $cover = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND status = 'active' AND deleted_at IS NULL", [$b['cover_media_id']]);
+                $cover = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$b['cover_media_id']]);
                 if ($cover) {
                     MediaHelper::appendUrls($cover);
                     $b['cover'] = $cover;
@@ -56,7 +71,7 @@ class BranchController {
             unset($b['cover_media_id']);
         }
         
-        Response::json(['data' => $branches]);
+        Response::json($branches);
     }
 
     public function getAdminDetail($id) {
@@ -71,7 +86,7 @@ class BranchController {
         
         $branch['cover'] = null;
         if ($branch['cover_media_id']) {
-            $cover = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND status = 'active' AND deleted_at IS NULL", [$branch['cover_media_id']]);
+            $cover = $this->db->fetch("SELECT id, storage_path, thumbnail_path, alt_text FROM media_assets WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL", [$branch['cover_media_id']]);
             if ($cover) {
                 MediaHelper::appendUrls($cover);
                 $branch['cover'] = $cover;
@@ -82,7 +97,7 @@ class BranchController {
         $gallery = $this->db->fetchAll("SELECT m.id, m.storage_path, m.thumbnail_path, m.alt_text, m.caption, m.width, m.height 
                                         FROM branch_media bm 
                                         JOIN media_assets m ON m.id = bm.media_id 
-                                        WHERE bm.branch_id = ? AND m.status = 'active' AND m.deleted_at IS NULL 
+                                        WHERE bm.branch_id = ? AND m.media_type = 'image' AND m.status = 'active' AND m.deleted_at IS NULL 
                                         ORDER BY bm.sort_order ASC, bm.id ASC", [$id]);
         
         foreach ($gallery as &$item) {
@@ -90,7 +105,7 @@ class BranchController {
         }
         $branch['gallery'] = $gallery;
         
-        Response::json(['data' => $branch]);
+        Response::json($branch);
     }
     
     private function validateSlugUniqueness($slug, $excludeId = null) {
@@ -115,10 +130,17 @@ class BranchController {
     }
     
     public function create() {
-        $admin = AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-        $adminId = $admin['id'];
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        $adminId = $this->getAdminId();
         
         $input = $this->getJsonInput();
+        
+        $allowed = ['name', 'slug', 'description', 'cover_media_id', 'gallery_media_ids', 'is_active'];
+        foreach (array_keys($input) as $key) {
+            if (!in_array($key, $allowed)) {
+                Response::error('Geçersiz alan: ' . $key, 'VALIDATION_ERROR', 422);
+            }
+        }
         
         if (!array_key_exists('name', $input) || !is_string($input['name'])) Response::error('Geçersiz name.', 'VALIDATION_ERROR', 422);
         if (!array_key_exists('slug', $input) || !is_string($input['slug'])) Response::error('Geçersiz slug.', 'VALIDATION_ERROR', 422);
@@ -169,7 +191,8 @@ class BranchController {
             $this->db->query("INSERT INTO branches (uuid, slug, name, description, cover_media_id, is_active, sort_order, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
                 $uuid, $slug, $name, $desc, $coverId, $isActive, $sortOrder, $adminId
             ]);
-            $branchId = $this->db->lastInsertId();
+            $branchId = (int)$this->db->getConnection()->lastInsertId();
+            if ($branchId <= 0) { throw new \Exception('Insert failed'); }
             
             if ($coverId) {
                 $this->db->query("INSERT IGNORE INTO media_usages (media_id, entity_type, entity_id, field_name) VALUES (?, 'branch', ?, 'cover')", [$coverId, $branchId]);
@@ -199,8 +222,8 @@ class BranchController {
     }
 
     public function update($id) {
-        $admin = AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-        $adminId = $admin['id'];
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        $adminId = $this->getAdminId();
         
         $branch = $this->db->fetch("SELECT * FROM branches WHERE id = ? AND deleted_at IS NULL", [$id]);
         if (!$branch) {
@@ -211,6 +234,13 @@ class BranchController {
         
         if (empty($input)) {
             Response::error('Güncellenecek veri bulunamadı.', 'VALIDATION_ERROR', 422);
+        }
+
+        $allowed = ['name', 'slug', 'description', 'cover_media_id', 'gallery_media_ids', 'is_active'];
+        foreach (array_keys($input) as $key) {
+            if (!in_array($key, $allowed)) {
+                Response::error('Geçersiz alan: ' . $key, 'VALIDATION_ERROR', 422);
+            }
         }
 
         $updates = [];
@@ -363,8 +393,8 @@ class BranchController {
     }
     
     public function delete($id) {
-        $admin = AuthMiddleware::hasRole(['super_admin', 'admin']);
-        $adminId = $admin['id'];
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $adminId = $this->getAdminId();
         
         $branch = $this->db->fetch("SELECT * FROM branches WHERE id = ? AND deleted_at IS NULL", [$id]);
         if (!$branch) {
@@ -399,10 +429,18 @@ class BranchController {
     }
     
     public function reorder() {
-        $admin = AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
-        $adminId = $admin['id'];
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        $adminId = $this->getAdminId();
         
         $input = $this->getJsonInput();
+        
+        $allowed = ['branch_ids'];
+        foreach (array_keys($input) as $key) {
+            if (!in_array($key, $allowed)) {
+                Response::error('Geçersiz alan: ' . $key, 'VALIDATION_ERROR', 422);
+            }
+        }
+        
         if (!array_key_exists('branch_ids', $input) || !is_array($input['branch_ids'])) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
