@@ -55,6 +55,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\EventController())->index();
         },
+        '/api/admin/branches' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\BranchController())->getAdminList();
+        },
         '/api/public/event-categories' => function() {
             (new \Controllers\PublicEventController())->categories();
         },
@@ -79,6 +83,10 @@ $routes = [
         '/api/admin/events' => function() {
             AuthMiddleware::handle();
             (new \Controllers\EventController())->create();
+        },
+        '/api/admin/branches' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\BranchController())->create();
         }
     ]
 ];
@@ -223,6 +231,31 @@ if (isset($routes[$method][$requestUri])) {
     if (preg_match('#^/api/public/events/([^/]+)$#', $requestUri, $matches)) {
         if ($method === 'GET') {
             (new \Controllers\PublicEventController())->show($matches[1]);
+            $matched = true;
+        }
+    }
+
+    // Dynamic matching for branch admin endpoints
+    if (preg_match('#^/api/admin/branches/order$#', $requestUri)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\BranchController())->reorder();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/branches/(\d+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\BranchController();
+        if ($method === 'GET') {
+            $controller->getAdminDetail($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
             $matched = true;
         }
     }
