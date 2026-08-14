@@ -7,8 +7,7 @@ export function HomeContact() {
   const contact = settings?.contact;
   const location = settings?.location;
 
-  // Default address text if API returns empty but we still want to render structure safely
-  const addressText = location?.address || "Kayseri, Türkiye";
+  
   return (
     <section id="iletisim" className="py-24 md:py-32 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 border-t border-black/5">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
@@ -60,7 +59,7 @@ export function HomeContact() {
               <div className="flex flex-col gap-4">
                 <span className="text-xs font-bold uppercase tracking-widest text-[#0A0A0A]/40">ADRES</span>
                 <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/80 leading-relaxed max-w-sm whitespace-pre-line">
-                  {loading ? "..." : addressText}
+                  {loading ? "..." : (location?.address || "Adres bilgisi şu anda görüntülenemiyor.")}
                 </p>
                 {!loading && location?.maps_directions_url && (
                   <a 
@@ -81,17 +80,25 @@ export function HomeContact() {
             
             {/* Map Column */}
             <div className="lg:col-span-7 bg-[#F4F1EB] rounded-lg overflow-hidden border border-[#E5E3DB] min-h-[400px]">
-              <iframe 
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3112.5937107116843!2d35.5292976756857!3d38.71293637176466!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x152b136a06abeb6b%3A0x572b063e20953544!2sSO3%20Selami%20%C3%96zy%C4%B1ld%C4%B1r%C4%B1m%20Personal%20Trainer!5e0!3m2!1sen!2str!4v1700000000000!5m2!1sen!2str" 
-                width="100%" 
-                height="100%" 
-                style={{ border: 0, minHeight: '400px' }} 
-                allowFullScreen={false} 
-                loading="lazy" 
-                referrerPolicy="no-referrer-when-downgrade"
-                title="SO3 PT Kayseri konumu"
-                className="w-full h-full object-cover grayscale-[10%] contrast-[105%]"
-              ></iframe>
+              {loading ? (
+                <div className="w-full h-full bg-[#E5E3DB]/50 animate-pulse"></div>
+              ) : location?.maps_embed_url ? (
+                <iframe 
+                  src={location.maps_embed_url} 
+                  width="100%" 
+                  height="100%" 
+                  style={{ border: 0, minHeight: '400px' }} 
+                  allowFullScreen={false} 
+                  loading="lazy" 
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title="SO3 PT Kayseri konumu"
+                  className="w-full h-full object-cover grayscale-[10%] contrast-[105%]"
+                ></iframe>
+              ) : (
+                <div className="w-full h-full bg-[#E5E3DB]/30 flex items-center justify-center text-[#0A0A0A]/40 font-medium">
+                  Harita şu anda görüntülenemiyor.
+                </div>
+              )}
             </div>
           </div>
         </div>
