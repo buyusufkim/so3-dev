@@ -14,15 +14,23 @@ import { InstagramEditor } from "./homepage/InstagramEditor";
 import { TourEditor } from "./homepage/TourEditor";
 import { ContactEditor } from "./homepage/ContactEditor";
 
+import { HomepageSectionId, isHomepageSectionId } from "../../features/homepage/homepageSections";
+
+type HomepageEditorProps = {
+  onClose: () => void;
+  onSaved?: () => void;
+};
+
+
 
 type HomepageSection = {
-  section_id: string;
+  section_id: HomepageSectionId;
   is_active: number;
   sort_order: number;
   updated_at: string | null;
 };
 
-const SECTION_LABELS: Record<string, string> = {
+const SECTION_LABELS: Record<HomepageSectionId, string> = {
   hero: "Hero",
   brand_band: "Hizmet Bandı",
   branches: "Branşlar",
@@ -37,6 +45,22 @@ const SECTION_LABELS: Record<string, string> = {
   contact: "İletişim",
 };
 
+
+const SECTION_EDITORS: Record<HomepageSectionId, React.ComponentType<HomepageEditorProps>> = {
+  hero: HeroEditor,
+  brand_band: BrandBandEditor,
+  branches: BranchesEditor,
+  about: AboutEditor,
+  why_so3: WhySo3Editor,
+  process: ProcessEditor,
+  trainers: TrainersEditor,
+  performance: PerformanceEditor,
+  community: CommunityEditor,
+  instagram: InstagramEditor,
+  tour: TourEditor,
+  contact: ContactEditor,
+};
+
 export function Homepage() {
   const [sections, setSections] = useState<HomepageSection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +68,7 @@ export function Homepage() {
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editingSection, setEditingSection] = useState<HomepageSectionId | null>(null);
 
 
   useEffect(() => {
@@ -57,7 +81,8 @@ export function Homepage() {
       setError(null);
       const res = await apiClient.get('/api/admin/homepage/sections');
       if (Array.isArray(res)) {
-        setSections(res as HomepageSection[]);
+        const validSections = res.filter(s => isHomepageSectionId(s.section_id));
+        setSections(validSections as HomepageSection[]);
       } else {
         throw new Error('Geçersiz API yanıtı.');
       }
@@ -72,14 +97,15 @@ export function Homepage() {
     try {
       const res = await apiClient.get('/api/admin/homepage/sections');
       if (Array.isArray(res)) {
-        setSections(res as HomepageSection[]);
+        const validSections = res.filter(s => isHomepageSectionId(s.section_id));
+        setSections(validSections as HomepageSection[]);
       }
     } catch (err) {
       // Failed to refresh metadata silently
     }
   };
 
-  const handleToggleActive = async (sectionId: string, currentActive: number) => {
+  const handleToggleActive = async (sectionId: HomepageSectionId, currentActive: number) => {
     // Optimistic update
     const newActive = currentActive ? 0 : 1;
     setSections(prev => 
@@ -222,7 +248,7 @@ export function Homepage() {
 
 
             <div className="flex items-center gap-6">
-              {['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram', 'tour', 'contact'].includes(section.section_id) && (
+              {SECTION_EDITORS[section.section_id] && (
                 <button
                   onClick={() => setEditingSection(section.section_id)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white hover:bg-white/20 transition"
@@ -249,18 +275,12 @@ export function Homepage() {
       </div>
 
 
-      {editingSection === 'hero' && <HeroEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'brand_band' && <BrandBandEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'about' && <AboutEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'why_so3' && <WhySo3Editor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'process' && <ProcessEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'performance' && <PerformanceEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'branches' && <BranchesEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'trainers' && <TrainersEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'community' && <CommunityEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'instagram' && <InstagramEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'tour' && <TourEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
-      {editingSection === 'contact' && <ContactEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {(() => {
+        if (!editingSection) return null;
+        const ActiveEditor = SECTION_EDITORS[editingSection];
+        if (!ActiveEditor) return null;
+        return <ActiveEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />;
+      })()}
     </div>
   );
 }

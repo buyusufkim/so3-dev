@@ -10,20 +10,7 @@ class PublicHomepageController
 {
     private $db;
 
-    private const ALLOWED_SECTIONS = [
-        'hero',
-        'brand_band',
-        'branches',
-        'about',
-        'why_so3',
-        'process',
-        'trainers',
-        'performance',
-        'community',
-        'instagram',
-        'tour',
-        'contact'
-    ];
+
 
     public function __construct()
     {
@@ -32,7 +19,7 @@ class PublicHomepageController
 
     public function index()
     {
-        $allowedList = "'" . implode("','", self::ALLOWED_SECTIONS) . "'";
+        $allowedList = "'" . implode("','", AdminHomepageController::getAllowedSections()) . "'";
 
         $sql = "SELECT section_id
                 FROM homepage_sections

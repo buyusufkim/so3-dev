@@ -10,20 +10,24 @@ use Core\MediaHelper;
 
 class AdminHomepageController {
     
-    private const ALLOWED_SECTIONS = [
-        'hero',
-        'brand_band',
-        'branches',
-        'about',
-        'why_so3',
-        'process',
-        'trainers',
-        'performance',
-        'community',
-        'instagram',
-        'tour',
-        'contact'
+    private const SECTION_DEFINITIONS = [
+        'hero' => ['editable' => true],
+        'brand_band' => ['editable' => true],
+        'branches' => ['editable' => true],
+        'about' => ['editable' => true],
+        'why_so3' => ['editable' => true],
+        'process' => ['editable' => true],
+        'trainers' => ['editable' => true],
+        'performance' => ['editable' => true],
+        'community' => ['editable' => true],
+        'instagram' => ['editable' => true],
+        'tour' => ['editable' => true],
+        'contact' => ['editable' => true],
     ];
+
+    public static function getAllowedSections(): array {
+        return array_keys(self::SECTION_DEFINITIONS);
+    }
 
     private function getAdminId() {
         $adminId = $_SESSION['admin_id'] ?? null;
@@ -43,10 +47,14 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram', 'tour', 'contact'];
-
     public static function getEditableSections(): array {
-        return self::EDITABLE_SECTIONS;
+        $editable = [];
+        foreach (self::SECTION_DEFINITIONS as $id => $meta) {
+            if (!empty($meta['editable'])) {
+                $editable[] = $id;
+            }
+        }
+        return $editable;
     }
 
     private const DEFAULTS = [
@@ -248,10 +256,10 @@ class AdminHomepageController {
     public function getContent(string $section_id) {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 
-        if (!in_array($section_id, self::ALLOWED_SECTIONS)) {
+        if (!in_array($section_id, self::getAllowedSections())) {
             Response::error('Geçersiz bölüm.', 'INVALID_SECTION', 422);
         }
-        if (!in_array($section_id, self::EDITABLE_SECTIONS)) {
+        if (!in_array($section_id, self::getEditableSections())) {
             Response::error('Bu bölüm henüz düzenlenemez.', 'CONTENT_NOT_EDITABLE', 422);
         }
 
@@ -289,10 +297,10 @@ class AdminHomepageController {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $adminId = $this->getAdminId();
 
-        if (!in_array($section_id, self::ALLOWED_SECTIONS)) {
+        if (!in_array($section_id, self::getAllowedSections())) {
             Response::error('Geçersiz bölüm.', 'INVALID_SECTION', 422);
         }
-        if (!in_array($section_id, self::EDITABLE_SECTIONS)) {
+        if (!in_array($section_id, self::getEditableSections())) {
             Response::error('Bu bölüm henüz düzenlenemez.', 'CONTENT_NOT_EDITABLE', 422);
         }
 

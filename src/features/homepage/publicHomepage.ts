@@ -1,36 +1,9 @@
-export type HomepageSectionId =
-  | 'hero'
-  | 'brand_band'
-  | 'branches'
-  | 'about'
-  | 'why_so3'
-  | 'process'
-  | 'trainers'
-  | 'performance'
-  | 'community'
-  | 'instagram'
-  | 'tour'
-  | 'contact';
+export type { HomepageSectionId } from './homepageSections';
+export { isHomepageSectionId, HOMEPAGE_SECTION_IDS, DEFAULT_HOME_SECTION_ORDER } from './homepageSections';
+import { HomepageSectionId, isHomepageSectionId } from './homepageSections';
 
 export interface PublicHomepageSection {
   section_id: HomepageSectionId;
-}
-
-export function isHomepageSectionId(value: unknown): value is HomepageSectionId {
-  return typeof value === 'string' && [
-    'hero',
-    'brand_band',
-    'branches',
-    'about',
-    'why_so3',
-    'process',
-    'trainers',
-    'performance',
-    'community',
-    'instagram',
-    'tour',
-    'contact'
-  ].includes(value);
 }
 
 export function parsePublicHomepageResponse(value: unknown): PublicHomepageSection[] {
@@ -54,7 +27,7 @@ export function parsePublicHomepageResponse(value: unknown): PublicHomepageSecti
     
     const sectionObj = item as Record<string, unknown>;
     
-    if (!isHomepageSectionId(sectionObj.section_id)) {
+    if (typeof sectionObj.section_id !== 'string' || !isHomepageSectionId(sectionObj.section_id)) {
       throw new Error(`Malformed payload: invalid or unknown section_id ${String(sectionObj.section_id)}`);
     }
     
@@ -69,17 +42,4 @@ export function parsePublicHomepageResponse(value: unknown): PublicHomepageSecti
   return sections;
 }
 
-export const DEFAULT_HOME_SECTION_ORDER: HomepageSectionId[] = [
-  'hero',
-  'brand_band',
-  'branches',
-  'about',
-  'why_so3',
-  'process',
-  'trainers',
-  'performance',
-  'community',
-  'instagram',
-  'tour',
-  'contact'
-];
+
