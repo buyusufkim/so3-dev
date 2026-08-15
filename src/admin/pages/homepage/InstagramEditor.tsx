@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface InstagramContent {
   eyebrow: string;
@@ -16,6 +17,7 @@ export function InstagramEditor({ onClose, onSaved }: { onClose: () => void, onS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     fetchContent();
@@ -123,7 +125,7 @@ export function InstagramEditor({ onClose, onSaved }: { onClose: () => void, onS
                   <label className="block text-sm font-medium text-white/70 mb-1">Açıklama</label>
                   <textarea
                     value={data.intro}
-                    maxLength={400}
+                    maxLength={500}
                     onChange={(e) => handleChange('intro', e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors min-h-[80px]"
                   />

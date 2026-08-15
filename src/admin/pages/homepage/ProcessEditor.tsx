@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X, ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface ProcessStep {
   title: string;
@@ -28,8 +29,8 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/process/content');
       setData(res.content);
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -59,8 +60,8 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
       alert('Başarıyla kaydedildi.');
       onSaved?.();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kaydedilemedi.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kaydedilemedi.'));
     } finally {
       setSaving(false);
     }
@@ -168,7 +169,7 @@ export function ProcessEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <div className="flex-1">
                       <input 
                         type="text" 
-                        maxLength={180}
+                        maxLength={100}
                         className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition"
                         value={step.title}
                         onChange={(e) => updateStep(index, e.target.value)}

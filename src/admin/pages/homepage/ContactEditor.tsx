@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface ContactContent {
   contact_eyebrow: string;
@@ -20,6 +21,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     fetchContent();
@@ -120,7 +122,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <input
                       type="text"
                       value={data.contact_headline_primary}
-                      maxLength={120}
+                      maxLength={100}
                       onChange={(e) => handleChange('contact_headline_primary', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                     />
@@ -130,7 +132,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <input
                       type="text"
                       value={data.contact_headline_emphasis}
-                      maxLength={120}
+                      maxLength={100}
                       onChange={(e) => handleChange('contact_headline_emphasis', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                     />
@@ -169,7 +171,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <input
                       type="text"
                       value={data.consultation_headline_primary}
-                      maxLength={120}
+                      maxLength={100}
                       onChange={(e) => handleChange('consultation_headline_primary', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                     />
@@ -179,7 +181,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <input
                       type="text"
                       value={data.consultation_headline_emphasis}
-                      maxLength={120}
+                      maxLength={100}
                       onChange={(e) => handleChange('consultation_headline_emphasis', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                     />
@@ -188,7 +190,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <label className="block text-sm font-medium text-white/70 mb-1">Ana Açıklama</label>
                     <textarea
                       value={data.consultation_intro_primary}
-                      maxLength={400}
+                      maxLength={200}
                       onChange={(e) => handleChange('consultation_intro_primary', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors min-h-[60px]"
                     />
@@ -198,7 +200,7 @@ export function ContactEditor({ onClose, onSaved }: { onClose: () => void, onSav
                     <label className="block text-sm font-medium text-white/70 mb-1">İkincil Açıklama</label>
                     <textarea
                       value={data.consultation_intro_secondary}
-                      maxLength={400}
+                      maxLength={200}
                       onChange={(e) => handleChange('consultation_intro_secondary', e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors min-h-[60px]"
                     />

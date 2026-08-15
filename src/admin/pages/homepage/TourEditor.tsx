@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface TourContent {
   eyebrow: string;
@@ -14,6 +15,7 @@ export function TourEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     fetchContent();

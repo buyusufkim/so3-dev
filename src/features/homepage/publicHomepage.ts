@@ -27,7 +27,7 @@ export function parsePublicHomepageResponse(value: unknown): PublicHomepageSecti
     
     const sectionObj = item as Record<string, unknown>;
     
-    if (typeof sectionObj.section_id !== 'string' || !isHomepageSectionId(sectionObj.section_id)) {
+    if (!isHomepageSectionId(sectionObj.section_id)) {
       throw new Error(`Malformed payload: invalid or unknown section_id ${String(sectionObj.section_id)}`);
     }
     

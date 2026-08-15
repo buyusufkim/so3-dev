@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X, ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 
 export interface WhySo3Content {
@@ -30,8 +31,8 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/why_so3/content');
       setData(res.content);
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -61,8 +62,8 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
       alert('Başarıyla kaydedildi.');
       onSaved?.();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kaydedilemedi.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kaydedilemedi.'));
     } finally {
       setSaving(false);
     }
@@ -134,7 +135,7 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
 
             <div>
               <label className="block text-xs text-white/50 mb-1">Kısa Açıklama</label>
-              <textarea maxLength={400} rows={3} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
+              <textarea maxLength={300} rows={3} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
                 value={data.intro || ''} onChange={e => handleFieldChange('intro', e.target.value)} />
             </div>
             
@@ -174,14 +175,14 @@ export function WhySo3Editor({ onClose, onSaved }: { onClose: () => void, onSave
                       <div className="flex-1 space-y-2">
                         <input 
                           type="text" 
-                          maxLength={100}
+                          maxLength={80}
                           className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition"
                           value={item.title}
                           onChange={(e) => updateItem(index, 'title', e.target.value)}
                           placeholder="Başlık"
                         />
                         <textarea
-                          maxLength={500}
+                          maxLength={300}
                           rows={2}
                           className="w-full bg-transparent border-b border-white/10 focus:border-white/40 text-white text-sm py-2 outline-none transition resize-none"
                           value={item.description}

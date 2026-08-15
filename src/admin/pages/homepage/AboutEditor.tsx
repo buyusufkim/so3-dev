@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface AboutContent {
   eyebrow: string;
@@ -27,14 +28,14 @@ export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/about/content');
       setData(res.content);
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (field: keyof AboutContent, value: any) => {
+  const handleChange = (field: keyof AboutContent, value: string) => {
     setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
   };
@@ -58,8 +59,8 @@ export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved
       alert('Başarıyla kaydedildi.');
       onSaved?.();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kaydedilemedi.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kaydedilemedi.'));
     } finally {
       setSaving(false);
     }
@@ -91,25 +92,25 @@ export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-white/50 mb-1">Başlık</label>
-                <input type="text" maxLength={120} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+                <input type="text" maxLength={140} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                   value={data.headline_primary || ''} onChange={e => handleChange('headline_primary', e.target.value)} />
               </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1">Vurgulu Başlık</label>
-                <input type="text" maxLength={120} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+                <input type="text" maxLength={140} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                   value={data.headline_emphasis || ''} onChange={e => handleChange('headline_emphasis', e.target.value)} />
               </div>
             </div>
 
             <div>
               <label className="block text-xs text-white/50 mb-1">Birinci Paragraf</label>
-              <textarea rows={4} maxLength={1200} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
+              <textarea rows={4} maxLength={600} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
                 value={data.paragraph_primary || ''} onChange={e => handleChange('paragraph_primary', e.target.value)} />
             </div>
 
             <div>
               <label className="block text-xs text-white/50 mb-1">İkinci Paragraf</label>
-              <textarea rows={4} maxLength={1200} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
+              <textarea rows={4} maxLength={600} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm resize-none"
                 value={data.paragraph_secondary || ''} onChange={e => handleChange('paragraph_secondary', e.target.value)} />
             </div>
 
@@ -121,7 +122,7 @@ export function AboutEditor({ onClose, onSaved }: { onClose: () => void, onSaved
               </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1">Video Başlığı</label>
-                <input type="text" maxLength={120} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+                <input type="text" maxLength={140} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                   value={data.youtube_title || ''} onChange={e => handleChange('youtube_title', e.target.value)} />
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface CommunityContent {
   eyebrow: string;
@@ -15,6 +16,7 @@ export function CommunityEditor({ onClose, onSaved }: { onClose: () => void, onS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     fetchContent();

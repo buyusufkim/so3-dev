@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X, ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export function BrandBandEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
   const [items, setItems] = useState<string[]>([]);
@@ -17,8 +18,8 @@ export function BrandBandEditor({ onClose, onSaved }: { onClose: () => void, onS
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/brand_band/content');
       setItems(res.content.items || []);
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -43,8 +44,8 @@ export function BrandBandEditor({ onClose, onSaved }: { onClose: () => void, onS
       alert('Başarıyla kaydedildi.');
       onSaved?.();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kaydedilemedi.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kaydedilemedi.'));
     } finally {
       setSaving(false);
     }

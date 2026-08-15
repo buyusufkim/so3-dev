@@ -13,6 +13,7 @@ import { CommunityEditor } from "./homepage/CommunityEditor";
 import { InstagramEditor } from "./homepage/InstagramEditor";
 import { TourEditor } from "./homepage/TourEditor";
 import { ContactEditor } from "./homepage/ContactEditor";
+import { getErrorMessage } from "./homepage/editorUtils";
 
 import { HomepageSectionId, isHomepageSectionId } from "../../features/homepage/homepageSections";
 
@@ -29,6 +30,18 @@ type HomepageSection = {
   sort_order: number;
   updated_at: string | null;
 };
+
+function isHomepageSection(value: unknown): value is HomepageSection {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isHomepageSectionId(obj.section_id)) return false;
+  if (obj.is_active !== 0 && obj.is_active !== 1) return false;
+  if (typeof obj.sort_order !== 'number' || !Number.isFinite(obj.sort_order)) return false;
+  if (obj.updated_at !== null && typeof obj.updated_at !== 'string') return false;
+  
+  return true;
+}
 
 const SECTION_LABELS: Record<HomepageSectionId, string> = {
   hero: "Hero",
@@ -81,13 +94,12 @@ export function Homepage() {
       setError(null);
       const res = await apiClient.get('/api/admin/homepage/sections');
       if (Array.isArray(res)) {
-        const validSections = res.filter(s => isHomepageSectionId(s.section_id));
-        setSections(validSections as HomepageSection[]);
+        setSections(res.filter(isHomepageSection));
       } else {
         throw new Error('Geçersiz API yanıtı.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Bölümler yüklenirken bir hata oluştu.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Bölümler yüklenirken bir hata oluştu.'));
     } finally {
       setLoading(false);
     }
@@ -97,8 +109,7 @@ export function Homepage() {
     try {
       const res = await apiClient.get('/api/admin/homepage/sections');
       if (Array.isArray(res)) {
-        const validSections = res.filter(s => isHomepageSectionId(s.section_id));
-        setSections(validSections as HomepageSection[]);
+        setSections(res.filter(isHomepageSection));
       }
     } catch (err) {
       // Failed to refresh metadata silently
@@ -116,12 +127,12 @@ export function Homepage() {
       await apiClient.patch(`/api/admin/homepage/sections/${sectionId}`, {
         is_active: !!newActive
       });
-    } catch (err: any) {
+    } catch (err) {
       // Revert on error
       setSections(prev => 
         prev.map(s => s.section_id === sectionId ? { ...s, is_active: currentActive } : s)
       );
-      setError(err.message || 'Görünürlük güncellenemedi.');
+      setError(getErrorMessage(err, 'Görünürlük güncellenemedi.'));
     }
   };
 
@@ -153,8 +164,8 @@ export function Homepage() {
         sections: sections.map(s => s.section_id)
       });
       setIsDirty(false);
-    } catch (err: any) {
-      setError(err.message || 'Sıralama güncellenirken bir hata oluştu.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Sıralama güncellenirken bir hata oluştu.'));
     } finally {
       setIsSavingOrder(false);
     }

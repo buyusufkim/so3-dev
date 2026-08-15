@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { X } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface TrainersContent {
   eyebrow: string;
@@ -23,8 +24,8 @@ export function TrainersEditor({ onClose, onSaved }: { onClose: () => void, onSa
     try {
       const res = await apiClient.get('/api/admin/homepage/sections/trainers/content');
       setData(res.content);
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -56,8 +57,8 @@ export function TrainersEditor({ onClose, onSaved }: { onClose: () => void, onSa
       setIsDirty(false);
       if (onSaved) onSaved();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kayıt başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kayıt başarısız.'));
     } finally {
       setSaving(false);
     }

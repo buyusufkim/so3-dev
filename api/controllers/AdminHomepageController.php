@@ -29,6 +29,20 @@ class AdminHomepageController {
         return array_keys(self::SECTION_DEFINITIONS);
     }
 
+    private function containsHtmlMarkup($value): bool {
+        if (is_string($value)) {
+            return preg_match('/<\/?[a-zA-Z][^>]*>/', $value) === 1;
+        }
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                if ($this->containsHtmlMarkup($item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private function getAdminId() {
         $adminId = $_SESSION['admin_id'] ?? null;
         if (!$adminId) {
@@ -50,7 +64,7 @@ class AdminHomepageController {
     public static function getEditableSections(): array {
         $editable = [];
         foreach (self::SECTION_DEFINITIONS as $id => $meta) {
-            if (!empty($meta['editable'])) {
+            if (($meta['editable'] ?? false) === true) {
                 $editable[] = $id;
             }
         }
@@ -114,7 +128,7 @@ class AdminHomepageController {
         'performance' => [
             'headline_primary' => 'PERFORMANS',
             'headline_emphasis' => 'TESADÜF DEĞİLDİR.',
-            'description' => 'Disiplinli çalışmanın yarışma ve sportif başarıya uzanan tarafı da SO3 kültürünün bir parçası.',
+            'description' => 'Disiplinli çalışma, düzenli takip ve gelişime odaklanan yaklaşım SO3 kültürünün bir parçasıdır.',
             'background_media_id' => null
         ],
         'brand_band' => [
@@ -142,10 +156,10 @@ class AdminHomepageController {
             'headline_emphasis' => 'Sana göre bir sistem var.',
             'intro' => 'SO3\'te antrenman, kişiye göre planlanır ve çalıştığın eğitmenle birlikte takip edilir.',
             'items' => [
-                ['title' => 'Birebir Takip', 'description' => 'Antrenmanın her anında antrenör gözetiminde her bir tekrarda en doğru ve sağlıklı sonuç'],
-                ['title' => 'Kişiye Özel Program', 'description' => 'Kalıplaşmış antrenman programları değil, size özel hazırlanmış en verimli antrenman programı ile çalışın'],
-                ['title' => 'Özel Takip', 'description' => 'Antrenörün sadece salonda değil günlük beslenme, takviye kullanımı ve su tüketimini her öğün ilgiyle birebir WhatsApp üzerinden takip eder'],
-                ['title' => 'Sürekli Güncel', 'description' => 'Programın her ay düzenli ölçümlerle kişisel gelişimin ve vücut tipinize en uygun şekilde güncellenir.']
+                ['title' => 'Birebir Takip', 'description' => 'Antrenman süreci, çalıştığın eğitmenin yönlendirmesi ve takibiyle ilerler.'],
+                ['title' => 'Kişiye Özel Program', 'description' => 'Program; hedefin, seviyen ve gelişimin doğrultusunda kişiye özel olarak planlanır.'],
+                ['title' => 'Süreç Takibi', 'description' => 'Antrenman süreci, ilerlemenin değerlendirilmesi ve ihtiyaçların doğrultusunda takip edilir.'],
+                ['title' => 'Gelişime Göre Güncel', 'description' => 'Program, gelişimine göre değerlendirilir ve gerektiğinde güncellenir.']
             ]
         ],
         'process' => [
@@ -664,6 +678,10 @@ class AdminHomepageController {
             }
             $oldMediaId = $oldMerged['background_media_id'];
             $newMediaId = $validated['background_media_id'];
+        }
+
+        if ($this->containsHtmlMarkup($validated)) {
+            Response::error('HTML etiketleri desteklenmiyor.', 'VALIDATION_ERROR', 422);
         }
 
         try {

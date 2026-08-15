@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { MediaPicker } from "../../components/MediaPicker";
 import { X, Image as ImageIcon } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 
 export interface HomepageMediaInfo {
   id: number;
@@ -44,8 +45,8 @@ export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
       if (res.media?.background) {
         setMediaPreview(res.media.background);
       }
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -75,8 +76,8 @@ export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
       alert('Başarıyla kaydedildi.');
       onSaved?.();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kaydedilemedi.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kaydedilemedi.'));
     } finally {
       setSaving(false);
     }
@@ -108,19 +109,19 @@ export function HeroEditor({ onClose, onSaved }: { onClose: () => void, onSaved?
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-white/50 mb-1">Ana Başlık</label>
-                <input type="text" maxLength={100} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+                <input type="text" maxLength={160} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                   value={data.headline_primary || ''} onChange={e => handleChange('headline_primary', e.target.value)} />
               </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1">Vurgulu Başlık</label>
-                <input type="text" maxLength={100} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+                <input type="text" maxLength={160} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                   value={data.headline_emphasis || ''} onChange={e => handleChange('headline_emphasis', e.target.value)} />
               </div>
             </div>
 
             <div>
               <label className="block text-xs text-white/50 mb-1">Destek Metni</label>
-              <input type="text" maxLength={180} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
+              <input type="text" maxLength={200} className="w-full bg-white/5 border border-white/10 rounded p-2 text-white text-sm"
                 value={data.support_text || ''} onChange={e => handleChange('support_text', e.target.value)} />
             </div>
 

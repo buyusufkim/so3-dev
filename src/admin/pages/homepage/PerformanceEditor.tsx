@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/client";
 import { MediaPicker } from "../../components/MediaPicker";
 import { X, Image as ImageIcon } from "lucide-react";
+import { getErrorMessage, useUnsavedChangesWarning } from "./editorUtils";
 import { type HomepageMediaInfo } from "./HeroEditor";
 
 export interface PerformanceContent {
@@ -31,8 +32,8 @@ export function PerformanceEditor({ onClose, onSaved }: { onClose: () => void, o
       if (res.media?.background) {
         setMediaPreview(res.media.background);
       }
-    } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Yükleme başarısız.'));
     } finally {
       setLoading(false);
     }
@@ -64,20 +65,20 @@ export function PerformanceEditor({ onClose, onSaved }: { onClose: () => void, o
       setIsDirty(false);
       if (onSaved) onSaved();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Kayıt başarısız.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Kayıt başarısız.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleMediaSelect = (selected: any) => {
+  const handleMediaSelect = (selected: { id: number; url: string; thumbnail_url: string | null; media_type: 'image' | 'video'; original_name: string; alt_text: string | null }) => {
     if (selected) {
       handleChange('background_media_id', selected.id);
       setMediaPreview({
         id: selected.id,
         url: selected.url,
-        thumbnail_url: selected.thumbnail_url,
+        thumbnail_url: selected.thumbnail_url || selected.url,
         alt_text: selected.alt_text
       });
     }
