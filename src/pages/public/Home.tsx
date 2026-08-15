@@ -34,7 +34,7 @@ const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
   trainers: (content) => content ? <HomeTrainers content={content.trainers} /> : null,
   performance: (content) => content ? <HomePerformance content={content.performance} /> : null,
   community: (content) => content ? <HomeCommunity content={content.community} /> : null,
-  instagram: () => <HomeInstagram />,
+  instagram: (content) => content ? <HomeInstagram content={content.instagram} /> : null,
   tour: () => <HomeTour />,
   contact: () => <HomeContact />
 };

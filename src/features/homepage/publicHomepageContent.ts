@@ -83,6 +83,14 @@ export interface PublicCommunitySectionContent {
   cta_label: string;
 }
 
+export interface PublicInstagramSectionContent {
+  eyebrow: string;
+  headline: string;
+  intro: string;
+  cta_label: string;
+  placeholder_text: string;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -93,6 +101,7 @@ export interface PublicHomepageContent {
   branches: PublicBranchesSectionContent;
   trainers: PublicTrainersSectionContent;
   community: PublicCommunitySectionContent;
+  instagram: PublicInstagramSectionContent;
 }
 
 function isString(value: unknown): value is string {
@@ -241,6 +250,19 @@ export function isCommunitySectionContent(value: unknown): value is PublicCommun
   return true;
 }
 
+export function isInstagramSectionContent(value: unknown): value is PublicInstagramSectionContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.eyebrow)) return false;
+  if (!isString(obj.headline)) return false;
+  if (!isString(obj.intro)) return false;
+  if (!isString(obj.cta_label)) return false;
+  if (!isString(obj.placeholder_text)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -261,6 +283,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isBranchesSectionContent(data.branches)) throw new Error('Malformed content payload: branches');
   if (!isTrainersSectionContent(data.trainers)) throw new Error('Malformed content payload: trainers');
   if (!isCommunitySectionContent(data.community)) throw new Error('Malformed content payload: community');
+  if (!isInstagramSectionContent(data.instagram)) throw new Error('Malformed content payload: instagram');
   
   return {
     hero: data.hero,
@@ -271,6 +294,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
     performance: data.performance,
     branches: data.branches,
     trainers: data.trainers,
-    community: data.community
+    community: data.community,
+    instagram: data.instagram
   };
 }

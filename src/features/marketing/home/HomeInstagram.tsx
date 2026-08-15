@@ -1,6 +1,11 @@
+import { type PublicInstagramSectionContent } from "@/features/homepage/publicHomepageContent";
 import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
 
-export function HomeInstagram() {
+interface HomeInstagramProps {
+  content: PublicInstagramSectionContent;
+}
+
+export function HomeInstagram({ content }: HomeInstagramProps) {
   const { settings, loading } = useSiteSettings();
   const username = settings?.social?.instagram_username;
   return (
@@ -11,26 +16,28 @@ export function HomeInstagram() {
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-                SO3 / REELS
+                {content.eyebrow}
               </span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-medium tracking-tight mb-6">
-              SO3'ü takip et.
+              {content.headline}
             </h2>
-            <p className="text-lg text-[#0A0A0A]/70 font-medium">
-              Güncel motivasyon, antrenman kesitleri ve SO3 topluluğundan anlar için Instagram'da bize katılın.
-            </p>
+            {content.intro && (
+              <p className="text-lg text-[#0A0A0A]/70 font-medium">
+                {content.intro}
+              </p>
+            )}
           </div>
           
           <div className="shrink-0 w-full md:w-auto">
-            {!loading && username && (
+            {!loading && username && content.cta_label && (
               <a 
                 href={`https://www.instagram.com/${username}/`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="group flex items-center justify-center bg-[#0A0A0A] text-white px-8 py-4 rounded text-sm font-semibold hover:bg-[#851C35] transition-colors w-full md:w-auto"
               >
-                Instagram'da Takip Et
+                {content.cta_label}
                 <svg className="ml-2 w-4 h-4 transform transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
@@ -46,9 +53,11 @@ export function HomeInstagram() {
              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
            </svg>
-           <p className="text-sm font-medium text-[#0A0A0A]/50 max-w-sm">
-             En güncel Reels videolarımızı Instagram hesabımız üzerinden hemen izleyebilirsiniz.
-           </p>
+           {content.placeholder_text && (
+             <p className="text-sm font-medium text-[#0A0A0A]/50 max-w-sm">
+               {content.placeholder_text}
+             </p>
+           )}
         </div>
       </div>
     </section>
