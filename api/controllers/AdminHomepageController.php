@@ -311,11 +311,11 @@ class AdminHomepageController {
             Response::error('Bölüm bulunamadı.', 'NOT_FOUND', 404);
         }
         $sectionDbId = $record['id'];
-        $oldStored = json_decode($record['content_json'], true) ?: [];
-        $oldMerged = [];
-        foreach ($defaults as $k => $v) {
-            $oldMerged[$k] = $oldStored[$k] ?? $v;
+        $oldStored = json_decode($record['content_json'], true);
+        if (!is_array($oldStored)) {
+            $oldStored = [];
         }
+        $oldMerged = self::normalizeStoredContent($section_id, $oldStored);
 
         $oldMediaId = null;
         $newMediaId = null;
