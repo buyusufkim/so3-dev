@@ -43,7 +43,7 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram'];
+    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram', 'tour'];
 
     public static function getEditableSections(): array {
         return self::EDITABLE_SECTIONS;
@@ -63,7 +63,12 @@ class AdminHomepageController {
             'secondary_cta_target' => '/#branslar',
             'background_media_id' => null
         ],
-                                                'instagram' => [
+                                                        'tour' => [
+            'eyebrow' => '360° SANAL TUR',
+            'headline' => 'SO3\'ün içinde dolaş.',
+            'intro' => 'Antrenman alanlarını gelmeden önce sanal turla keşfet.'
+        ],
+        'instagram' => [
             'eyebrow' => 'SO3 / REELS',
             'headline' => 'SO3\'ü takip et.',
             'intro' => 'Güncel motivasyon, antrenman kesitleri ve SO3 topluluğundan anlar için Instagram\'da bize katılın.',
@@ -489,6 +494,24 @@ class AdminHomepageController {
             $validated['steps'] = $cleanSteps;
         }
 
+        elseif ($section_id === 'tour') {
+            foreach (['eyebrow', 'headline', 'intro'] as $field) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline'] = trim($content['headline'] ?? $defaults['headline']);
+            $validated['intro'] = trim($content['intro'] ?? $defaults['intro']);
+            
+            if (mb_strlen($validated['eyebrow']) < 1 || mb_strlen($validated['headline']) < 1) {
+                Response::error('Gerekli alanların doldurulması zorunludur.', 'VALIDATION_ERROR', 422);
+            }
+            
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline']) > 160 || mb_strlen($validated['intro']) > 300) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+        }
         elseif ($section_id === 'instagram') {
             foreach (['eyebrow', 'headline', 'intro', 'cta_label', 'placeholder_text'] as $field) {
                 if (array_key_exists($field, $content) && !is_string($content[$field])) {

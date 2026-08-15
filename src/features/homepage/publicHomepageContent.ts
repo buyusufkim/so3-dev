@@ -91,6 +91,12 @@ export interface PublicInstagramSectionContent {
   placeholder_text: string;
 }
 
+export interface PublicTourSectionContent {
+  eyebrow: string;
+  headline: string;
+  intro: string;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -102,6 +108,7 @@ export interface PublicHomepageContent {
   trainers: PublicTrainersSectionContent;
   community: PublicCommunitySectionContent;
   instagram: PublicInstagramSectionContent;
+  tour: PublicTourSectionContent;
 }
 
 function isString(value: unknown): value is string {
@@ -263,6 +270,17 @@ export function isInstagramSectionContent(value: unknown): value is PublicInstag
   return true;
 }
 
+export function isTourSectionContent(value: unknown): value is PublicTourSectionContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.eyebrow)) return false;
+  if (!isString(obj.headline)) return false;
+  if (!isString(obj.intro)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -284,6 +302,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isTrainersSectionContent(data.trainers)) throw new Error('Malformed content payload: trainers');
   if (!isCommunitySectionContent(data.community)) throw new Error('Malformed content payload: community');
   if (!isInstagramSectionContent(data.instagram)) throw new Error('Malformed content payload: instagram');
+  if (!isTourSectionContent(data.tour)) throw new Error('Malformed content payload: tour');
   
   return {
     hero: data.hero,
@@ -295,6 +314,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
     branches: data.branches,
     trainers: data.trainers,
     community: data.community,
-    instagram: data.instagram
+    instagram: data.instagram,
+    tour: data.tour
   };
 }
