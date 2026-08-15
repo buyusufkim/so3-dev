@@ -36,7 +36,7 @@ const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
   community: (content) => content ? <HomeCommunity content={content.community} /> : null,
   instagram: (content) => content ? <HomeInstagram content={content.instagram} /> : null,
   tour: (content) => content ? <HomeTour content={content.tour} /> : null,
-  contact: () => <HomeContact />
+  contact: (content) => content ? <HomeContact content={content.contact} /> : null
 };
 
 export function Home() {

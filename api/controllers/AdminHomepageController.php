@@ -43,7 +43,7 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram', 'tour'];
+    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community', 'instagram', 'tour', 'contact'];
 
     public static function getEditableSections(): array {
         return self::EDITABLE_SECTIONS;
@@ -63,7 +63,18 @@ class AdminHomepageController {
             'secondary_cta_target' => '/#branslar',
             'background_media_id' => null
         ],
-                                                        'tour' => [
+                                                        'contact' => [
+            'contact_eyebrow' => 'SO3 / İLETİŞİM',
+            'contact_headline_primary' => 'SO3\'e',
+            'contact_headline_emphasis' => 'ulaş.',
+            'directions_cta_label' => 'Yol Tarifi Al',
+            'consultation_eyebrow' => 'SO3 / ÖN GÖRÜŞME',
+            'consultation_headline_primary' => 'Önce seni',
+            'consultation_headline_emphasis' => 'tanıyalım.',
+            'consultation_intro_primary' => 'Hedefini ve hangi alanda çalışmak istediğini konuşarak başlayalım.',
+            'consultation_intro_secondary' => 'Nereden başlayacağını bilmiyorsan sorun değil. Birlikte değerlendirebiliriz.'
+        ],
+        'tour' => [
             'eyebrow' => '360° SANAL TUR',
             'headline' => 'SO3\'ün içinde dolaş.',
             'intro' => 'Antrenman alanlarını gelmeden önce sanal turla keşfet.'
@@ -494,6 +505,30 @@ class AdminHomepageController {
             $validated['steps'] = $cleanSteps;
         }
 
+        elseif ($section_id === 'contact') {
+            foreach (['contact_eyebrow', 'contact_headline_primary', 'contact_headline_emphasis', 'directions_cta_label', 'consultation_eyebrow', 'consultation_headline_primary', 'consultation_headline_emphasis', 'consultation_intro_primary', 'consultation_intro_secondary'] as $field) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
+            $validated['contact_eyebrow'] = trim($content['contact_eyebrow'] ?? $defaults['contact_eyebrow']);
+            $validated['contact_headline_primary'] = trim($content['contact_headline_primary'] ?? $defaults['contact_headline_primary']);
+            $validated['contact_headline_emphasis'] = trim($content['contact_headline_emphasis'] ?? $defaults['contact_headline_emphasis']);
+            $validated['directions_cta_label'] = trim($content['directions_cta_label'] ?? $defaults['directions_cta_label']);
+            $validated['consultation_eyebrow'] = trim($content['consultation_eyebrow'] ?? $defaults['consultation_eyebrow']);
+            $validated['consultation_headline_primary'] = trim($content['consultation_headline_primary'] ?? $defaults['consultation_headline_primary']);
+            $validated['consultation_headline_emphasis'] = trim($content['consultation_headline_emphasis'] ?? $defaults['consultation_headline_emphasis']);
+            $validated['consultation_intro_primary'] = trim($content['consultation_intro_primary'] ?? $defaults['consultation_intro_primary']);
+            $validated['consultation_intro_secondary'] = trim($content['consultation_intro_secondary'] ?? $defaults['consultation_intro_secondary']);
+            
+            if (mb_strlen($validated['contact_eyebrow']) < 1 || mb_strlen($validated['contact_headline_primary']) < 1 || mb_strlen($validated['contact_headline_emphasis']) < 1 || mb_strlen($validated['consultation_eyebrow']) < 1 || mb_strlen($validated['consultation_headline_primary']) < 1 || mb_strlen($validated['consultation_headline_emphasis']) < 1) {
+                Response::error('Gerekli alanların doldurulması zorunludur.', 'VALIDATION_ERROR', 422);
+            }
+            
+            if (mb_strlen($validated['contact_eyebrow']) > 80 || mb_strlen($validated['contact_headline_primary']) > 120 || mb_strlen($validated['contact_headline_emphasis']) > 120 || mb_strlen($validated['directions_cta_label']) > 80 || mb_strlen($validated['consultation_eyebrow']) > 80 || mb_strlen($validated['consultation_headline_primary']) > 120 || mb_strlen($validated['consultation_headline_emphasis']) > 120 || mb_strlen($validated['consultation_intro_primary']) > 400 || mb_strlen($validated['consultation_intro_secondary']) > 400) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+        }
         elseif ($section_id === 'tour') {
             foreach (['eyebrow', 'headline', 'intro'] as $field) {
                 if (array_key_exists($field, $content) && !is_string($content[$field])) {

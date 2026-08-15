@@ -1,8 +1,13 @@
+import { type PublicContactSectionContent } from "@/features/homepage/publicHomepageContent";
 import { ConsultationForm } from "../contact/ConsultationForm";
 import { useSiteSettings } from "@/features/site-settings/PublicSiteSettingsProvider";
 import { formatTurkishPhone, toTelHref, toWhatsappUrl } from "@/features/site-settings/utils";
 
-export function HomeContact() {
+interface HomeContactProps {
+  content: PublicContactSectionContent;
+}
+
+export function HomeContact({ content }: HomeContactProps) {
   const { settings, loading } = useSiteSettings();
   const contact = settings?.contact;
   const location = settings?.location;
@@ -17,12 +22,12 @@ export function HomeContact() {
           <div className="flex items-center gap-3 mb-8 md:mb-10">
             <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
             <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-              SO3 / İLETİŞİM
+              {content.contact_eyebrow}
             </span>
           </div>
           
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] mb-12 md:mb-16">
-            SO3'e <span className="font-bold">ulaş.</span>
+            {content.contact_headline_primary} <span className="font-bold">{content.contact_headline_emphasis}</span>
           </h2>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
@@ -61,7 +66,7 @@ export function HomeContact() {
                 <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/80 leading-relaxed max-w-sm whitespace-pre-line">
                   {loading ? "..." : (location?.address || "Adres bilgisi şu anda görüntülenemiyor.")}
                 </p>
-                {!loading && location?.maps_directions_url && (
+                {!loading && location?.maps_directions_url && content.directions_cta_label && (
                   <a 
                     href={location.maps_directions_url} 
                     target="_blank" 
@@ -69,7 +74,7 @@ export function HomeContact() {
                     className="group flex items-center gap-2 text-sm font-semibold text-[#851C35] mt-2"
                   >
                   <span className="relative">
-                    Yol Tarifi Al
+                    {content.directions_cta_label}
                     <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-[#851C35] transition-all group-hover:w-full"></span>
                   </span>
                   <span className="transform group-hover:translate-x-1 transition-transform">→</span>
@@ -112,22 +117,26 @@ export function HomeContact() {
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-                SO3 / ÖN GÖRÜŞME
+                {content.consultation_eyebrow}
               </span>
             </div>
             
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] mb-6">
-              Önce seni <br className="hidden md:block" />
-              <span className="font-bold">tanıyalım.</span>
+              {content.consultation_headline_primary} <br className="hidden md:block" />
+              <span className="font-bold">{content.consultation_headline_emphasis}</span>
             </h2>
             
-            <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/70 leading-relaxed mb-6">
-              Hedefini ve hangi alanda çalışmak istediğini konuşarak başlayalım.
-            </p>
+            {content.consultation_intro_primary && (
+              <p className="text-lg md:text-xl font-medium text-[#0A0A0A]/70 leading-relaxed mb-6">
+                {content.consultation_intro_primary}
+              </p>
+            )}
             
-            <p className="text-base text-[#0A0A0A]/50 font-medium mb-10 max-w-sm">
-              Nereden başlayacağını bilmiyorsan sorun değil. Birlikte değerlendirebiliriz.
-            </p>
+            {content.consultation_intro_secondary && (
+              <p className="text-base text-[#0A0A0A]/50 font-medium mb-10 max-w-sm">
+                {content.consultation_intro_secondary}
+              </p>
+            )}
           </div>
 
           {/* Form Column (Right) */}

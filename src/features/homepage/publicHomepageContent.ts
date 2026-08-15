@@ -97,6 +97,18 @@ export interface PublicTourSectionContent {
   intro: string;
 }
 
+export interface PublicContactSectionContent {
+  contact_eyebrow: string;
+  contact_headline_primary: string;
+  contact_headline_emphasis: string;
+  directions_cta_label: string;
+  consultation_eyebrow: string;
+  consultation_headline_primary: string;
+  consultation_headline_emphasis: string;
+  consultation_intro_primary: string;
+  consultation_intro_secondary: string;
+}
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -109,6 +121,7 @@ export interface PublicHomepageContent {
   community: PublicCommunitySectionContent;
   instagram: PublicInstagramSectionContent;
   tour: PublicTourSectionContent;
+  contact: PublicContactSectionContent;
 }
 
 function isString(value: unknown): value is string {
@@ -281,6 +294,23 @@ export function isTourSectionContent(value: unknown): value is PublicTourSection
   return true;
 }
 
+export function isContactSectionContent(value: unknown): value is PublicContactSectionContent {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  
+  if (!isString(obj.contact_eyebrow)) return false;
+  if (!isString(obj.contact_headline_primary)) return false;
+  if (!isString(obj.contact_headline_emphasis)) return false;
+  if (!isString(obj.directions_cta_label)) return false;
+  if (!isString(obj.consultation_eyebrow)) return false;
+  if (!isString(obj.consultation_headline_primary)) return false;
+  if (!isString(obj.consultation_headline_emphasis)) return false;
+  if (!isString(obj.consultation_intro_primary)) return false;
+  if (!isString(obj.consultation_intro_secondary)) return false;
+  
+  return true;
+}
+
 export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
@@ -303,6 +333,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   if (!isCommunitySectionContent(data.community)) throw new Error('Malformed content payload: community');
   if (!isInstagramSectionContent(data.instagram)) throw new Error('Malformed content payload: instagram');
   if (!isTourSectionContent(data.tour)) throw new Error('Malformed content payload: tour');
+  if (!isContactSectionContent(data.contact)) throw new Error('Malformed content payload: contact');
   
   return {
     hero: data.hero,
@@ -315,6 +346,7 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
     trainers: data.trainers,
     community: data.community,
     instagram: data.instagram,
-    tour: data.tour
+    tour: data.tour,
+    contact: data.contact
   };
 }
