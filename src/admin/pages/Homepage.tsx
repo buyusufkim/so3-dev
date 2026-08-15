@@ -9,6 +9,7 @@ import { ProcessEditor } from "./homepage/ProcessEditor";
 import { PerformanceEditor } from "./homepage/PerformanceEditor";
 import { BranchesEditor } from "./homepage/BranchesEditor";
 import { TrainersEditor } from "./homepage/TrainersEditor";
+import { CommunityEditor } from "./homepage/CommunityEditor";
 
 
 type HomepageSection = {
@@ -218,7 +219,7 @@ export function Homepage() {
 
 
             <div className="flex items-center gap-6">
-              {['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers'].includes(section.section_id) && (
+              {['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community'].includes(section.section_id) && (
                 <button
                   onClick={() => setEditingSection(section.section_id)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white hover:bg-white/20 transition"
@@ -253,6 +254,7 @@ export function Homepage() {
       {editingSection === 'performance' && <PerformanceEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
       {editingSection === 'branches' && <BranchesEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
       {editingSection === 'trainers' && <TrainersEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
+      {editingSection === 'community' && <CommunityEditor onClose={() => setEditingSection(null)} onSaved={refreshSectionsMetadata} />}
     </div>
   );
 }

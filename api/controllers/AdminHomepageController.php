@@ -43,7 +43,7 @@ class AdminHomepageController {
     }
 
 
-    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers'];
+    private const EDITABLE_SECTIONS = ['hero', 'brand_band', 'about', 'why_so3', 'process', 'performance', 'branches', 'trainers', 'community'];
 
     public static function getEditableSections(): array {
         return self::EDITABLE_SECTIONS;
@@ -63,7 +63,13 @@ class AdminHomepageController {
             'secondary_cta_target' => '/#branslar',
             'background_media_id' => null
         ],
-                                'trainers' => [
+                                        'community' => [
+            'eyebrow' => 'SO3 / TOPLULUK',
+            'headline' => 'SO3 Ailesi Çok Sosyal',
+            'intro' => 'SO3 topluluğu; kano, doğa yürüyüşü, voleybol ve piknik gibi etkinliklerle salon dışında da bir araya gelir.',
+            'cta_label' => 'Tüm Etkinlikleri Keşfet'
+        ],
+        'trainers' => [
             'eyebrow' => 'SO3 / EKİP',
             'headline' => 'Profesyonel Eğitim Kadrosu',
             'intro' => 'SO3 antrenör kadromuzla tanışın.'
@@ -476,6 +482,25 @@ class AdminHomepageController {
             $validated['steps'] = $cleanSteps;
         }
 
+        elseif ($section_id === 'community') {
+            foreach (['eyebrow', 'headline', 'intro', 'cta_label'] as $field) {
+                if (array_key_exists($field, $content) && !is_string($content[$field])) {
+                    Response::error('Geçersiz veri tipi (' . $field . '). Sadece metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+            }
+            $validated['eyebrow'] = trim($content['eyebrow'] ?? $defaults['eyebrow']);
+            $validated['headline'] = trim($content['headline'] ?? $defaults['headline']);
+            $validated['intro'] = trim($content['intro'] ?? $defaults['intro']);
+            $validated['cta_label'] = trim($content['cta_label'] ?? $defaults['cta_label']);
+            
+            if (mb_strlen($validated['eyebrow']) < 1 || mb_strlen($validated['headline']) < 1) {
+                Response::error('Gerekli alanların doldurulması zorunludur.', 'VALIDATION_ERROR', 422);
+            }
+            
+            if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline']) > 160 || mb_strlen($validated['intro']) > 500 || mb_strlen($validated['cta_label']) > 80) {
+                Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
+            }
+        }
         elseif ($section_id === 'trainers') {
             foreach (['eyebrow', 'headline', 'intro'] as $field) {
                 if (array_key_exists($field, $content) && !is_string($content[$field])) {

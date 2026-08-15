@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
+import { type PublicCommunitySectionContent } from "@/features/homepage/publicHomepageContent";
 import { Link } from "react-router-dom";
 import { PublicEvent } from "../events/EventCard";
 
-export function HomeCommunity() {
+interface HomeCommunityProps {
+  content: PublicCommunitySectionContent;
+}
+
+export function HomeCommunity({ content }: HomeCommunityProps) {
   const [events, setEvents] = useState<PublicEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -53,15 +58,17 @@ export function HomeCommunity() {
           <div className="flex items-center justify-center gap-3 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
             <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
-              SO3 / TOPLULUK
+              {content.eyebrow}
             </span>
           </div>
           <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-medium tracking-tight leading-[1.05] mb-8">
-            SO3 Ailesi Çok Sosyal
+            {content.headline}
           </h2>
-          <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium max-w-2xl mx-auto">
-            İlk günden beridir prensibimiz sadece bir spor salonu değil hayat dolu bir aile olmaktı. Öyle de olduk! SO3 ile kano etkinlikleri, doğa yürüyüşleri, takımlı müsabakalar, salon içi toplu antrenman etkinlikleri, kahvaltı buluşmaları gibi yılın her ayını dolu dolu geçiriyoruz.
-          </p>
+          {content.intro && (
+            <p className="text-lg md:text-xl text-[#0A0A0A]/70 font-medium max-w-2xl mx-auto">
+              {content.intro}
+            </p>
+          )}
         </div>
 
         {error ? (
@@ -93,15 +100,17 @@ export function HomeCommunity() {
           </div>
         )}
 
-        <div className="flex justify-center mt-12">
-          <Link 
-            to="/etkinlikler"
-            className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#0A0A0A] hover:text-[#851C35] transition-colors"
-          >
-            Tüm Etkinlikleri Keşfet
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform group-hover:translate-x-1 transition-transform"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </Link>
-        </div>
+        {content.cta_label && (
+          <div className="flex justify-center mt-12">
+            <Link 
+              to="/etkinlikler"
+              className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#0A0A0A] hover:text-[#851C35] transition-colors"
+            >
+              {content.cta_label}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform group-hover:translate-x-1 transition-transform"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );
