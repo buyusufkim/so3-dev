@@ -37,7 +37,7 @@ function isHomepageSection(value: unknown): value is HomepageSection {
   
   if (!isHomepageSectionId(obj.section_id)) return false;
   if (obj.is_active !== 0 && obj.is_active !== 1) return false;
-  if (typeof obj.sort_order !== 'number' || !Number.isFinite(obj.sort_order)) return false;
+  if (typeof obj.sort_order !== 'number' || !Number.isFinite(obj.sort_order) || !Number.isInteger(obj.sort_order)) return false;
   if (obj.updated_at !== null && typeof obj.updated_at !== 'string') return false;
   
   return true;

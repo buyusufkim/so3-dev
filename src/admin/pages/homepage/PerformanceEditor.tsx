@@ -125,7 +125,7 @@ export function PerformanceEditor({ onClose, onSaved }: { onClose: () => void, o
                         type="text"
                         value={data.headline_primary}
                         onChange={(e) => handleChange('headline_primary', e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                        maxLength={140} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                       />
                     </div>
                     <div>
@@ -134,7 +134,7 @@ export function PerformanceEditor({ onClose, onSaved }: { onClose: () => void, o
                         type="text"
                         value={data.headline_emphasis}
                         onChange={(e) => handleChange('headline_emphasis', e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                        maxLength={140} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                       />
                     </div>
                     <div>
@@ -143,7 +143,7 @@ export function PerformanceEditor({ onClose, onSaved }: { onClose: () => void, o
                         value={data.description}
                         onChange={(e) => handleChange('description', e.target.value)}
                         rows={3}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors resize-none"
+                        maxLength={500} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors resize-none"
                       />
                     </div>
                   </div>

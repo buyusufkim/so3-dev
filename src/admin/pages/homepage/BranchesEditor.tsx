@@ -98,7 +98,7 @@ export function BranchesEditor({ onClose, onSaved }: { onClose: () => void, onSa
                     type="text"
                     value={data.eyebrow}
                     onChange={(e) => handleChange('eyebrow', e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                    maxLength={80} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                   />
                 </div>
                 <div>
@@ -107,7 +107,7 @@ export function BranchesEditor({ onClose, onSaved }: { onClose: () => void, onSa
                     type="text"
                     value={data.headline_primary}
                     onChange={(e) => handleChange('headline_primary', e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                    maxLength={140} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                   />
                 </div>
                 <div>
@@ -116,7 +116,7 @@ export function BranchesEditor({ onClose, onSaved }: { onClose: () => void, onSa
                     type="text"
                     value={data.headline_emphasis}
                     onChange={(e) => handleChange('headline_emphasis', e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                    maxLength={140} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                   />
                 </div>
                 <div>
@@ -125,7 +125,7 @@ export function BranchesEditor({ onClose, onSaved }: { onClose: () => void, onSa
                     type="text"
                     value={data.gallery_cta_label}
                     onChange={(e) => handleChange('gallery_cta_label', e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
+                    maxLength={60} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors"
                   />
                   <p className="text-xs text-white/40 mt-1">Zorunlu değildir. Boş bırakırsanız sadece ikon ve tıklama işlevi kalır, metin gizlenir.</p>
                 </div>
