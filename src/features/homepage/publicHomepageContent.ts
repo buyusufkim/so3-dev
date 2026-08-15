@@ -109,6 +109,10 @@ export interface PublicContactSectionContent {
   consultation_intro_secondary: string;
 }
 
+export type ParsedPublicHomepageContent = {
+  [K in keyof PublicHomepageContent]: PublicHomepageContent[K] | null;
+};
+
 export interface PublicHomepageContent {
   hero: PublicHeroContent;
   brand_band: PublicBrandBandContent;
@@ -311,7 +315,7 @@ export function isContactSectionContent(value: unknown): value is PublicContactS
   return true;
 }
 
-export function parsePublicHomepageContentResponse(value: unknown): PublicHomepageContent {
+export function parsePublicHomepageContentResponse(value: unknown): ParsedPublicHomepageContent {
   if (!value || typeof value !== 'object') {
     throw new Error('Malformed content payload: root is not an object');
   }
@@ -322,31 +326,18 @@ export function parsePublicHomepageContentResponse(value: unknown): PublicHomepa
   }
   const data = root.data as Record<string, unknown>;
   
-  if (!isHeroContent(data.hero)) throw new Error('Malformed content payload: hero');
-  if (!isBrandBandContent(data.brand_band)) throw new Error('Malformed content payload: brand_band');
-  if (!isAboutContent(data.about)) throw new Error('Malformed content payload: about');
-  if (!isWhySo3Content(data.why_so3)) throw new Error('Malformed content payload: why_so3');
-  if (!isProcessContent(data.process)) throw new Error('Malformed content payload: process');
-  if (!isPerformanceContent(data.performance)) throw new Error('Malformed content payload: performance');
-  if (!isBranchesSectionContent(data.branches)) throw new Error('Malformed content payload: branches');
-  if (!isTrainersSectionContent(data.trainers)) throw new Error('Malformed content payload: trainers');
-  if (!isCommunitySectionContent(data.community)) throw new Error('Malformed content payload: community');
-  if (!isInstagramSectionContent(data.instagram)) throw new Error('Malformed content payload: instagram');
-  if (!isTourSectionContent(data.tour)) throw new Error('Malformed content payload: tour');
-  if (!isContactSectionContent(data.contact)) throw new Error('Malformed content payload: contact');
-  
   return {
-    hero: data.hero,
-    brand_band: data.brand_band,
-    about: data.about,
-    why_so3: data.why_so3,
-    process: data.process,
-    performance: data.performance,
-    branches: data.branches,
-    trainers: data.trainers,
-    community: data.community,
-    instagram: data.instagram,
-    tour: data.tour,
-    contact: data.contact
+    hero: isHeroContent(data.hero) ? data.hero : null,
+    brand_band: isBrandBandContent(data.brand_band) ? data.brand_band : null,
+    about: isAboutContent(data.about) ? data.about : null,
+    why_so3: isWhySo3Content(data.why_so3) ? data.why_so3 : null,
+    process: isProcessContent(data.process) ? data.process : null,
+    performance: isPerformanceContent(data.performance) ? data.performance : null,
+    branches: isBranchesSectionContent(data.branches) ? data.branches : null,
+    trainers: isTrainersSectionContent(data.trainers) ? data.trainers : null,
+    community: isCommunitySectionContent(data.community) ? data.community : null,
+    instagram: isInstagramSectionContent(data.instagram) ? data.instagram : null,
+    tour: isTourSectionContent(data.tour) ? data.tour : null,
+    contact: isContactSectionContent(data.contact) ? data.contact : null
   };
 }

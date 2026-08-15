@@ -19,29 +19,30 @@ import {
 } from "@/features/homepage/publicHomepage";
 import {
   type PublicHomepageContent,
+  type ParsedPublicHomepageContent,
   parsePublicHomepageContentResponse
 } from "@/features/homepage/publicHomepageContent";
 
-type SectionRenderer = (content: PublicHomepageContent | null) => React.ReactNode;
+type SectionRenderer = (content: ParsedPublicHomepageContent | null) => React.ReactNode;
 
 const SECTION_RENDERERS: Record<HomepageSectionId, SectionRenderer> = {
-  hero: (content) => content ? <HomeHero content={content.hero} /> : null,
-  brand_band: (content) => content ? <HomeBrandBand content={content.brand_band} /> : null,
-  branches: (content) => content ? <HomeBranches content={content.branches} /> : null,
-  about: (content) => content ? <HomeAbout content={content.about} /> : null,
-  why_so3: (content) => content ? <HomeWhySO3 content={content.why_so3} /> : null,
-  process: (content) => content ? <HomeProcess content={content.process} /> : null,
-  trainers: (content) => content ? <HomeTrainers content={content.trainers} /> : null,
-  performance: (content) => content ? <HomePerformance content={content.performance} /> : null,
-  community: (content) => content ? <HomeCommunity content={content.community} /> : null,
-  instagram: (content) => content ? <HomeInstagram content={content.instagram} /> : null,
-  tour: (content) => content ? <HomeTour content={content.tour} /> : null,
-  contact: (content) => content ? <HomeContact content={content.contact} /> : null
+  hero: (content) => content?.hero ? <HomeHero content={content.hero} /> : null,
+  brand_band: (content) => content?.brand_band ? <HomeBrandBand content={content.brand_band} /> : null,
+  branches: (content) => content?.branches ? <HomeBranches content={content.branches} /> : null,
+  about: (content) => content?.about ? <HomeAbout content={content.about} /> : null,
+  why_so3: (content) => content?.why_so3 ? <HomeWhySO3 content={content.why_so3} /> : null,
+  process: (content) => content?.process ? <HomeProcess content={content.process} /> : null,
+  trainers: (content) => content?.trainers ? <HomeTrainers content={content.trainers} /> : null,
+  performance: (content) => content?.performance ? <HomePerformance content={content.performance} /> : null,
+  community: (content) => content?.community ? <HomeCommunity content={content.community} /> : null,
+  instagram: (content) => content?.instagram ? <HomeInstagram content={content.instagram} /> : null,
+  tour: (content) => content?.tour ? <HomeTour content={content.tour} /> : null,
+  contact: (content) => content?.contact ? <HomeContact content={content.contact} /> : null
 };
 
 export function Home() {
   const [sections, setSections] = useState<HomepageSectionId[]>([]);
-  const [content, setContent] = useState<PublicHomepageContent | null>(null);
+  const [content, setContent] = useState<ParsedPublicHomepageContent | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export function Home() {
           }
         }
 
-        let parsedContent: PublicHomepageContent | null = null;
+        let parsedContent: ParsedPublicHomepageContent | null = null;
         if (contentRes && contentRes.ok) {
           try {
             const contentJson = await contentRes.json();
