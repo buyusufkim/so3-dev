@@ -12,11 +12,22 @@
    - **Migration User**: Temporarily granted `CREATE`, `ALTER`, `INDEX`, etc. for running migrations.
    - **Application Runtime User**: Granted **Least Privilege**: Only `SELECT`, `INSERT`, `UPDATE`, `DELETE`. This is the user configured in `config.local.php`.
 
-## 2. Migrations
-Run the migrations via the CLI script using a user with schema modification privileges:
-```bash
-php bin/migrate.php
-```
+## 2. Database Installation & Migrations
+
+### Path A: Fresh/Empty Database
+If you are deploying to a completely empty database for the first time:
+1. Import `database/fresh-install.sql` using phpMyAdmin or the MySQL CLI.
+   *WARNING: Never import `fresh-install.sql` into a live database containing existing data.*
+2. Configure runtime credentials in `config.local.php`.
+3. Create the first admin **only** through the `php bin/create-admin.php` CLI tool.
+
+### Path B: Existing/Incremental Database
+If you are deploying an update to an existing live database:
+1. Run the incremental migration tool:
+   ```bash
+   php bin/migrate.php
+   ```
+2. **Never** import `fresh-install.sql` over an existing database.
 
 ## 3. Configuration
 1. Use `SO3_CONFIG_PATH` environment variable if available to point to a config file outside the document root.
