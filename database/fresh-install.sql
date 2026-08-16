@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-024
+-- Generated from migrations 001-025
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -8,7 +8,7 @@
 -- Existing migrations in database/migrations remain authoritative for live deployments.
 -- Regeneration of this file is required when a new migration is added.
 
-SET NAMES utf8mb4;
+SET @SO3_OLD_FOREIGN_KEY_CHECKS = @@FOREIGN_KEY_CHECKS;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Migration: 001_create_schema_migrations.sql
@@ -210,12 +210,6 @@ INSERT IGNORE INTO event_categories (name, slug, sort_order) VALUES
 ('Kano Etkinlikleri', 'kano-etkinlikleri', 30),
 ('Salon Etkinlikleri', 'salon-etkinlikleri', 40);
 
--- Migration: 015_add_homepage_sections_sort_order.sql
-ALTER TABLE homepage_sections 
-ADD COLUMN sort_order INT NOT NULL DEFAULT 0;
-
-CREATE INDEX idx_homepage_sections_active_order ON homepage_sections(is_active, sort_order);
-
 -- Migration: 016_seed_homepage_sections.sql
 INSERT INTO homepage_sections (section_id, is_active, content_json, sort_order) VALUES
   ('hero', 1, '{}', 10),
@@ -243,7 +237,7 @@ SET content_json = '{
   "feature_right": "Birebir takip",
   "primary_cta_label": "Ön görüşme planla",
   "primary_cta_target": "/#iletisim",
-  "secondary_cta_label": "SO3\'ü keşfet",
+  "secondary_cta_label": "SO3''ü keşfet",
   "secondary_cta_target": "/#branslar",
   "background_media_id": null
 }'
@@ -277,26 +271,26 @@ WHERE section_id = 'about' AND JSON_LENGTH(content_json) = 0;
 -- Migration: 018_seed_homepage_content_why_process.sql
 UPDATE homepage_sections 
 SET content_json = '{
-  "eyebrow": "NEDEN SO3",
+  "eyebrow": "NEDEN SO3?",
   "headline_primary": "Tek tip program yok.",
   "headline_emphasis": "Sana göre bir sistem var.",
-  "intro": "SO3\'te antrenman, kişiye göre planlanır ve çalıştığın eğitmenle birlikte takip edilir.",
+  "intro": "SO3''te antrenman, kişiye göre planlanır ve çalıştığın eğitmenle birlikte takip edilir.",
   "items": [
     {
       "title": "Birebir Takip",
-      "description": "Antrenmanın her anında antrenör gözetiminde her bir tekrarda en doğru ve sağlıklı sonuç"
+      "description": "Antrenman süreci, çalıştığın eğitmenin yönlendirmesi ve takibiyle ilerler."
     },
     {
       "title": "Kişiye Özel Program",
-      "description": "Kalıplaşmış antrenman programları değil, size özel hazırlanmış en verimli antrenman programı ile çalışın"
+      "description": "Program; hedefin, seviyen ve gelişimin doğrultusunda kişiye özel olarak planlanır."
     },
     {
-      "title": "Özel Takip",
-      "description": "Antrenörün sadece salonda değil günlük beslenme, takviye kullanımı ve su tüketimini her öğün ilgiyle birebir WhatsApp üzerinden takip eder"
+      "title": "Süreç Takibi",
+      "description": "Antrenman süreci, ilerlemenin değerlendirilmesi ve ihtiyaçların doğrultusunda takip edilir."
     },
     {
-      "title": "Sürekli Güncel",
-      "description": "Programın her ay düzenli ölçümlerle kişisel gelişimin ve vücut tipinize en uygun şekilde güncellenir."
+      "title": "Gelişime Göre Güncel",
+      "description": "Program, gelişimine göre değerlendirilir ve gerektiğinde güncellenir."
     }
   ]
 }'
@@ -447,6 +441,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('021_seed_branches.sql', CURRENT_TIMESTAMP),
 ('022_create_trainers.sql', CURRENT_TIMESTAMP),
 ('023_seed_trainers.sql', CURRENT_TIMESTAMP),
-('024_seed_global_settings.sql', CURRENT_TIMESTAMP);
+('024_seed_global_settings.sql', CURRENT_TIMESTAMP),
+('025_replace_legacy_why_so3_copy.sql', CURRENT_TIMESTAMP);
 
-SET FOREIGN_KEY_CHECKS = 1;
+SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
