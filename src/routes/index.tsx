@@ -62,6 +62,10 @@ const router = createBrowserRouter([
         path: "iletisim",
         element: <Navigate to="/#iletisim" replace />,
       },
+      {
+        path: "360-tur",
+        element: <Navigate to="/#tour" replace />,
+      },
       
       // 404 Fallback
       {

@@ -6,6 +6,7 @@ type PageSEOProps = {
   canonical?: string;
   ogType?: "website" | "article";
   ogImage?: string;
+  robots?: "index, follow" | "noindex, follow" | "noindex, nofollow";
 };
 
 export function PageSEO({
@@ -14,6 +15,7 @@ export function PageSEO({
   canonical,
   ogType = "website",
   ogImage,
+  robots = "index, follow",
 }: PageSEOProps) {
   useEffect(() => {
     // Title
@@ -73,7 +75,10 @@ export function PageSEO({
       updateOrCreateMeta("name", "twitter:image", undefined);
       updateOrCreateMeta("name", "twitter:card", "summary");
     }
-  }, [title, description, canonical, ogType, ogImage]);
+
+    updateOrCreateMeta("name", "robots", robots);
+
+  }, [title, description, canonical, ogType, ogImage, robots]);
 
   return null;
 }

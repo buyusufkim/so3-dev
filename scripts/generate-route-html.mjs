@@ -24,31 +24,48 @@ function cleanHtml(html) {
 }
 
 function generateMeta(opts) {
+  const eText = (str) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+  const eAttr = (str) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   let meta = `
-    <title>${opts.title}</title>
-    <meta name="description" content="${opts.description}" />
-    <link rel="canonical" href="${opts.url}" />
-    <meta property="og:title" content="${opts.title}" />
-    <meta property="og:description" content="${opts.description}" />
-    <meta property="og:type" content="${opts.ogType || 'website'}" />
-    <meta property="og:url" content="${opts.url}" />
+    <title>${eText(opts.title)}</title>
+    <meta name="description" content="${eAttr(opts.description)}" />
+    <link rel="canonical" href="${eAttr(opts.url)}" />
+    <meta property="og:title" content="${eAttr(opts.title)}" />
+    <meta property="og:description" content="${eAttr(opts.description)}" />
+    <meta property="og:type" content="${eAttr(opts.ogType || 'website')}" />
+    <meta property="og:url" content="${eAttr(opts.url)}" />
     <meta property="og:locale" content="tr_TR" />
     <meta property="og:site_name" content="SO3 Personal Training" />`;
-    
+      
   if (opts.ogImage) {
     meta += `
-    <meta property="og:image" content="${opts.ogImage}" />
+    <meta property="og:image" content="${eAttr(opts.ogImage)}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${opts.title}" />
-    <meta name="twitter:description" content="${opts.description}" />
-    <meta name="twitter:image" content="${opts.ogImage}" />`;
+    <meta name="twitter:title" content="${eAttr(opts.title)}" />
+    <meta name="twitter:description" content="${eAttr(opts.description)}" />
+    <meta name="twitter:image" content="${eAttr(opts.ogImage)}" />`;
   } else {
     meta += `
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="${opts.title}" />
-    <meta name="twitter:description" content="${opts.description}" />`;
+    <meta name="twitter:title" content="${eAttr(opts.title)}" />
+    <meta name="twitter:description" content="${eAttr(opts.description)}" />`;
   }
-  
+    
   if (opts.noindex) {
     meta += `
     <meta name="robots" content="noindex, follow" />`;
@@ -123,7 +140,7 @@ events.forEach(evt => {
 });
 
 // 4. Legacy redirect-only routes (noindex)
-const legacyRoutes = ['/branslar', '/egitmenler', '/topluluk', '/iletisim'];
+const legacyRoutes = ['/branslar', '/egitmenler', '/topluluk', '/iletisim', '/360-tur'];
 legacyRoutes.forEach(route => {
   writeRouteHtml(route, {
     title: "SO3 Personal Training | Kayseri",

@@ -78,23 +78,24 @@ export function EventDetailPage() {
   if (loading) {
     return (
       <main className="w-full flex items-center justify-center min-h-screen bg-[#0A0A0A] text-white">
+        <PageSEO title="Etkinlik Yükleniyor... | SO3 Personal Training" robots="noindex, follow" />
         <div className="text-white/50 animate-pulse font-medium">Etkinlik Yükleniyor...</div>
       </main>
     );
   }
 
   if (notFound) {
-    return (
-      <>
-        <PageSEO title="Etkinlik Bulunamadı | SO3 Personal Training" />
-        <NotFound />
-      </>
-    );
+    return <NotFound />;
   }
 
   if (!event) {
     return (
       <main className="w-full flex items-center justify-center min-h-screen bg-[#0A0A0A] text-white">
+        <PageSEO 
+          title="Etkinlik Yüklenemedi | SO3 Personal Training" 
+          description="Etkinlik bilgileri şu anda görüntülenemiyor."
+          robots="noindex, follow" 
+        />
         <div className="text-red-400 font-medium">Etkinlik yüklenemedi.</div>
       </main>
     );
@@ -112,6 +113,7 @@ export function EventDetailPage() {
         canonical={`https://so3pt.com.tr/etkinlikler/${event.slug}`}
         ogType="article"
         ogImage={coverImg ? (coverImg.startsWith('http') ? coverImg : `https://so3pt.com.tr${coverImg}`) : undefined}
+        robots="index, follow"
       />
       
       <EventDetailHero event={event} />

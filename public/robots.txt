@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
-
+Disallow: /admin
+Disallow: /api/
 Sitemap: https://so3pt.com.tr/sitemap.xml
