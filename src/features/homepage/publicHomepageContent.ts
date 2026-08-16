@@ -89,6 +89,7 @@ export interface PublicInstagramSectionContent {
   intro: string;
   cta_label: string;
   placeholder_text: string;
+  reels?: string[];
 }
 
 export interface PublicTourSectionContent {

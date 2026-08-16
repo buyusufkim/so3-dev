@@ -106,7 +106,8 @@ class AdminHomepageController {
             'headline' => 'SO3\'ü takip et.',
             'intro' => 'Güncel motivasyon, antrenman kesitleri ve SO3 topluluğundan anlar için Instagram\'da bize katılın.',
             'cta_label' => 'Instagram\'da Takip Et',
-            'placeholder_text' => 'En güncel Reels videolarımızı Instagram hesabımız üzerinden hemen izleyebilirsiniz.'
+            'placeholder_text' => 'En güncel Reels videolarımızı Instagram hesabımız üzerinden hemen izleyebilirsiniz.',
+            'reels' => []
         ],
         'community' => [
             'eyebrow' => 'SO3 / TOPLULUK',
@@ -190,7 +191,17 @@ class AdminHomepageController {
                             $merged[$k] = $v;
                         }
                     } elseif (is_array($v)) {
-                        if ($section_id === 'why_so3' && $k === 'items') {
+                        if ($section_id === 'instagram' && $k === 'reels') {
+                            $validReels = [];
+                            if (is_array($storedVal)) {
+                                foreach ($storedVal as $reel) {
+                                    if (is_string($reel)) {
+                                        $validReels[] = $reel;
+                                    }
+                                }
+                            }
+                            $merged[$k] = $validReels;
+                        } elseif ($section_id === 'why_so3' && $k === 'items') {
                             $validItems = [];
                             if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 6) {
                                 $allValid = true;
@@ -588,6 +599,54 @@ class AdminHomepageController {
             if (mb_strlen($validated['eyebrow']) > 80 || mb_strlen($validated['headline']) > 160 || mb_strlen($validated['intro']) > 400 || mb_strlen($validated['cta_label']) > 80 || mb_strlen($validated['placeholder_text']) > 300) {
                 Response::error('Karakter sınırı aşıldı.', 'VALIDATION_ERROR', 422);
             }
+            
+            $reels = $content['reels'] ?? [];
+            if (!is_array($reels)) {
+                Response::error('Reels verisi dizi formatında olmalıdır.', 'VALIDATION_ERROR', 422);
+            }
+            if (count($reels) > 6) {
+                Response::error('En fazla 6 adet Reel eklenebilir.', 'VALIDATION_ERROR', 422);
+            }
+            
+            $normalizedReels = [];
+            foreach ($reels as $reelUrl) {
+                if (!is_string($reelUrl)) {
+                    Response::error('Reel URL metin olmalıdır.', 'VALIDATION_ERROR', 422);
+                }
+                $reelUrl = trim($reelUrl);
+                if (empty($reelUrl)) continue;
+                
+                $parsed = parse_url($reelUrl);
+                if (!$parsed || !isset($parsed['scheme']) || !isset($parsed['host']) || !isset($parsed['path'])) {
+                    Response::error('Geçersiz Reel URL formatı.', 'VALIDATION_ERROR', 422);
+                }
+                
+                if ($parsed['scheme'] !== 'https') {
+                    Response::error('Reel URL sadece HTTPS destekler.', 'VALIDATION_ERROR', 422);
+                }
+                
+                $host = strtolower($parsed['host']);
+                if ($host !== 'instagram.com' && $host !== 'www.instagram.com') {
+                    Response::error('Sadece instagram.com bağlantıları desteklenir.', 'VALIDATION_ERROR', 422);
+                }
+                
+                if (preg_match('#^/(reel|p)/([A-Za-z0-9_-]+)/?#', $parsed['path'], $matches)) {
+                    $type = $matches[1];
+                    $shortcode = $matches[2];
+                    $normalizedUrl = "https://www.instagram.com/{$type}/{$shortcode}/";
+                    if (!in_array($normalizedUrl, $normalizedReels, true)) {
+                        $normalizedReels[] = $normalizedUrl;
+                    }
+                } else {
+                    Response::error('Desteklenmeyen Instagram bağlantı tipi. (Sadece /reel/ veya /p/ desteklenir)', 'VALIDATION_ERROR', 422);
+                }
+            }
+            
+            if (count($normalizedReels) > 6) {
+                Response::error('En fazla 6 adet Reel eklenebilir.', 'VALIDATION_ERROR', 422);
+            }
+            
+            $validated['reels'] = $normalizedReels;
         }
         elseif ($section_id === 'community') {
             foreach (['eyebrow', 'headline', 'intro', 'cta_label'] as $field) {

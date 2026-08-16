@@ -8,7 +8,25 @@ interface HomeInstagramProps {
 export function HomeInstagram({ content }: HomeInstagramProps) {
   const { settings, loading } = useSiteSettings();
   const username = settings?.social?.instagram_username;
+
+  const validReels: { url: string; type: string; shortcode: string }[] = [];
+  if (content.reels && Array.isArray(content.reels)) {
+    content.reels.forEach(url => {
+      if (typeof url === 'string') {
+        const match = url.match(/^https:\/\/(?:www\.)?instagram\.com\/(reel|p)\/([A-Za-z0-9_-]+)/);
+        if (match) {
+          validReels.push({
+            url,
+            type: match[1],
+            shortcode: match[2]
+          });
+        }
+      }
+    });
+  }
+
   return (
+
     <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-white text-[#0A0A0A]">
       <div className="container mx-auto max-w-7xl">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
@@ -46,19 +64,37 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
           </div>
         </div>
 
-        {/* Reels Placeholder Container - Ready for Future API Integration */}
-        <div className="w-full bg-[#F4F1EB] rounded-lg border border-[#E5E3DB] flex flex-col items-center justify-center p-12 text-center min-h-[300px]">
-           <svg className="w-12 h-12 text-[#0A0A0A]/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-             <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-             <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-             <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-           </svg>
-           {content.placeholder_text && (
-             <p className="text-sm font-medium text-[#0A0A0A]/50 max-w-sm">
-               {content.placeholder_text}
-             </p>
-           )}
-        </div>
+                {validReels.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {validReels.map((reel, index) => (
+              <div key={index} className="w-full flex justify-center bg-[#F4F1EB] rounded-xl overflow-hidden border border-[#E5E3DB]">
+                <iframe
+                  src={`https://www.instagram.com/${reel.type}/${reel.shortcode}/embed`}
+                  className="w-full max-w-[400px] min-h-[550px]"
+                  frameBorder="0"
+                  scrolling="no"
+                  allowTransparency={true}
+                  allow="encrypted-media"
+                  loading="lazy"
+                  title={`Instagram ${reel.type === 'reel' ? 'Reel' : 'Gönderisi'}`}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="w-full bg-[#F4F1EB] rounded-lg border border-[#E5E3DB] flex flex-col items-center justify-center p-12 text-center min-h-[300px]">
+             <svg className="w-12 h-12 text-[#0A0A0A]/20 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+               <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+               <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+               <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+             </svg>
+             {content.placeholder_text && (
+               <p className="text-sm font-medium text-[#0A0A0A]/50 max-w-sm">
+                 {content.placeholder_text}
+               </p>
+             )}
+          </div>
+        )}
       </div>
     </section>
   );

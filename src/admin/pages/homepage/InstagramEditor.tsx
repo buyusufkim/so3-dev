@@ -9,6 +9,7 @@ export interface InstagramContent {
   intro: string;
   cta_label: string;
   placeholder_text: string;
+  reels?: string[];
 }
 
 export function InstagramEditor({ onClose, onSaved }: { onClose: () => void, onSaved?: () => void }) {
@@ -151,6 +152,54 @@ export function InstagramEditor({ onClose, onSaved }: { onClose: () => void, onS
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#851C35] transition-colors min-h-[80px]"
                   />
                   <p className="text-xs text-white/40 mt-1">Zorunlu değildir. Boş bırakırsanız sadece görsel yer tutucu kalır.</p>
+                </div>
+              </div>
+              <div className="mt-8">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-4">
+                  <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider">Instagram Reels</h3>
+                  <span className="text-xs text-white/40">{(data.reels || []).length} / 6 Reel</span>
+                </div>
+                
+                <div className="space-y-3">
+                  {(data.reels || []).map((reelUrl, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={reelUrl}
+                        onChange={(e) => {
+                          const newReels = [...(data.reels || [])];
+                          newReels[index] = e.target.value;
+                          handleChange('reels', newReels);
+                        }}
+                        placeholder="https://www.instagram.com/reel/..."
+                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#851C35] transition-colors"
+                      />
+                      <button
+                        onClick={() => {
+                          const newReels = [...(data.reels || [])];
+                          newReels.splice(index, 1);
+                          handleChange('reels', newReels);
+                        }}
+                        className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                        title="Sil"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {(!data.reels || data.reels.length < 6) && (
+                    <button
+                      onClick={() => {
+                        const newReels = [...(data.reels || []), ''];
+                        handleChange('reels', newReels);
+                      }}
+                      className="w-full py-3 border border-dashed border-white/20 rounded-lg text-sm text-white/60 hover:text-white hover:border-white/40 transition-colors"
+                    >
+                      + Yeni Reel Ekle
+                    </button>
+                  )}
+                  <p className="text-xs text-white/40 mt-2">Instagram Reel bağlantısını yapıştırın.</p>
                 </div>
               </div>
             </div>
