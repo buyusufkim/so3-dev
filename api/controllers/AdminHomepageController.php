@@ -176,7 +176,35 @@ class AdminHomepageController {
         ]
     ];
 
-        public static function normalizeStoredContent(string $section_id, array $stored): array {
+    private static function normalizeInstagramUrl(string $url): ?string {
+        $parsed = parse_url($url);
+        if (!$parsed || !isset($parsed['scheme']) || !isset($parsed['host']) || !isset($parsed['path'])) {
+            return null;
+        }
+        
+        if (strtolower($parsed['scheme']) !== 'https') {
+            return null;
+        }
+        
+        $host = strtolower($parsed['host']);
+        if ($host !== 'instagram.com' && $host !== 'www.instagram.com') {
+            return null;
+        }
+        
+        if (isset($parsed['user']) || isset($parsed['pass']) || isset($parsed['port'])) {
+            return null;
+        }
+        
+        if (preg_match('#^/(reel|p)/([A-Za-z0-9_-]+)/?$#', $parsed['path'], $matches)) {
+            $type = $matches[1];
+            $shortcode = $matches[2];
+            return "https://www.instagram.com/{$type}/{$shortcode}/";
+        }
+        
+        return null;
+    }
+
+    public static function normalizeStoredContent(string $section_id, array $stored): array {
         $defaults = self::DEFAULTS[$section_id];
             $merged = [];
             foreach ($defaults as $k => $v) {
@@ -196,11 +224,14 @@ class AdminHomepageController {
                             if (is_array($storedVal)) {
                                 foreach ($storedVal as $reel) {
                                     if (is_string($reel)) {
-                                        $validReels[] = $reel;
+                                        $normalized = self::normalizeInstagramUrl(trim($reel));
+                                        if ($normalized && !in_array($normalized, $validReels, true)) {
+                                            $validReels[] = $normalized;
+                                        }
                                     }
                                 }
                             }
-                            $merged[$k] = $validReels;
+                            $merged[$k] = array_slice($validReels, 0, 6);
                         } elseif ($section_id === 'why_so3' && $k === 'items') {
                             $validItems = [];
                             if (is_array($storedVal) && count($storedVal) >= 1 && count($storedVal) <= 6) {
@@ -616,29 +647,13 @@ class AdminHomepageController {
                 $reelUrl = trim($reelUrl);
                 if (empty($reelUrl)) continue;
                 
-                $parsed = parse_url($reelUrl);
-                if (!$parsed || !isset($parsed['scheme']) || !isset($parsed['host']) || !isset($parsed['path'])) {
-                    Response::error('Geçersiz Reel URL formatı.', 'VALIDATION_ERROR', 422);
+                $normalizedUrl = self::normalizeInstagramUrl($reelUrl);
+                if (!$normalizedUrl) {
+                    Response::error('Geçersiz veya desteklenmeyen Instagram bağlantısı: ' . $reelUrl, 'VALIDATION_ERROR', 422);
                 }
                 
-                if ($parsed['scheme'] !== 'https') {
-                    Response::error('Reel URL sadece HTTPS destekler.', 'VALIDATION_ERROR', 422);
-                }
-                
-                $host = strtolower($parsed['host']);
-                if ($host !== 'instagram.com' && $host !== 'www.instagram.com') {
-                    Response::error('Sadece instagram.com bağlantıları desteklenir.', 'VALIDATION_ERROR', 422);
-                }
-                
-                if (preg_match('#^/(reel|p)/([A-Za-z0-9_-]+)/?#', $parsed['path'], $matches)) {
-                    $type = $matches[1];
-                    $shortcode = $matches[2];
-                    $normalizedUrl = "https://www.instagram.com/{$type}/{$shortcode}/";
-                    if (!in_array($normalizedUrl, $normalizedReels, true)) {
-                        $normalizedReels[] = $normalizedUrl;
-                    }
-                } else {
-                    Response::error('Desteklenmeyen Instagram bağlantı tipi. (Sadece /reel/ veya /p/ desteklenir)', 'VALIDATION_ERROR', 422);
+                if (!in_array($normalizedUrl, $normalizedReels, true)) {
+                    $normalizedReels[] = $normalizedUrl;
                 }
             }
             

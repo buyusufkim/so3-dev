@@ -11,18 +11,20 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
 
   const validReels: { url: string; type: string; shortcode: string }[] = [];
   if (content.reels && Array.isArray(content.reels)) {
-    content.reels.forEach(url => {
-      if (typeof url === 'string') {
-        const match = url.match(/^https:\/\/(?:www\.)?instagram\.com\/(reel|p)\/([A-Za-z0-9_-]+)/);
+    for (const rawUrl of content.reels) {
+      if (typeof rawUrl === 'string') {
+        const match = rawUrl.match(/^https:\/\/(?:www\.)?instagram\.com\/(reel|p)\/([A-Za-z0-9_-]+)\/?$/);
         if (match) {
-          validReels.push({
-            url,
-            type: match[1],
-            shortcode: match[2]
-          });
+          const type = match[1];
+          const shortcode = match[2];
+          const canonicalUrl = `https://www.instagram.com/${type}/${shortcode}/`;
+          if (!validReels.some(r => r.url === canonicalUrl)) {
+            validReels.push({ url: canonicalUrl, type, shortcode });
+            if (validReels.length === 6) break;
+          }
         }
       }
-    });
+    }
   }
 
   return (
@@ -66,8 +68,8 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
 
                 {validReels.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {validReels.map((reel, index) => (
-              <div key={index} className="w-full flex justify-center bg-[#F4F1EB] rounded-xl overflow-hidden border border-[#E5E3DB]">
+            {validReels.map((reel) => (
+              <div key={reel.url} className="w-full flex justify-center bg-[#F4F1EB] rounded-xl overflow-hidden border border-[#E5E3DB]">
                 <iframe
                   src={`https://www.instagram.com/${reel.type}/${reel.shortcode}/embed`}
                   className="w-full max-w-[400px] min-h-[550px]"

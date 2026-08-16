@@ -284,7 +284,15 @@ export function isInstagramSectionContent(value: unknown): value is PublicInstag
   if (!isString(obj.intro)) return false;
   if (!isString(obj.cta_label)) return false;
   if (!isString(obj.placeholder_text)) return false;
-  
+
+  if (obj.reels !== undefined) {
+    if (!Array.isArray(obj.reels)) return false;
+    if (obj.reels.length > 6) return false;
+    for (const reel of obj.reels) {
+      if (!isString(reel)) return false;
+    }
+  }
+
   return true;
 }
 

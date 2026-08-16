@@ -35,13 +35,6 @@ export function InstagramEditor({ onClose, onSaved }: { onClose: () => void, onS
     }
   };
 
-  const getErrorMessage = (err: unknown, fallback: string): string => {
-    if (err && typeof err === 'object' && 'message' in err) {
-      return String(err.message);
-    }
-    return fallback;
-  };
-
   const handleChange = <K extends keyof InstagramContent>(field: K, value: InstagramContent[K]) => {
     setData((prev) => prev ? { ...prev, [field]: value } : null);
     setIsDirty(true);
