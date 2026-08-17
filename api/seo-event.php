@@ -1,26 +1,34 @@
 <?php
 
-require_once __DIR__ . '/bootstrap.php';
-require_once __DIR__ . '/core/SeoPageRenderer.php';
-
-use Core\Database;
-use Core\SeoPageRenderer;
-
-if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD') {
-    http_response_code(405);
-    exit('Method Not Allowed');
-}
-
-$slug = $_GET['slug'] ?? '';
-if (!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug)) {
-    http_response_code(404);
-    header('Content-Type: text/html; charset=UTF-8');
-    header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-    echo SeoPageRenderer::renderEventPage(null);
-    exit;
-}
+define('SO3_SKIP_SESSION', true);
 
 try {
+    require_once __DIR__ . '/bootstrap.php';
+    require_once __DIR__ . '/core/SeoPageRenderer.php';
+
+    use Core\Database;
+    use Core\SeoPageRenderer;
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD') {
+        http_response_code(405);
+        header('Allow: GET, HEAD');
+        header('Cache-Control: no-store, max-age=0');
+        exit('Method Not Allowed');
+    }
+
+    $isHead = ($_SERVER['REQUEST_METHOD'] === 'HEAD');
+    $slug = $_GET['slug'] ?? '';
+
+    if (!preg_match('/\A[a-z0-9]+(?:-[a-z0-9]+)*\z/', $slug)) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
+        if (!$isHead) {
+            echo SeoPageRenderer::renderEventPage(null);
+        }
+        exit;
+    }
+
     $db = Database::getInstance()->getConnection();
     
     $query = "
@@ -39,17 +47,38 @@ try {
         http_response_code(200);
         header('Content-Type: text/html; charset=UTF-8');
         header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-        echo SeoPageRenderer::renderEventPage($event);
+        if (!$isHead) {
+            echo SeoPageRenderer::renderEventPage($event);
+        }
     } else {
         http_response_code(404);
         header('Content-Type: text/html; charset=UTF-8');
         header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-        echo SeoPageRenderer::renderEventPage(null);
+        if (!$isHead) {
+            echo SeoPageRenderer::renderEventPage(null);
+        }
     }
-} catch (\Exception $e) {
+} catch (\Throwable $e) {
     http_response_code(503);
     header('Content-Type: text/html; charset=UTF-8');
-    header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-    echo SeoPageRenderer::renderEventPage(null);
+    header('Cache-Control: no-store, max-age=0');
+    if (isset($isHead) && $isHead) {
+        exit;
+    }
+    if (class_exists('Core\SeoPageRenderer') && method_exists('Core\SeoPageRenderer', 'renderStandaloneErrorPage')) {
+        echo \Core\SeoPageRenderer::renderStandaloneErrorPage();
+    } else {
+        echo '<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Hizmet Kullanılamıyor | SO3 Personal Training</title>
+    <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+    <h1>Hizmet Kullanılamıyor</h1>
+    <p>Şu anda sayfa yüklenemiyor. Lütfen daha sonra tekrar deneyin.</p>
+</body>
+</html>';
+    }
 }
-

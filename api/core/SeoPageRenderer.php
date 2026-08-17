@@ -4,11 +4,14 @@ namespace Core;
 
 class SeoPageRenderer {
     public static function renderEventPage(?array $event): string {
-        $distPath = __DIR__ . '/../../dist/index.html';
-        if (!file_exists($distPath)) {
-            return "<html><body>Build not found.</body></html>";
+        $distPath = dirname(__DIR__, 2) . '/index.html';
+        if (!file_exists($distPath) || !is_readable($distPath)) {
+            throw new \RuntimeException('Template missing or unreadable');
         }
         $html = file_get_contents($distPath);
+        if (empty($html) || stripos($html, '</head>') === false) {
+            throw new \RuntimeException('Template empty or missing </head>');
+        }
         
         $html = preg_replace('/<title>.*?<\/title>/si', '', $html);
         $html = preg_replace('/<meta\s+name="description"[^>]*>/i', '', $html);
@@ -35,8 +38,26 @@ class SeoPageRenderer {
             $meta .= "<meta property=\"og:type\" content=\"article\" />\n";
             $meta .= "<meta property=\"og:url\" content=\"" . htmlspecialchars($canonical, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\" />\n";
             
-            if (!empty($event['cover_path'])) {
-                $ogImage = "https://so3pt.com.tr" . $event['cover_path'];
+            $coverPath = $event['cover_path'] ?? '';
+            $isValidCover = false;
+            
+            if (!empty($coverPath)) {
+                $normalizedPath = ltrim($coverPath, '/');
+                if (
+                    (strpos($normalizedPath, 'uploads/') === 0 || strpos($normalizedPath, 'media/') === 0) &&
+                    strpos($normalizedPath, '?') === false &&
+                    strpos($normalizedPath, '#') === false &&
+                    strpos($normalizedPath, '\\') === false &&
+                    strpos($normalizedPath, "\0") === false &&
+                    strpos($normalizedPath, '../') === false &&
+                    strpos($normalizedPath, '://') === false
+                ) {
+                    $isValidCover = true;
+                    $ogImage = "https://so3pt.com.tr/" . $normalizedPath;
+                }
+            }
+
+            if ($isValidCover) {
                 $meta .= "<meta property=\"og:image\" content=\"" . htmlspecialchars($ogImage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\" />\n";
                 $meta .= "<meta name=\"twitter:card\" content=\"summary_large_image\" />\n";
                 $meta .= "<meta name=\"twitter:image\" content=\"" . htmlspecialchars($ogImage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\" />\n";
@@ -53,5 +74,20 @@ class SeoPageRenderer {
         
         $html = str_replace('</head>', $meta . '</head>', $html);
         return $html;
+    }
+
+    public static function renderStandaloneErrorPage(): string {
+        return '<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Hizmet Kullanılamıyor | SO3 Personal Training</title>
+    <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+    <h1>Hizmet Kullanılamıyor</h1>
+    <p>Şu anda sayfa yüklenemiyor. Lütfen daha sonra tekrar deneyin.</p>
+</body>
+</html>';
     }
 }

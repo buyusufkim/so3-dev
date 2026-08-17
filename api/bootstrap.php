@@ -26,4 +26,6 @@ use Core\Session;
 
 ErrorHandler::register();
 Config::load();
-Session::start();
+if (!defined('SO3_SKIP_SESSION') || !SO3_SKIP_SESSION) {
+    Session::start();
+}

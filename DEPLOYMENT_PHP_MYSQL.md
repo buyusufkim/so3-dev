@@ -47,8 +47,18 @@ The application uses a dynamic SEO shell and dynamic sitemap driven by PHP, foll
 **mod_rewrite (or Nginx equivalent) and PHP are required** for this functionality.
 
 ### Important Structural Requirements
+
+The deployed document root structure must be:
+```text
+document-root/
+  index.html
+  api/
+    core/
+      SeoPageRenderer.php
+```
+
 - The `dist/` contents (from `npm run build`) and the `api/` directory **must remain siblings under the document root**.
-- The `index.html` file must be readable by the PHP runtime, as `api/core/SeoPageRenderer.php` reads it to inject dynamic SEO tags.
+- The `index.html` file must be readable by the PHP runtime, as `api/core/SeoPageRenderer.php` reads it (`dirname(__DIR__, 2) . '/index.html'`) to inject dynamic SEO tags.
 - Event SEO (`/etkinlikler/...`) and the sitemap (`/sitemap.xml`) update automatically from published CMS data with a short cache delay (e.g., 60 seconds).
 - Nginx requires equivalent routing rules to achieve the same internal rewrites.
 
@@ -58,7 +68,7 @@ RewriteEngine On
 
 # Dynamic SEO and Sitemap
 RewriteRule ^sitemap\.xml$ api/seo-sitemap.php [L]
-RewriteRule ^etkinlikler/([a-z0-9-]+)$ api/seo-event.php?slug=$1 [L,QSA]
+RewriteRule ^etkinlikler/(.+)$ api/seo-event.php?slug=$1 [L,QSA]
 
 # Allow API access
 RewriteCond %{REQUEST_URI} ^/api/ [NC]
