@@ -139,33 +139,8 @@ writeRouteHtml('/etkinlikler', {
   ogType: "website"
 });
 
-// 3. Events Details
-const events = [
-  { slug: 'kano-etkinligi', title: 'Kano Etkinliği' },
-  { slug: 'gomeda-vadisi-yuruyusu', title: 'Gomeda Vadisi Yürüyüşü' },
-  { slug: 'kirlangic-vadisi-yuruyusu', title: 'Kırlangıç Vadisi Yürüyüşü' },
-  { slug: 'voleybol-etkinligi', title: 'Voleybol Etkinliği' },
-  { slug: 'plaj-voleybolu', title: 'Plaj Voleybolu' },
-  { slug: 'mobilite-grup-dersi', title: 'Mobilite Grup Dersi' }
-];
-
-events.forEach(evt => {
-  const coverPath = `/media/so3/events/${evt.slug}/cover.webp`;
-  const physicalCoverPath = path.join(distPath, coverPath);
-  
-  if (!fs.existsSync(physicalCoverPath)) {
-    console.error(`ERROR: Expected cover image not found at ${physicalCoverPath}`);
-    process.exit(1);
-  }
-
-  writeRouteHtml(`/etkinlikler/${evt.slug}`, {
-    title: `${evt.title} | SO3 Personal Training`,
-    description: `${evt.title} etkinliğinden SO3 topluluğuna ait gerçek fotoğraf ve video içeriklerini keşfedin.`,
-    url: `https://so3pt.com.tr/etkinlikler/${evt.slug}`,
-    ogType: "article",
-    ogImage: `https://so3pt.com.tr${coverPath}`
-  });
-});
+// 3. Event Details
+// Note: Event-detail SEO is served dynamically by api/seo-event.php at runtime.
 
 // 4. Legacy redirect-only routes (noindex)
 const legacyRoutes = ['/branslar', '/egitmenler', '/topluluk', '/iletisim', '/360-tur'];

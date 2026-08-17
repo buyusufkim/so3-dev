@@ -1,5 +1,10 @@
 RewriteEngine On
 
+
+# Dynamic SEO and Sitemap
+RewriteRule ^sitemap\.xml$ api/seo-sitemap.php [L]
+RewriteRule ^etkinlikler/([a-z0-9-]+)$ api/seo-event.php?slug=$1 [L,QSA]
+
 # Allow API access
 RewriteCond %{REQUEST_URI} ^/api/ [NC]
 RewriteRule ^ - [L]

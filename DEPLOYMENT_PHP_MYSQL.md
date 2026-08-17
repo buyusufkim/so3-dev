@@ -41,15 +41,37 @@ If you are deploying an update to an existing live database:
 2. Upload the `dist/` directory contents and the `api/` directory to the server.
 3. Protect sensitive files (`.git`, `node_modules`, `config.local.php`) from web access via the root `.htaccess`.
 
-## 5. SPA Rewrite Rules (Apache Example)
+## 5. Web Server Configuration & Dynamic SEO
+
+The application uses a dynamic SEO shell and dynamic sitemap driven by PHP, followed by an SPA fallback. 
+**mod_rewrite (or Nginx equivalent) and PHP are required** for this functionality.
+
+### Important Structural Requirements
+- The `dist/` contents (from `npm run build`) and the `api/` directory **must remain siblings under the document root**.
+- The `index.html` file must be readable by the PHP runtime, as `api/core/SeoPageRenderer.php` reads it to inject dynamic SEO tags.
+- Event SEO (`/etkinlikler/...`) and the sitemap (`/sitemap.xml`) update automatically from published CMS data with a short cache delay (e.g., 60 seconds).
+- Nginx requires equivalent routing rules to achieve the same internal rewrites.
+
+### Apache Example (.htaccess)
 ```apache
 RewriteEngine On
+
+# Dynamic SEO and Sitemap
+RewriteRule ^sitemap\.xml$ api/seo-sitemap.php [L]
+RewriteRule ^etkinlikler/([a-z0-9-]+)$ api/seo-event.php?slug=$1 [L,QSA]
 
 # Allow API access
 RewriteCond %{REQUEST_URI} ^/api/ [NC]
 RewriteRule ^ - [L]
 
-# Redirect all non-file non-dir to index.html
+# Allow uploads access
+RewriteCond %{REQUEST_URI} ^/uploads/ [NC]
+RewriteRule ^ - [L]
+
+# Deny access to sensitive files
+RewriteRule ^(\.git|\.env|config\.local\.php|composer\.json|package\.json|.*\.sql) - [F,L,NC]
+
+# SPA Fallback for all other routes
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]

@@ -181,6 +181,10 @@ class EventController {
             $slug = $this->generateSlug($title);
         }
         
+        if (!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug)) {
+            Response::json(['error' => 'Geçersiz URL uzantısı (slug). Sadece küçük harf, rakam ve tire içerebilir. Tire ile başlayıp bitemez.'], 422);
+        }
+        
         $excerpt = isset($data['excerpt']) ? trim($data['excerpt']) : null;
         $content = isset($data['content']) ? trim($data['content']) : null;
         $location = isset($data['location']) ? trim($data['location']) : null;

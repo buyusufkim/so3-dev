@@ -35,15 +35,16 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 - Dosya yükleme (Filesystem/public upload architecture).
 - **Instagram Entegrasyonu:** CMS-selected manual Instagram Reel/Post embeds.
 - SEO ve performans iyileştirmeleri, static HTML generation.
+- Runtime PHP SEO-shell ve dynamic sitemap mimarisi tamamlandı.
 
 ## Dağıtım ve Doğrulama Bekleyenler (Runtime/Deployment Verification Still Pending)
 - Mevcut mimarinin (PHP + MySQL + React SPA) üretim ortamında tam olarak test edilmesi ve canlıya alınması.
 - Sunucu yapılandırması ve kalıcı dosya yükleme yollarının üretim ortamında doğrulanması.
 
-## SEO Kısıtlamaları (Pending SEO Synchronization)
-- **Önemli:** Static event-detail HTML generation still uses a fixed legacy event list. 
-- Newly created, edited or archived CMS events are not automatically synchronized with generated route HTML or sitemap.xml. 
-- This remains pending work and must not be described as completed SEO synchronization.
+## Tamamlanan SEO Özellikleri
+- Runtime PHP SEO-shell mimarisi ile dinamik etkinlik meta etiketlerinin oluşturulması.
+- Dinamik sitemap entegrasyonu (api/seo-sitemap.php) ile güncel yayınlanan etkinliklerin senkronize edilmesi.
+- *Not: SEO kod geliştirmeleri repository-complete durumundadır, ancak PHP/MySQL/Apache runtime doğrulamasının canlıda yapılması (runtime verification pending) henüz tamamlanmamıştır.*
 
 ## Gelecek Modüller (Future Modules)
 - **Üye Sistemi:** Üye dashboard'u, program takibi, ölçümler.
