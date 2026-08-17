@@ -82,13 +82,17 @@ export function PageSEO({
     const scriptId = "so3-home-jsonld";
     let scriptElement = document.getElementById(scriptId);
 
-    if (canonical === "https://so3pt.com.tr/" && robots.includes("index")) {
+    const isIndexableHomepage =
+      canonical === "https://so3pt.com.tr/" &&
+      robots === "index, follow";
+
+    if (isIndexableHomepage) {
       if (!scriptElement) {
         scriptElement = document.createElement("script");
         scriptElement.id = scriptId;
-        scriptElement.setAttribute("type", "application/ld+json");
         document.head.appendChild(scriptElement);
       }
+      scriptElement.setAttribute("type", "application/ld+json");
       const jsonLdData = {
         "@context": "https://schema.org",
         "@graph": [

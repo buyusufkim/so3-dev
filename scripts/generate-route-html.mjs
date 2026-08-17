@@ -20,7 +20,7 @@ function cleanHtml(html) {
     .replace(/<link\s+rel="canonical"[^>]*>/gi, '')
     .replace(/<meta\s+name="robots"[^>]*>/gi, '')
     .replace(/<!--.*?Open Graph Basics.*?-->/gi, '')
-    .replace(/<script\s+id="so3-home-jsonld"[\s\S]*?<\/script>/gi, '');
+    .replace(/<script\b[^>]*\bid=["\']so3-home-jsonld["\'][^>]*>[\s\S]*?<\/script>/gi, "");
   return cleaned;
 }
 

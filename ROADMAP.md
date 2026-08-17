@@ -14,9 +14,23 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 - Database-backed homepage CMS, events, trainers, branches and site settings
 - Filesystem/public upload architecture currently implemented
 
+## Güncel Route Durumu (Current Route Truth)
+**Indexable (İndekslenebilir Sayfalar):**
+- `/`
+- `/etkinlikler`
+- `/etkinlikler/:slug`
+
+**Legacy noindex redirect routes (Geçmişten Kalan ve Ana Sayfaya Yönlendiren Rotalar):**
+- `/branslar`
+- `/egitmenler`
+- `/topluluk`
+- `/iletisim`
+- `/360-tur`
+*Not: Bu sayfalar bağımsız nihai sayfalar değildir, ziyaretçileri ana sayfa bölümlerine yönlendirir.*
+
 ## Tamamlanan Özellikler (Completed Repository Capabilities)
 - Proje iskeleti, tasarım sistemi, renkler ve tipografi (Tailwind ile).
-- Herkese açık sayfalar (Ana Sayfa, Branşlar, Eğitmenler, Topluluk, İletişim, vb.) final tasarımlarıyla.
+- Ana sayfa ve ana sayfaya entegre bölümler.
 - CMS destekli Ana Sayfa, Etkinlikler, Eğitmenler, Branşlar ve Site Ayarları.
 - Dosya yükleme (Filesystem/public upload architecture).
 - **Instagram Entegrasyonu:** CMS-selected manual Instagram Reel/Post embeds.
@@ -25,6 +39,11 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 ## Dağıtım ve Doğrulama Bekleyenler (Runtime/Deployment Verification Still Pending)
 - Mevcut mimarinin (PHP + MySQL + React SPA) üretim ortamında tam olarak test edilmesi ve canlıya alınması.
 - Sunucu yapılandırması ve kalıcı dosya yükleme yollarının üretim ortamında doğrulanması.
+
+## SEO Kısıtlamaları (Pending SEO Synchronization)
+- **Önemli:** Static event-detail HTML generation still uses a fixed legacy event list. 
+- Newly created, edited or archived CMS events are not automatically synchronized with generated route HTML or sitemap.xml. 
+- This remains pending work and must not be described as completed SEO synchronization.
 
 ## Gelecek Modüller (Future Modules)
 - **Üye Sistemi:** Üye dashboard'u, program takibi, ölçümler.
