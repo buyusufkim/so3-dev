@@ -1,19 +1,20 @@
 <?php
 
+use Core\Database;
+
 define('SO3_SKIP_SESSION', true);
+
+if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD') {
+    http_response_code(405);
+    header('Allow: GET, HEAD');
+    header('Cache-Control: no-store, max-age=0');
+    exit;
+}
+
+$isHead = ($_SERVER['REQUEST_METHOD'] === 'HEAD');
 
 try {
     require_once __DIR__ . '/bootstrap.php';
-    use Core\Database;
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD') {
-        http_response_code(405);
-        header('Allow: GET, HEAD');
-        header('Cache-Control: no-store, max-age=0');
-        exit('Method Not Allowed');
-    }
-
-    $isHead = ($_SERVER['REQUEST_METHOD'] === 'HEAD');
 
     $db = Database::getInstance()->getConnection();
     
@@ -68,6 +69,7 @@ try {
     }
 
 } catch (\Throwable $e) {
+    error_log("SEO Sitemap Error: " . $e->getMessage());
     http_response_code(503);
     header('Cache-Control: no-store, max-age=0');
     exit;

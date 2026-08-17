@@ -13,13 +13,22 @@ class SeoPageRenderer {
             throw new \RuntimeException('Template empty or missing </head>');
         }
         
-        $html = preg_replace('/<title>.*?<\/title>/si', '', $html);
-        $html = preg_replace('/<meta\s+name="description"[^>]*>/i', '', $html);
-        $html = preg_replace('/<link\s+rel="canonical"[^>]*>/i', '', $html);
-        $html = preg_replace('/<meta\s+name="robots"[^>]*>/i', '', $html);
-        $html = preg_replace('/<meta\s+property="og:[^"]+"[^>]*>/i', '', $html);
-        $html = preg_replace('/<meta\s+name="twitter:[^"]+"[^>]*>/i', '', $html);
-        $html = preg_replace('/<script\b[^>]*\bid=["\']so3-home-jsonld["\'][^>]*>[\s\S]*?<\/script>/i', '', $html);
+        $replacements = [
+            '/<title>.*?<\/title>/si',
+            '/<meta\s+name="description"[^>]*>/i',
+            '/<link\s+rel="canonical"[^>]*>/i',
+            '/<meta\s+name="robots"[^>]*>/i',
+            '/<meta\s+property="og:[^"]+"[^>]*>/i',
+            '/<meta\s+name="twitter:[^"]+"[^>]*>/i',
+            '/<script\b[^>]*\bid=["\']so3-home-jsonld["\'][^>]*>[\s\S]*?<\/script>/i'
+        ];
+        
+        foreach ($replacements as $pattern) {
+            $html = preg_replace($pattern, '', $html);
+            if ($html === null) {
+                throw new \RuntimeException('Regex replacement failed');
+            }
+        }
         
         $meta = "";
         
@@ -43,17 +52,20 @@ class SeoPageRenderer {
             
             if (!empty($coverPath)) {
                 $normalizedPath = ltrim($coverPath, '/');
-                if (
-                    (strpos($normalizedPath, 'uploads/') === 0 || strpos($normalizedPath, 'media/') === 0) &&
-                    strpos($normalizedPath, '?') === false &&
-                    strpos($normalizedPath, '#') === false &&
-                    strpos($normalizedPath, '\\') === false &&
-                    strpos($normalizedPath, "\0") === false &&
-                    strpos($normalizedPath, '../') === false &&
-                    strpos($normalizedPath, '://') === false
-                ) {
-                    $isValidCover = true;
-                    $ogImage = "https://so3pt.com.tr/" . $normalizedPath;
+                
+                if (preg_match('/\A(?:uploads|media)\/[a-zA-Z0-9\.\_\-\/]+\z/', $normalizedPath)) {
+                    $segments = explode('/', $normalizedPath);
+                    $segmentCheck = true;
+                    foreach ($segments as $segment) {
+                        if ($segment === '' || $segment === '.' || $segment === '..') {
+                            $segmentCheck = false;
+                            break;
+                        }
+                    }
+                    if ($segmentCheck) {
+                        $isValidCover = true;
+                        $ogImage = "https://so3pt.com.tr/" . $normalizedPath;
+                    }
                 }
             }
 
@@ -72,7 +84,11 @@ class SeoPageRenderer {
             $meta .= "<meta name=\"robots\" content=\"noindex, follow\" />\n";
         }
         
-        $html = str_replace('</head>', $meta . '</head>', $html);
+        $count = 0;
+        $html = preg_replace('/<\/head>/i', $meta . '</head>', $html, 1, $count);
+        if ($html === null || $count !== 1) {
+            throw new \RuntimeException('Failed to inject meta tags into head');
+        }
         return $html;
     }
 

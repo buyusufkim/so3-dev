@@ -68,7 +68,7 @@ RewriteEngine On
 
 # Dynamic SEO and Sitemap
 RewriteRule ^sitemap\.xml$ api/seo-sitemap.php [L]
-RewriteRule ^etkinlikler/(.+)$ api/seo-event.php?slug=$1 [L,QSA]
+RewriteRule ^etkinlikler/(.+)$ api/seo-event.php?slug=$1 [B,L,QSA]
 
 # Allow API access
 RewriteCond %{REQUEST_URI} ^/api/ [NC]
