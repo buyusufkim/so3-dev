@@ -19,7 +19,8 @@ function cleanHtml(html) {
     .replace(/<meta\s+name="twitter:[^"]+"[^>]*>/gi, '')
     .replace(/<link\s+rel="canonical"[^>]*>/gi, '')
     .replace(/<meta\s+name="robots"[^>]*>/gi, '')
-    .replace(/<!--.*?Open Graph Basics.*?-->/gi, '');
+    .replace(/<!--.*?Open Graph Basics.*?-->/gi, '')
+    .replace(/<script\s+id="so3-home-jsonld"[\s\S]*?<\/script>/gi, '');
   return cleaned;
 }
 
@@ -72,6 +73,33 @@ function generateMeta(opts) {
   } else {
     meta += `
     <meta name="robots" content="index, follow" />`;
+  }
+
+  if (opts.url === "https://so3pt.com.tr/" && !opts.noindex) {
+    const jsonLdData = {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://so3pt.com.tr/#organization",
+          "name": "SO3 Personal Training",
+          "url": "https://so3pt.com.tr/",
+          "logo": "https://so3pt.com.tr/brand/so3-logo.png"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://so3pt.com.tr/#website",
+          "name": "SO3 Personal Training",
+          "url": "https://so3pt.com.tr/",
+          "inLanguage": "tr-TR",
+          "publisher": {
+            "@id": "https://so3pt.com.tr/#organization"
+          }
+        }
+      ]
+    };
+    const jsonStr = JSON.stringify(jsonLdData).replace(/</g, '\\u003c');
+    meta += `\n    <script id="so3-home-jsonld" type="application/ld+json">${jsonStr}</script>`;
   }
   return meta;
 }

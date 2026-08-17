@@ -2,42 +2,33 @@
 
 Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi için izlenecek fazlar aşağıda listelenmiştir.
 
-## Faz 0: Proje Temeli (Şu anki Aşama)
-- Proje iskeletinin, klasör yapısının ve standartların oluşturulması.
-- Tasarım sisteminin (renkler, tipografi, grid) belirlenmesi ve Tailwind ile yapılandırılması.
-- Modüllerin (Admin, Üye, Antrenör, Resepsiyon vb.) taslak (placeholder) sayfalarının hazırlanması.
-- Route mimarisinin oluşturulması.
+## Mevcut Mimari (Actual Architecture)
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- PHP API
+- MySQL/MariaDB
+- InnoDB and utf8mb4
+- Role-based admin authentication
+- Database-backed homepage CMS, events, trainers, branches and site settings
+- Filesystem/public upload architecture currently implemented
 
-## Faz 1: Premium Web Sitesi
-- Herkese açık sayfaların (Ana Sayfa, Branşlar, Eğitmenler, Topluluk, vb.) final tasarımlarıyla kodlanması.
-- SEO, erişilebilirlik ve performans optimizasyonları.
-- Animasyon ve geçişlerin premium hisse uygun entegrasyonu.
-- **Bekleyen Özellik (Pending):** Instagram automatic feed integration (Instagram gönderilerinin ana sayfaya otomatik aktarımı).
+## Tamamlanan Özellikler (Completed Repository Capabilities)
+- Proje iskeleti, tasarım sistemi, renkler ve tipografi (Tailwind ile).
+- Herkese açık sayfalar (Ana Sayfa, Branşlar, Eğitmenler, Topluluk, İletişim, vb.) final tasarımlarıyla.
+- CMS destekli Ana Sayfa, Etkinlikler, Eğitmenler, Branşlar ve Site Ayarları.
+- Dosya yükleme (Filesystem/public upload architecture).
+- **Instagram Entegrasyonu:** CMS-selected manual Instagram Reel/Post embeds.
+- SEO ve performans iyileştirmeleri, static HTML generation.
 
-## Faz 2: Supabase Veri/Auth Güvenlik Temeli
-- Supabase (PostgreSQL, Auth, Storage) bağlantısının kurulması.
-- Role-based (Rol tabanlı) yetkilendirme mimarisi (Admin, Üye, Antrenör, Resepsiyon ayrımı).
-- Row Level Security (RLS) kurallarının tanımlanması ve güvenli oturum yönetimi.
+## Dağıtım ve Doğrulama Bekleyenler (Runtime/Deployment Verification Still Pending)
+- Mevcut mimarinin (PHP + MySQL + React SPA) üretim ortamında tam olarak test edilmesi ve canlıya alınması.
+- Sunucu yapılandırması ve kalıcı dosya yükleme yollarının üretim ortamında doğrulanması.
 
-## Faz 3: CMS ve Yönetim Paneli
-- İçerik yönetim altyapısının kurulması.
-- Yöneticilerin, etkinlik ve takım üyelerini yönetebileceği içerik ekranları.
-
-## Faz 4: Üye ve Antrenör Sistemi
-- Üye dashboard'unun geliştirilmesi (Program takibi, ölçümler).
-- Antrenör dashboard'unun geliştirilmesi (Üye yönetimi, program atama).
-
-## Faz 5: Etkinlik, Randevu ve Bildirim
-- Randevu ve seans takviminin devreye alınması.
-- Topluluk etkinliklerinin sistemden planlanması.
-- Üyelerin etkinliklere katılım durumu ve kontenjan yönetimi.
-- E-posta ve sistem içi bildirim mekanizmaları.
-
-## Faz 6: İşletme ve Resepsiyon Operasyonu
-- Resepsiyon ekranlarının aktif edilmesi (Hızlı check-in, anlık salon durumu).
-- Finansal raporlamalar, üyelik yenileme takibi ve işletme metrikleri.
-
-## Faz 7: PWA, Optimizasyon, Test ve Canlıya Alma
-- Progressive Web App (PWA) entegrasyonu ile mobil cihazlarda uygulama deneyimi sunulması.
-- Push notification (Anlık bildirim) testleri.
-- Performans optimizasyonu, son kullanıcı testleri ve tam sürümün yayına alınması.
+## Gelecek Modüller (Future Modules)
+- **Üye Sistemi:** Üye dashboard'u, program takibi, ölçümler.
+- **Antrenör Sistemi:** Antrenör dashboard'u, üye yönetimi, program atama.
+- **Resepsiyon Operasyonu:** Hızlı check-in, anlık salon durumu, üyelik yenileme.
+- **Randevu Sistemi:** Randevu ve seans takviminin devreye alınması.
+- **Bildirim Mekanizmaları:** E-posta, sistem içi bildirim ve push bildirimleri.

@@ -78,6 +78,52 @@ export function PageSEO({
 
     updateOrCreateMeta("name", "robots", robots);
 
+    // JSON-LD Logic
+    const scriptId = "so3-home-jsonld";
+    let scriptElement = document.getElementById(scriptId);
+
+    if (canonical === "https://so3pt.com.tr/" && robots.includes("index")) {
+      if (!scriptElement) {
+        scriptElement = document.createElement("script");
+        scriptElement.id = scriptId;
+        scriptElement.setAttribute("type", "application/ld+json");
+        document.head.appendChild(scriptElement);
+      }
+      const jsonLdData = {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://so3pt.com.tr/#organization",
+            "name": "SO3 Personal Training",
+            "url": "https://so3pt.com.tr/",
+            "logo": "https://so3pt.com.tr/brand/so3-logo.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://so3pt.com.tr/#website",
+            "name": "SO3 Personal Training",
+            "url": "https://so3pt.com.tr/",
+            "inLanguage": "tr-TR",
+            "publisher": {
+              "@id": "https://so3pt.com.tr/#organization"
+            }
+          }
+        ]
+      };
+      scriptElement.textContent = JSON.stringify(jsonLdData).replace(/</g, '\\u003c');
+    } else {
+      if (scriptElement) {
+        scriptElement.remove();
+      }
+    }
+
+    return () => {
+      const el = document.getElementById(scriptId);
+      if (el) {
+        el.remove();
+      }
+    };
   }, [title, description, canonical, ogType, ogImage, robots]);
 
   return null;
