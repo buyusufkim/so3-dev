@@ -79,7 +79,7 @@ RewriteCond %{REQUEST_URI} ^/uploads/ [NC]
 RewriteRule ^ - [L]
 
 # Deny access to sensitive files
-RewriteRule ^(\.git|\.env|config\.local\.php|composer\.json|package\.json|.*\.sql) - [F,L,NC]
+RewriteRule ^(\.git|\.env|config\.local\.php|composer\.json|package\.json|.*\.sql|.*\.mjs|scripts/.*) - [F,L,NC]
 
 # SPA Fallback for all other routes
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -87,7 +87,38 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]
 ```
 
-## 6. Admin Creation & Cleanup
+## 6. Runtime SEO Verification
+
+After deploying to a staging environment, run the non-destructive verification harness to confirm Apache, PHP, and database routing behaves correctly for SEO. 
+
+### Required Environment Variables
+
+Set the following environment variables before running the verifier:
+- `SO3_VERIFY_BASE_URL`: The full URL to your staging deployment (e.g., `https://staging.so3pt.com.tr`). Must use HTTPS and contain no paths or trailing slashes.
+- `SO3_VERIFY_PUBLISHED_SLUG`: An existing event slug that is published.
+- `SO3_VERIFY_NONPUBLIC_SLUG`: An existing event slug that is drafted or hidden.
+- `SO3_VERIFY_MISSING_SLUG`: A random slug that does not exist.
+
+### Execution
+
+```bash
+npm run verify:runtime-seo
+```
+
+### Staging-First Workflow & 503 Verification
+
+1. **Deploy to Staging**: Push your build to an isolated staging URL with an identical `.htaccess`, PHP version, and database schema to production.
+2. **Run Verifier**: Execute `npm run verify:runtime-seo`. Expect an exit code of `0` indicating all HTTP statuses, cache controls, and method gates are functioning safely.
+3. **Manual 503 Check [MANUAL STAGING REQUIRED]**: 
+   - Temporarily break the staging database connection (e.g., rename `config.local.php` or `index.html`).
+   - Visit the staging event URL in your browser or run a manual `curl -I`.
+   - Confirm it securely degrades to a `503 Service Unavailable` with `Cache-Control: no-store` and a standalone HTML error page.
+   - Restore the staging environment.
+4. **Deploy to Production**: Only proceed to production once the staging verifier confirms the infrastructure routing matrix is sound.
+
+The Apache/PHP/MySQL runtime remains officially unverified until this command is executed against a live staging environment.
+
+## 7. Admin Creation & Cleanup
 If SSH access is available, run:
 ```bash
 php bin/create-admin.php
