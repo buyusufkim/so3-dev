@@ -12,15 +12,15 @@ class AdminController
         try {
             $db = Database::getInstance()->getConnection();
             $stmt = $db->query("SELECT 1");
-            if ($stmt && $stmt->fetchColumn() === 1) {
+            if ($stmt && (int)$stmt->fetchColumn() === 1) {
                 $dbStatus = 'connected';
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $dbStatus = 'unavailable';
         }
 
         $mediaCount = null;
-        $eventMetrics = null;
+        $eventCount = null;
 
         try {
             if ($dbStatus === 'connected') {
@@ -29,31 +29,25 @@ class AdminController
                     $mediaCount = (int)$mediaStmt->fetchColumn();
                 }
 
-                $eventStmt = $db->query("
-                    SELECT 
-                        SUM(CASE WHEN status = 'published' AND deleted_at IS NULL THEN 1 ELSE 0 END) as published_events,
-                        SUM(CASE WHEN status = 'draft' AND deleted_at IS NULL THEN 1 ELSE 0 END) as draft_events
-                    FROM events
-                ");
+                $eventStmt = $db->query(
+                    "SELECT COUNT(*)
+                     FROM events
+                     WHERE deleted_at IS NULL AND status IN ('published', 'draft')"
+                );
                 if ($eventStmt) {
-                    $row = $eventStmt->fetch(\PDO::FETCH_ASSOC);
-                    $eventMetrics = [
-                        'published_events' => (int)($row['published_events'] ?? 0),
-                        'draft_events' => (int)($row['draft_events'] ?? 0),
-                        'total_active' => ((int)($row['published_events'] ?? 0)) + ((int)($row['draft_events'] ?? 0))
-                    ];
+                    $eventCount = (int)$eventStmt->fetchColumn();
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $mediaCount = null;
-            $eventMetrics = null;
+            $eventCount = null;
         }
 
         Response::json([
             'system_status' => 'ok',
             'database_status' => $dbStatus,
             'metrics' => [
-                'events' => $eventMetrics,
+                'events' => $eventCount,
                 'media' => $mediaCount,
                 'visitors' => null,
                 'trainers' => null
