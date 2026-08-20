@@ -122,12 +122,21 @@ $matched = false;
 
 if (isset($routes[$method][$requestUri])) {
     $handler = $routes[$method][$requestUri];
-    if (is_callable($handler)) {
-        $handler();
-    } elseif (is_array($handler)) {
-        $controller = new $handler[0]();
+    if (is_array($handler) && count($handler) === 2 && is_string($handler[0]) && is_string($handler[1])) {
+        $controllerClass = $handler[0];
         $action = $handler[1];
+        if (!class_exists($controllerClass)) {
+            Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
+        }
+        $controller = new $controllerClass();
+        if (!is_callable([$controller, $action])) {
+            Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
+        }
         $controller->$action();
+    } elseif (is_callable($handler)) {
+        $handler();
+    } else {
+        Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
     }
     $matched = true;
 } else {
