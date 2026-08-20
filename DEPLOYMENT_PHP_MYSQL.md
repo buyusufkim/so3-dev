@@ -39,6 +39,8 @@ If you are deploying an update to an existing live database:
 1. Build the frontend: `npm run build`.
 2. Upload the `dist/` directory contents and the `api/` directory to the server.
 3. Protect sensitive files (`.git`, `node_modules`, `config.local.php`) from web access via the root `.htaccess`.
+4. Production uploads directory is `document-root/uploads`. Preserve `dist/uploads/.htaccess` during upload.
+5. The `uploads` directory must be writable by the PHP runtime using the safest hosting-supported permissions, normally `0755` or `0775`. Do not use `0777`.
 
 ## 5. Web Server Configuration & Dynamic SEO
 The application uses a dynamic SEO shell and dynamic sitemap driven by PHP, followed by an SPA fallback. **mod_rewrite (or Nginx equivalent) and PHP are required** for this functionality.

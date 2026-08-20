@@ -202,7 +202,7 @@ class MediaController
         $year = date('Y');
         $month = date('m');
         
-        $uploadDir = __DIR__ . '/../../public/uploads';
+        $uploadDir = dirname(__DIR__, 2) . '/uploads';
         
         if ($isImage) {
             // Check dimensions
@@ -283,18 +283,32 @@ class MediaController
             $relDir = "images/$year/$month";
             $thumbDir = "thumbnails/$year/$month";
             
-            if (!is_dir("$uploadDir/$relDir")) mkdir("$uploadDir/$relDir", 0755, true);
-            if (!is_dir("$uploadDir/$thumbDir")) mkdir("$uploadDir/$thumbDir", 0755, true);
+            if (!is_dir("$uploadDir/$relDir")) {
+                if (!mkdir("$uploadDir/$relDir", 0755, true)) {
+                    Response::error('Storage failed', 'STORAGE_FAILED', 500);
+                }
+            }
+            if (!is_dir("$uploadDir/$thumbDir")) {
+                if (!mkdir("$uploadDir/$thumbDir", 0755, true)) {
+                    Response::error('Storage failed', 'STORAGE_FAILED', 500);
+                }
+            }
             
             $mainPath = "$uploadDir/$relDir/$randomName";
             $thumbPath = "$uploadDir/$thumbDir/$randomName";
             
-            imagewebp($mainImg, $mainPath, 85);
-            imagewebp($thumbImg, $thumbPath, 80);
+            $mainSuccess = imagewebp($mainImg, $mainPath, 85);
+            $thumbSuccess = imagewebp($thumbImg, $thumbPath, 80);
             
             imagedestroy($image);
             imagedestroy($mainImg);
             imagedestroy($thumbImg);
+            
+            if (!$mainSuccess || !$thumbSuccess) {
+                if (file_exists($mainPath)) @unlink($mainPath);
+                if (file_exists($thumbPath)) @unlink($thumbPath);
+                Response::error('Storage failed', 'STORAGE_FAILED', 500);
+            }
             
             $storagePath = "uploads/$relDir/$randomName";
             $thumbnailPath = "uploads/$thumbDir/$randomName";
@@ -306,7 +320,11 @@ class MediaController
             $randomName = bin2hex(random_bytes(16)) . '.' . $extension;
             
             $relDir = "videos/$year/$month";
-            if (!is_dir("$uploadDir/$relDir")) mkdir("$uploadDir/$relDir", 0755, true);
+            if (!is_dir("$uploadDir/$relDir")) {
+                if (!mkdir("$uploadDir/$relDir", 0755, true)) {
+                    Response::error('Storage failed', 'STORAGE_FAILED', 500);
+                }
+            }
             
             $mainPath = "$uploadDir/$relDir/$randomName";
             
@@ -318,7 +336,12 @@ class MediaController
         }
         
         $uuid = bin2hex(random_bytes(16));
-        $finalSize = filesize($uploadDir . '/../' . $storagePath);
+        $finalSize = filesize($mainPath);
+        if ($finalSize === false) {
+            if (file_exists($mainPath)) @unlink($mainPath);
+            if (isset($thumbPath) && file_exists($thumbPath)) @unlink($thumbPath);
+            Response::error('Storage failed', 'STORAGE_FAILED', 500);
+        }
         
         try {
             $this->db->beginTransaction();
@@ -341,8 +364,8 @@ class MediaController
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
-            if (file_exists($uploadDir . '/../' . $storagePath)) @unlink($uploadDir . '/../' . $storagePath);
-            if ($thumbnailPath && file_exists($uploadDir . '/../' . $thumbnailPath)) @unlink($uploadDir . '/../' . $thumbnailPath);
+            if (file_exists($mainPath)) @unlink($mainPath);
+            if (isset($thumbPath) && file_exists($thumbPath)) @unlink($thumbPath);
             
             Response::error('Database error', 'DB_ERROR', 500);
         }
