@@ -309,6 +309,156 @@ class AdminHomepageController {
         return $merged;
     }
 
+    public function index() {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+
+        $allowedSections = self::getAllowedSections();
+        $db = Database::getInstance();
+        $sections = $db->fetchAll(
+            "SELECT section_id, is_active, sort_order, updated_at
+             FROM homepage_sections
+             ORDER BY sort_order ASC, id ASC"
+        );
+
+        $sections = array_values(array_filter($sections, static function ($section) use ($allowedSections) {
+            return is_array($section)
+                && isset($section['section_id'])
+                && is_string($section['section_id'])
+                && in_array($section['section_id'], $allowedSections, true);
+        }));
+
+        foreach ($sections as &$section) {
+            $section['is_active'] = (int)$section['is_active'];
+            $section['sort_order'] = (int)$section['sort_order'];
+        }
+        unset($section);
+
+        Response::json($sections);
+    }
+
+    public function update(string $section_id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        $adminId = $this->getAdminId();
+
+        if (!in_array($section_id, self::getAllowedSections(), true)) {
+            Response::error('Geçersiz bölüm.', 'INVALID_SECTION', 422);
+        }
+
+        $input = $this->getJsonInput();
+        if (count($input) !== 1 || !array_key_exists('is_active', $input) || !is_bool($input['is_active'])) {
+            Response::error('Sadece boolean is_active alanı gönderilebilir.', 'VALIDATION_ERROR', 422);
+        }
+
+        $db = Database::getInstance();
+        $current = $db->fetch(
+            "SELECT id, is_active FROM homepage_sections WHERE section_id = ?",
+            [$section_id]
+        );
+
+        if (!$current) {
+            Response::error('Bölüm bulunamadı.', 'NOT_FOUND', 404);
+        }
+
+        $isActive = $input['is_active'] ? 1 : 0;
+        $oldIsActive = (bool)$current['is_active'];
+
+        $db->query(
+            "UPDATE homepage_sections
+             SET is_active = ?, updated_by = ?, updated_at = NOW()
+             WHERE id = ?",
+            [$isActive, $adminId, $current['id']]
+        );
+
+        AuditLogger::log(
+            'homepage.section.toggle',
+            $adminId,
+            'homepage_section',
+            (int)$current['id'],
+            [
+                'section_id' => $section_id,
+                'old_is_active' => $oldIsActive,
+                'new_is_active' => (bool)$isActive
+            ]
+        );
+
+        Response::json(['success' => true]);
+    }
+
+    public function reorder() {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        $adminId = $this->getAdminId();
+
+        $input = $this->getJsonInput();
+        if (count($input) !== 1 || !array_key_exists('sections', $input) || !is_array($input['sections'])) {
+            Response::error('Sadece sections listesi gönderilebilir.', 'VALIDATION_ERROR', 422);
+        }
+
+        $sections = $input['sections'];
+        $allowedSections = self::getAllowedSections();
+
+        if (count($sections) !== count($allowedSections)) {
+            Response::error('Eksik veya fazla bölüm gönderildi.', 'VALIDATION_ERROR', 422);
+        }
+
+        foreach ($sections as $sectionId) {
+            if (!is_string($sectionId)) {
+                Response::error('Geçersiz bölüm tipi, metin olmalıdır.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
+        if (count(array_unique($sections)) !== count($sections)
+            || !empty(array_diff($sections, $allowedSections))
+            || !empty(array_diff($allowedSections, $sections))) {
+            Response::error('Bölüm listesi hatalı.', 'VALIDATION_ERROR', 422);
+        }
+
+        $db = Database::getInstance();
+        $oldRecords = $db->fetchAll(
+            "SELECT section_id FROM homepage_sections ORDER BY sort_order ASC, id ASC"
+        );
+        $oldOrder = array_values(array_filter(
+            array_column($oldRecords, 'section_id'),
+            static function ($sectionId) use ($allowedSections) {
+                return is_string($sectionId) && in_array($sectionId, $allowedSections, true);
+            }
+        ));
+
+        try {
+            $db->beginTransaction();
+
+            $order = 10;
+            foreach ($sections as $sectionId) {
+                $db->query(
+                    "UPDATE homepage_sections
+                     SET sort_order = ?, updated_by = ?, updated_at = NOW()
+                     WHERE section_id = ?",
+                    [$order, $adminId, $sectionId]
+                );
+                $order += 10;
+            }
+
+            $db->commit();
+
+            AuditLogger::log(
+                'homepage.sections.reorder',
+                $adminId,
+                'homepage',
+                null,
+                [
+                    'old_order' => $oldOrder,
+                    'new_order' => $sections
+                ]
+            );
+
+            Response::json(['success' => true]);
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            Response::error('Sıralama güncellenirken bir hata oluştu.', 'DATABASE_ERROR', 500);
+        }
+    }
+
     public function getContent(string $section_id) {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 
