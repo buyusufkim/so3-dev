@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { apiClient } from "../api/client";
+import { MediaPicker } from "../components/MediaPicker";
 import { Upload, X, Trash2, Edit2, Loader2, Image as ImageIcon, Video, CheckCircle2, AlertCircle } from "lucide-react";
 
 const VIDEO_POSTER_MAX_EDGE = 1200;
@@ -104,6 +105,8 @@ export function MediaPage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
+  const [posterPickerOpen, setPosterPickerOpen] = useState(false);
+  const [posterUpdating, setPosterUpdating] = useState(false);
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -199,6 +202,25 @@ export function MediaPage() {
       fetchMedia();
     } catch (err: any) {
       alert(err.message || "Güncelleme başarısız.");
+    }
+  };
+
+  const handlePosterSelect = async (poster: { id: number }) => {
+    if (!selectedAsset || selectedAsset.media_type !== 'video') return;
+
+    try {
+      setPosterUpdating(true);
+      await apiClient.patch(`/api/admin/media/${selectedAsset.id}/poster`, {
+        poster_media_id: poster.id
+      });
+      const updatedAsset = await apiClient.get(`/api/admin/media/${selectedAsset.id}`);
+      setSelectedAsset(updatedAsset);
+      setPosterPickerOpen(false);
+      await fetchMedia();
+    } catch (err: any) {
+      alert(err.message || 'Video kapak görseli güncellenemedi.');
+    } finally {
+      setPosterUpdating(false);
     }
   };
 
@@ -408,6 +430,27 @@ export function MediaPage() {
                     />
                   </div>
                 )}
+
+                {selectedAsset.media_type === 'video' && (
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="text-xs font-medium text-white/60 mb-2">Video Kapak Görseli</div>
+                    {selectedAsset.thumbnail_url && (
+                      <img
+                        src={selectedAsset.thumbnail_url}
+                        alt="Video kapak önizlemesi"
+                        className="w-full aspect-video object-cover rounded border border-white/10 mb-3"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPosterPickerOpen(true)}
+                      disabled={posterUpdating}
+                      className="w-full px-3 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white rounded text-sm transition"
+                    >
+                      {posterUpdating ? 'Güncelleniyor...' : 'Kapak Görselini Değiştir'}
+                    </button>
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1">Açıklama (Caption)</label>
@@ -475,6 +518,13 @@ export function MediaPage() {
           </div>
         </div>
       )}
+
+      <MediaPicker
+        open={posterPickerOpen}
+        onClose={() => setPosterPickerOpen(false)}
+        onSelect={handlePosterSelect}
+        mode="image"
+      />
 
     </div>
   );

@@ -122,21 +122,12 @@ $matched = false;
 
 if (isset($routes[$method][$requestUri])) {
     $handler = $routes[$method][$requestUri];
-    if (is_array($handler) && count($handler) === 2 && is_string($handler[0]) && is_string($handler[1])) {
-        $controllerClass = $handler[0];
+    if (is_array($handler)) {
+        $controller = new $handler[0]();
         $action = $handler[1];
-        if (!class_exists($controllerClass)) {
-            Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
-        }
-        $controller = new $controllerClass();
-        if (!is_callable([$controller, $action])) {
-            Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
-        }
         $controller->$action();
     } elseif (is_callable($handler)) {
         $handler();
-    } else {
-        Response::error("Bir hata oluştu.", "INTERNAL_ERROR", 500);
     }
     $matched = true;
 } else {
@@ -200,6 +191,14 @@ if (isset($routes[$method][$requestUri])) {
         AuthMiddleware::handle();
         if ($method === 'POST') {
             (new \Controllers\MediaController())->restore((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/media/(\d+)/poster$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\MediaController())->updateVideoPoster((int)$matches[1]);
             $matched = true;
         }
     }
