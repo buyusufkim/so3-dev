@@ -259,7 +259,7 @@ export function MediaPage() {
               onClick={() => handleEditClick(asset)}
             >
               <div className="aspect-square bg-[#0a0a0a] relative overflow-hidden flex items-center justify-center">
-                {asset.media_type === 'image' ? (
+                {asset.media_type === 'image' || asset.thumbnail_url ? (
                   <img 
                     src={asset.thumbnail_url || asset.url} 
                     alt={asset.alt_text || asset.original_name}
@@ -367,6 +367,7 @@ export function MediaPage() {
               ) : (
                 <video 
                   src={selectedAsset.url} 
+                  poster={selectedAsset.thumbnail_url || undefined}
                   controls 
                   className="max-w-full max-h-[60vh] rounded"
                 />
