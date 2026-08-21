@@ -131,7 +131,7 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
                   className={`group relative aspect-square bg-[#121212] border rounded overflow-hidden transition-colors ${selectedIds.includes(asset.id) ? "border-green-500 cursor-default" : "border-white/10 cursor-pointer hover:border-white/40"}`}
                   onClick={() => !selectedIds.includes(asset.id) && onSelect(asset)}
                 >
-                  {asset.media_type === 'image' ? (
+                  {asset.media_type === 'image' || asset.thumbnail_url ? (
                     <img src={asset.thumbnail_url || asset.url} alt={asset.alt_text || 'Asset'} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-black/50 flex flex-col items-center justify-center">

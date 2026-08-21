@@ -2,6 +2,80 @@ import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { apiClient } from "../api/client";
 import { Upload, X, Trash2, Edit2, Loader2, Image as ImageIcon, Video, CheckCircle2, AlertCircle } from "lucide-react";
 
+const VIDEO_POSTER_MAX_EDGE = 1200;
+const VIDEO_POSTER_TIMEOUT_MS = 15000;
+
+function createVideoPoster(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    let timeoutId: number | undefined;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Video kapağı otomatik oluşturulamadı. Lütfen MP4 veya WEBM dosyasını kontrol edin.'));
+    };
+
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = objectUrl;
+    video.onerror = fail;
+
+    video.onloadedmetadata = () => {
+      if (!video.videoWidth || !video.videoHeight || !Number.isFinite(video.duration)) {
+        fail();
+        return;
+      }
+
+      const captureTime = Math.min(Math.max(video.duration * 0.1, 0.1), 3);
+      video.currentTime = Math.min(captureTime, Math.max(video.duration - 0.05, 0));
+    };
+
+    video.onseeked = () => {
+      if (settled) return;
+
+      const scale = Math.min(1, VIDEO_POSTER_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight));
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        fail();
+        return;
+      }
+
+      context.drawImage(video, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob || settled) {
+          fail();
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        const baseName = file.name.replace(/\.[^.]+$/, '') || 'video';
+        resolve(new File([blob], `${baseName}-poster.webp`, { type: 'image/webp' }));
+      }, 'image/webp', 0.82);
+    };
+
+    timeoutId = window.setTimeout(fail, VIDEO_POSTER_TIMEOUT_MS);
+  });
+}
+
 export interface MediaAsset {
   id: number;
   uuid: string;
@@ -79,6 +153,11 @@ export function MediaPage() {
         const file = files[i];
         const formData = new FormData();
         formData.append('file', file);
+
+        if (file.type === 'video/mp4' || file.type === 'video/webm') {
+          const poster = await createVideoPoster(file);
+          formData.append('poster', poster);
+        }
 
         await apiClient.post('/api/admin/media', formData);
       }
@@ -180,7 +259,7 @@ export function MediaPage() {
               onClick={() => handleEditClick(asset)}
             >
               <div className="aspect-square bg-[#0a0a0a] relative overflow-hidden flex items-center justify-center">
-                {asset.media_type === 'image' ? (
+                {asset.media_type === 'image' || asset.thumbnail_url ? (
                   <img 
                     src={asset.thumbnail_url || asset.url} 
                     alt={asset.alt_text || asset.original_name}
@@ -288,6 +367,7 @@ export function MediaPage() {
               ) : (
                 <video 
                   src={selectedAsset.url} 
+                  poster={selectedAsset.thumbnail_url || undefined}
                   controls 
                   className="max-w-full max-h-[60vh] rounded"
                 />

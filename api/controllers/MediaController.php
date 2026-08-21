@@ -318,21 +318,104 @@ class MediaController
             $extMap = ['video/mp4' => 'mp4', 'video/webm' => 'webm'];
             $extension = $extMap[$mime];
             $randomName = bin2hex(random_bytes(16)) . '.' . $extension;
+
+            if (!isset($_FILES['poster']) || $_FILES['poster']['error'] !== UPLOAD_ERR_OK) {
+                Response::error('Video kapağı oluşturulamadı.', 'VIDEO_POSTER_REQUIRED', 400);
+            }
+
+            $posterFile = $_FILES['poster'];
+            if ($posterFile['size'] > 5 * 1024 * 1024) {
+                Response::error('Video kapağı maksimum 5MB olabilir.', 'VIDEO_POSTER_TOO_LARGE', 400);
+            }
+
+            $posterFinfo = finfo_open(FILEINFO_MIME_TYPE);
+            $posterMime = finfo_file($posterFinfo, $posterFile['tmp_name']);
+            finfo_close($posterFinfo);
+
+            $allowedPosterTypes = ['image/jpeg', 'image/png', 'image/webp'];
+            if (!in_array($posterMime, $allowedPosterTypes, true)) {
+                Response::error('Geçersiz video kapağı.', 'INVALID_VIDEO_POSTER', 400);
+            }
+
+            $posterDimensions = getimagesize($posterFile['tmp_name']);
+            if (!$posterDimensions) {
+                Response::error('Geçersiz video kapağı.', 'INVALID_VIDEO_POSTER', 400);
+            }
+
+            [$posterWidth, $posterHeight] = $posterDimensions;
+            if ($posterWidth > 12000 || $posterHeight > 12000 || ($posterWidth * $posterHeight) > 60000000) {
+                Response::error('Video kapağı boyutları çok büyük.', 'VIDEO_POSTER_TOO_LARGE', 400);
+            }
+
+            if (!extension_loaded('gd')) {
+                Response::error('Sunucuda GD kütüphanesi eksik, işlem yapılamıyor.', 'SERVER_ERROR', 500);
+            }
+
+            $posterImage = null;
+            if ($posterMime === 'image/jpeg') $posterImage = imagecreatefromjpeg($posterFile['tmp_name']);
+            elseif ($posterMime === 'image/png') $posterImage = imagecreatefrompng($posterFile['tmp_name']);
+            elseif ($posterMime === 'image/webp') $posterImage = imagecreatefromwebp($posterFile['tmp_name']);
+
+            if (!$posterImage) {
+                Response::error('Video kapağı çözümlenemedi.', 'INVALID_VIDEO_POSTER', 400);
+            }
+
+            $posterMaxEdge = 1200;
+            $posterScale = min(1, $posterMaxEdge / max($posterWidth, $posterHeight));
+            $newPosterWidth = max(1, (int) round($posterWidth * $posterScale));
+            $newPosterHeight = max(1, (int) round($posterHeight * $posterScale));
+            $posterOutput = imagecreatetruecolor($newPosterWidth, $newPosterHeight);
+            imagecopyresampled(
+                $posterOutput,
+                $posterImage,
+                0,
+                0,
+                0,
+                0,
+                $newPosterWidth,
+                $newPosterHeight,
+                $posterWidth,
+                $posterHeight
+            );
+            imagedestroy($posterImage);
             
             $relDir = "videos/$year/$month";
+            $thumbDir = "thumbnails/$year/$month";
             if (!is_dir("$uploadDir/$relDir")) {
                 if (!mkdir("$uploadDir/$relDir", 0755, true)) {
+                    imagedestroy($posterOutput);
+                    Response::error('Storage failed', 'STORAGE_FAILED', 500);
+                }
+            }
+            if (!is_dir("$uploadDir/$thumbDir")) {
+                if (!mkdir("$uploadDir/$thumbDir", 0755, true)) {
+                    imagedestroy($posterOutput);
                     Response::error('Storage failed', 'STORAGE_FAILED', 500);
                 }
             }
             
             $mainPath = "$uploadDir/$relDir/$randomName";
+            $posterName = pathinfo($randomName, PATHINFO_FILENAME) . '.webp';
+            $thumbPath = "$uploadDir/$thumbDir/$posterName";
             
             if (!move_uploaded_file($file['tmp_name'], $mainPath)) {
+                imagedestroy($posterOutput);
+                Response::error('Storage failed', 'STORAGE_FAILED', 500);
+            }
+
+            $posterSuccess = imagewebp($posterOutput, $thumbPath, 82);
+            imagedestroy($posterOutput);
+
+            if (!$posterSuccess) {
+                if (file_exists($mainPath)) @unlink($mainPath);
+                if (file_exists($thumbPath)) @unlink($thumbPath);
                 Response::error('Storage failed', 'STORAGE_FAILED', 500);
             }
             
             $storagePath = "uploads/$relDir/$randomName";
+            $thumbnailPath = "uploads/$thumbDir/$posterName";
+            $width = $newPosterWidth;
+            $height = $newPosterHeight;
         }
         
         $uuid = bin2hex(random_bytes(16));
