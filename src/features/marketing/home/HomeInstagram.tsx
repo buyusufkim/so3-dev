@@ -66,13 +66,13 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
           </div>
         </div>
 
-                {validReels.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {validReels.length > 0 ? (
+          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0 md:gap-6">
             {validReels.map((reel) => (
-              <div key={reel.url} className="w-full flex justify-center bg-[#F4F1EB] rounded-xl overflow-hidden border border-[#E5E3DB]">
+              <div key={reel.url} className="flex w-[82vw] max-w-[360px] shrink-0 snap-start justify-center overflow-hidden rounded-xl border border-[#E5E3DB] bg-[#F4F1EB]">
                 <iframe
                   src={`https://www.instagram.com/${reel.type}/${reel.shortcode}/embed`}
-                  className="w-full max-w-[400px] min-h-[550px]"
+                  className="min-h-[550px] w-full"
                   frameBorder="0"
                   scrolling="no"
                   allowTransparency={true}
