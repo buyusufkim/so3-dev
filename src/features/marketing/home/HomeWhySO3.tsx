@@ -6,11 +6,11 @@ interface HomeWhySO3Props {
 
 export function HomeWhySO3({ content }: HomeWhySO3Props) {
   return (
-    <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A]">
+    <section className="pt-16 pb-20 md:pt-20 md:pb-24 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A]">
       <div className="container mx-auto max-w-7xl">
         
         {/* Header section */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 md:mb-24 gap-10">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-12 md:mb-16 gap-8 lg:gap-10">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
