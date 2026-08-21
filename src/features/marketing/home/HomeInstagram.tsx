@@ -29,9 +29,9 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
 
   return (
 
-    <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-white text-[#0A0A0A]">
+    <section className="py-20 md:py-24 px-4 sm:px-6 lg:px-12 bg-white text-[#0A0A0A] overflow-hidden">
       <div className="container mx-auto max-w-7xl">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 md:mb-12 gap-6 md:gap-8">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3 mb-6 md:mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
@@ -66,13 +66,13 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
           </div>
         </div>
 
-                {validReels.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {validReels.length > 0 ? (
+          <div className="-mx-4 flex flex-nowrap snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0 md:gap-5 [scrollbar-width:thin] [scrollbar-color:#851C35_#E5E3DB]">
             {validReels.map((reel) => (
-              <div key={reel.url} className="w-full flex justify-center bg-[#F4F1EB] rounded-xl overflow-hidden border border-[#E5E3DB]">
+              <div key={reel.url} className="flex w-[82vw] max-w-[350px] shrink-0 snap-start justify-center overflow-hidden rounded-lg border border-[#D8D5CC] bg-[#F4F1EB] shadow-sm">
                 <iframe
                   src={`https://www.instagram.com/${reel.type}/${reel.shortcode}/embed`}
-                  className="w-full max-w-[400px] min-h-[550px]"
+                  className="min-h-[550px] w-full"
                   frameBorder="0"
                   scrolling="no"
                   allowTransparency={true}

@@ -14,11 +14,11 @@ export function HomeContact({ content }: HomeContactProps) {
 
   
   return (
-    <section id="iletisim" className="py-24 md:py-32 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 border-t border-black/5">
+    <section id="iletisim" className="py-20 md:py-24 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 border-t border-black/5">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
         
         {/* Contact Info & Map Row */}
-        <div className="mb-24">
+        <div className="mb-16 md:mb-20">
           <div className="flex items-center gap-3 mb-8 md:mb-10">
             <span className="w-1.5 h-1.5 rounded-full bg-[#851C35]"></span>
             <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-[#0A0A0A]/50">
@@ -26,7 +26,7 @@ export function HomeContact({ content }: HomeContactProps) {
             </span>
           </div>
           
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] mb-12 md:mb-16">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight leading-[1.1] mb-10 md:mb-12">
             {content.contact_headline_primary} <span className="font-bold">{content.contact_headline_emphasis}</span>
           </h2>
           
@@ -108,7 +108,7 @@ export function HomeContact({ content }: HomeContactProps) {
           </div>
         </div>
 
-        <div className="w-full h-px bg-[#0A0A0A]/10 mb-20 md:mb-24"></div>
+        <div className="w-full h-px bg-[#0A0A0A]/10 mb-14 md:mb-16"></div>
 
         {/* Consultation Form Row */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24 items-start">
