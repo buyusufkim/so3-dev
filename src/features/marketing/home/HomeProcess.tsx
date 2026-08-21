@@ -8,7 +8,7 @@ export function HomeProcess({ content }: HomeProcessProps) {
   const hasHeadline = content.headline_primary || content.headline_emphasis;
 
   return (
-    <section className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#121212] text-white">
+    <section className="py-20 md:py-24 px-4 sm:px-6 lg:px-12 bg-[#121212] text-white">
       <div className="container mx-auto max-w-7xl">
         
         <div className="mb-16 md:mb-24">
