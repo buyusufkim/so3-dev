@@ -52,7 +52,7 @@ export function HomeCommunity({ content }: HomeCommunityProps) {
   ];
 
   return (
-    <section id="topluluk" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28">
+    <section id="topluluk" className="py-20 md:py-24 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28">
       <div className="container mx-auto max-w-7xl">
         <div className="text-center max-w-4xl mx-auto mb-16 md:mb-24">
           <div className="flex items-center justify-center gap-3 mb-6">
