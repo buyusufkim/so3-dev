@@ -16,17 +16,19 @@
 ### Path A: Fresh/Empty Database
 If you are deploying to a completely empty database for the first time:
 1. Import `database/fresh-install.sql` using phpMyAdmin or the MySQL CLI.
-   *Note: This file canonically represents migrations 001–026.*
+   *Note: This file canonically represents migrations 001–027.*
    *WARNING: Never import `fresh-install.sql` into a live database containing existing data.*
 2. Configure runtime credentials in `config.local.php`.
 3. Create the first admin **only** through the `php bin/create-admin.php` CLI tool.
 
 ### Path B: Existing/Incremental Database
 If you are deploying an update to an existing live database:
-1. Run the incremental migration tool to receive migrations (e.g., 026) safely:
+1. Run the incremental migration tool to receive migrations (e.g., 027) safely:
    ```bash
    php bin/migrate.php
    ```
+
+   Migration 027 registers the canonical demo media already deployed under `media/so3`, fills only missing homepage and branch media, and creates the six canonical demo events with their galleries. Existing customized media and same-slug events are preserved.
 2. **Never** import `fresh-install.sql` over an existing database.
 
 ## 3. Configuration
