@@ -6,7 +6,7 @@ interface HomeAboutProps {
 
 export function HomeAbout({ content }: HomeAboutProps) {
   return (
-    <section id="hakkimizda" className="py-24 md:py-32 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A]">
+    <section id="hakkimizda" className="pt-20 pb-16 md:pt-24 md:pb-20 px-4 sm:px-6 lg:px-12 bg-[#F4F1EB] text-[#0A0A0A]">
       <div className="container mx-auto max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           
