@@ -118,7 +118,7 @@ export function HomeTrainers({ content }: HomeTrainersProps) {
   };
 
   return (
-    <section ref={sectionRef} id="egitmenler" className="py-24 md:py-32 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 overflow-hidden">
+    <section ref={sectionRef} id="egitmenler" className="py-20 md:py-24 bg-white text-[#0A0A0A] scroll-mt-24 md:scroll-mt-28 overflow-hidden">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 md:mb-16 gap-8">
