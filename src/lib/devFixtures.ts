@@ -102,7 +102,31 @@ export interface HomepageContent {
 }
 
 export interface SiteSettings {
-    [key: string]: unknown;
+    contact: {
+        phone_primary: string;
+        phone_secondary: string;
+        whatsapp: string;
+    };
+    location: {
+        address: string;
+        maps_directions_url: string;
+        maps_embed_url: string;
+    };
+    social: {
+        instagram_username: string;
+    };
+    tour: {
+        matterport_model_id: string;
+    };
+    business_hours: {
+        enabled: boolean;
+        items: Array<{
+            day: string;
+            open: string | null;
+            close: string | null;
+            is_closed: boolean;
+        }>;
+    };
 }
 
 export interface Branch {
@@ -284,11 +308,34 @@ export const FIXTURES: FixturesType = {
         }
     },
     SITE_SETTINGS: {
-        contact_phone: '+90 530 000 0000',
-        contact_email: 'info@so3.com.tr',
-        contact_address: 'Barbaros Mah. Mor Sümbül Sok.',
-        business_hours_weekdays: '07:00 - 23:00',
-        business_hours_weekends: '09:00 - 21:00'
+        contact: {
+            phone_primary: "05539573738",
+            phone_secondary: "05072077797",
+            whatsapp: "05523790777"
+        },
+        location: {
+            address: "Yıldırım Beyazıt, Aşık Veysel Blv. No:69/4, 38030 Melikgazi / Kayseri",
+            maps_embed_url: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3112.5937107116843!2d35.5292976756857!3d38.71293637176466!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x152b136a06abeb6b%3A0x572b063e20953544!2sSO3%20Selami%20%C3%96zy%C4%B1ld%C4%B1r%C4%B1m%20Personal%20Trainer!5e0!3m2!1sen!2str!4v1700000000000!5m2!1sen!2str",
+            maps_directions_url: "https://www.google.com/maps/place/SO3+Selami+%C3%96zy%C4%B1ld%C4%B1r%C4%B1m+Personal+Trainer/@38.7129364,35.5318726,17z/data=!3m1!4b1!4m6!3m5!1s0x152b136a06abeb6b:0x572b063e20953544!8m2!3d38.7129364!4d35.5318726!16s%2Fg%2F11st_bxb2b"
+        },
+        social: {
+            instagram_username: "so3pt"
+        },
+        tour: {
+            matterport_model_id: "sXAzAwRLnGs"
+        },
+        business_hours: {
+            enabled: true,
+            items: [
+                { day: "monday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "tuesday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "wednesday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "thursday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "friday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "saturday", open: "06:00", close: "00:00", is_closed: false },
+                { day: "sunday", open: null, close: null, is_closed: true }
+            ]
+        }
     },
     BRANCHES: [
         {
@@ -296,7 +343,7 @@ export const FIXTURES: FixturesType = {
             slug: 'fitness',
             name: 'Fitness',
             description: 'Güç, kondisyon ve kişisel hedeflere göre şekillenen kişiye özel antrenman süreci.',
-            cover_image: null,
+            cover_image: { id: 5, url: '/media/so3/branch-fitness.webp', thumbnail_url: '/media/so3/branch-fitness.webp', alt_text: 'SO3 Fitness' },
             media: []
         },
         {
@@ -304,7 +351,7 @@ export const FIXTURES: FixturesType = {
             slug: 'boks',
             name: 'Boks',
             description: 'Kondisyon, refleks ve güç artırımı odaklı özel boks dersleri.',
-            cover_image: null,
+            cover_image: { id: 4, url: '/media/so3/branch-boxing.webp', thumbnail_url: '/media/so3/branch-boxing.webp', alt_text: 'SO3 Boks' },
             media: []
         },
         {
@@ -312,7 +359,7 @@ export const FIXTURES: FixturesType = {
             slug: 'pilates',
             name: 'Pilates',
             description: 'Reformer pilates ile esneklik, merkez bölge gücü ve postür gelişimi.',
-            cover_image: null,
+            cover_image: { id: 6, url: '/media/so3/branch-pilates-01.webp', thumbnail_url: '/media/so3/branch-pilates-01.webp', alt_text: 'SO3 Pilates' },
             media: []
         },
         {
@@ -320,24 +367,24 @@ export const FIXTURES: FixturesType = {
             slug: 'yoga',
             name: 'Yoga',
             description: 'Beden ve zihin bütünlüğü, esneklik ve denge odaklı pratikler.',
-            cover_image: null,
+            cover_image: { id: 21, url: '/media/so3/discovery-yoga.webp', thumbnail_url: '/media/so3/discovery-yoga.webp', alt_text: 'SO3 Yoga' },
             media: []
         }
     ],
     TRAINERS: [
-        { id: '1', slug: 'selami-ozyildirim', name: 'Selami Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '2', slug: 'selim-ozyildirim', name: 'Selim Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '3', slug: 'sencer-ozyildirim', name: 'Sencer Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '4', slug: 'burak-corakcioglu', name: 'Burak Çorakçıoğlu', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '5', slug: 'eren-sencer-ozturk', name: 'Eren Sencer Öztürk', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '6', slug: 'mehmet-katipoglu', name: 'Mehmet Katipoğlu', role_title: 'Fitness Eğitmeni · Uzman Diyetisyen', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '7', slug: 'hulusi-unlu', name: 'Hulusi Ünlü', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '8', slug: 'sahranur-sozer', name: 'Sahranur Sözer', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null },
-        { id: '9', slug: 'mehmet-ates', name: 'Mehmet Ateş', role_title: 'Boks Eğitmeni', branch_slug: 'boks', bio: null, instagram_username: null },
-        { id: '10', slug: 'serhat-guler', name: 'Serhat Güler', role_title: 'Boks Eğitmeni', branch_slug: 'boks', bio: null, instagram_username: null },
-        { id: '11', slug: 'almira-tektas', name: 'Almira Tektaş', role_title: 'Pilates Eğitmeni', branch_slug: 'pilates', bio: null, instagram_username: null },
-        { id: '12', slug: 'muniyra-karayagiz', name: 'Müniyra Karayağız', role_title: 'Pilates Eğitmeni', branch_slug: 'pilates', bio: null, instagram_username: null },
-        { id: '13', slug: 'irem-bulut', name: 'İrem Bulut', role_title: 'Yoga Eğitmeni', branch_slug: 'yoga', bio: null, instagram_username: null }
+        { id: '1', slug: 'selami-ozyildirim', name: 'Selami Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '2', slug: 'selim-ozyildirim', name: 'Selim Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '3', slug: 'sencer-ozyildirim', name: 'Sencer Özyıldırım', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '4', slug: 'burak-corakcioglu', name: 'Burak Çorakçıoğlu', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '5', slug: 'eren-sencer-ozturk', name: 'Eren Sencer Öztürk', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '6', slug: 'mehmet-katipoglu', name: 'Mehmet Katipoğlu', role_title: 'Fitness Eğitmeni · Uzman Diyetisyen', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '7', slug: 'hulusi-unlu', name: 'Hulusi Ünlü', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '8', slug: 'sahranur-sozer', name: 'Sahranur Sözer', role_title: 'Fitness Eğitmeni', branch_slug: 'fitness', bio: null, instagram_username: null, profile_image: null },
+        { id: '9', slug: 'mehmet-ates', name: 'Mehmet Ateş', role_title: 'Boks Eğitmeni', branch_slug: 'boks', bio: null, instagram_username: null, profile_image: null },
+        { id: '10', slug: 'serhat-guler', name: 'Serhat Güler', role_title: 'Boks Eğitmeni', branch_slug: 'boks', bio: null, instagram_username: null, profile_image: null },
+        { id: '11', slug: 'almira-tektas', name: 'Almira Tektaş', role_title: 'Pilates Eğitmeni', branch_slug: 'pilates', bio: null, instagram_username: null, profile_image: null },
+        { id: '12', slug: 'muniyra-karayagiz', name: 'Müniyra Karayağız', role_title: 'Pilates Eğitmeni', branch_slug: 'pilates', bio: null, instagram_username: null, profile_image: null },
+        { id: '13', slug: 'irem-bulut', name: 'İrem Bulut', role_title: 'Yoga Eğitmeni', branch_slug: 'yoga', bio: null, instagram_username: null, profile_image: null }
     ],
     EVENT_CATEGORIES: [
         { id: '1', name: 'Doğa Yürüyüşleri', slug: 'doga-yuruyusleri' },
@@ -346,12 +393,160 @@ export const FIXTURES: FixturesType = {
         { id: '4', name: 'Salon Etkinlikleri', slug: 'salon-etkinlikleri' }
     ],
     EVENTS: [
-        { id: '1', title: 'Gomeda Vadisi Yürüyüşü', slug: 'gomeda-vadisi-yuruyusu', category: { id: '1', name: 'Doğa Yürüyüşleri', slug: 'doga-yuruyusleri' }, excerpt: 'SO3 topluluğunun Gomeda Vadisi yürüyüşünden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: true, featured_order: 10 },
-        { id: '2', title: 'Kano Etkinliği', slug: 'kano-etkinligi', category: { id: '3', name: 'Kano Etkinlikleri', slug: 'kano-etkinlikleri' }, excerpt: 'SO3 topluluğunun kano etkinliğinden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: true, featured_order: 20 },
-        { id: '3', title: 'Voleybol Etkinliği', slug: 'voleybol-etkinligi', category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, excerpt: 'SO3 topluluğunun voleybol etkinliğinden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: true, featured_order: 30 },
-        { id: '4', title: 'Mobilite Grup Dersi', slug: 'mobilite-grup-dersi', category: { id: '4', name: 'Salon Etkinlikleri', slug: 'salon-etkinlikleri' }, excerpt: 'SO3 topluluğunun mobilite grup dersinden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: false, featured_order: 40 },
-        { id: '5', title: 'Kırlangıç Vadisi Yürüyüşü', slug: 'kirlangic-vadisi-yuruyusu', category: { id: '1', name: 'Doğa Yürüyüşleri', slug: 'doga-yuruyusleri' }, excerpt: 'SO3 topluluğunun Kırlangıç Vadisi yürüyüşünden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: false, featured_order: null },
-        { id: '6', title: 'Plaj Voleybolu', slug: 'plaj-voleybolu', category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, excerpt: 'SO3 topluluğunun plaj voleybolu etkinliğinden seçili anlar.', content: '', event_date: null, location: '', status: 'published', is_featured: true, featured_order: null },
-        { id: '7', title: 'Halı Saha', slug: 'hali-saha', category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, excerpt: 'So3 Ekibi Halısahada', content: '', event_date: null, location: '', status: 'published', is_featured: false, featured_order: null }
+        { 
+            id: '1', 
+            title: 'Gomeda Vadisi Yürüyüşü', 
+            slug: 'gomeda-vadisi-yuruyusu', 
+            category: { id: '1', name: 'Doğa Yürüyüşleri', slug: 'doga-yuruyusleri' }, 
+            excerpt: 'SO3 topluluğunun Gomeda Vadisi yürüyüşünden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: true, 
+            featured_order: 10,
+            cover_image: { id: 22, url: '/media/so3/events/gomeda-vadisi-yuruyusu/cover.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/cover.webp', alt_text: 'Gomeda Vadisi Yürüyüşü Kapak' },
+            media: [
+                { id: 'v1', url: '/media/so3/events/gomeda-vadisi-yuruyusu/video/01-poster.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/video/01-poster.webp', alt_text: '' },
+                { id: 'g1', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/01.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/02.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/03.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/04.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/05.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/05.webp', alt_text: '' },
+                { id: 'g6', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/06.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/06.webp', alt_text: '' },
+                { id: 'g7', url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/07.webp', thumbnail_url: '/media/so3/events/gomeda-vadisi-yuruyusu/gallery/07.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '2', 
+            title: 'Kano Etkinliği', 
+            slug: 'kano-etkinligi', 
+            category: { id: '3', name: 'Kano Etkinlikleri', slug: 'kano-etkinlikleri' }, 
+            excerpt: 'SO3 topluluğunun kano etkinliğinden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: true, 
+            featured_order: 20,
+            cover_image: { id: 30, url: '/media/so3/events/kano-etkinligi/cover.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/cover.webp', alt_text: 'Kano Etkinliği Kapak' },
+            media: [
+                { id: 'v1', url: '/media/so3/events/kano-etkinligi/video/01-poster.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/video/01-poster.webp', alt_text: '' },
+                { id: 'v2', url: '/media/so3/events/kano-etkinligi/video/02-poster.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/video/02-poster.webp', alt_text: '' },
+                { id: 'g1', url: '/media/so3/events/kano-etkinligi/gallery/01.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/kano-etkinligi/gallery/02.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/kano-etkinligi/gallery/03.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/kano-etkinligi/gallery/04.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/kano-etkinligi/gallery/05.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/05.webp', alt_text: '' },
+                { id: 'g6', url: '/media/so3/events/kano-etkinligi/gallery/06.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/06.webp', alt_text: '' },
+                { id: 'g7', url: '/media/so3/events/kano-etkinligi/gallery/07.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/07.webp', alt_text: '' },
+                { id: 'g8', url: '/media/so3/events/kano-etkinligi/gallery/08.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/08.webp', alt_text: '' },
+                { id: 'g9', url: '/media/so3/events/kano-etkinligi/gallery/09.webp', thumbnail_url: '/media/so3/events/kano-etkinligi/gallery/09.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '3', 
+            title: 'Voleybol Etkinliği', 
+            slug: 'voleybol-etkinligi', 
+            category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, 
+            excerpt: 'SO3 topluluğunun voleybol etkinliğinden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: true, 
+            featured_order: 30,
+            cover_image: { id: 59, url: '/media/so3/events/voleybol-etkinligi/cover.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/cover.webp', alt_text: 'Voleybol Etkinliği Kapak' },
+            media: [
+                { id: 'v1', url: '/media/so3/events/voleybol-etkinligi/video/01-poster.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/video/01-poster.webp', alt_text: '' },
+                { id: 'g1', url: '/media/so3/events/voleybol-etkinligi/gallery/01.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/voleybol-etkinligi/gallery/02.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/voleybol-etkinligi/gallery/03.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/voleybol-etkinligi/gallery/04.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/voleybol-etkinligi/gallery/05.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/05.webp', alt_text: '' },
+                { id: 'g6', url: '/media/so3/events/voleybol-etkinligi/gallery/06.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/06.webp', alt_text: '' },
+                { id: 'g7', url: '/media/so3/events/voleybol-etkinligi/gallery/07.webp', thumbnail_url: '/media/so3/events/voleybol-etkinligi/gallery/07.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '4', 
+            title: 'Mobilite Grup Dersi', 
+            slug: 'mobilite-grup-dersi', 
+            category: { id: '4', name: 'Salon Etkinlikleri', slug: 'salon-etkinlikleri' }, 
+            excerpt: 'SO3 topluluğunun mobilite grup dersinden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: false, 
+            featured_order: 40,
+            cover_image: { id: 47, url: '/media/so3/events/mobilite-grup-dersi/cover.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/cover.webp', alt_text: 'Mobilite Grup Dersi Kapak' },
+            media: [
+                { id: 'v1', url: '/media/so3/events/mobilite-grup-dersi/video/01-poster.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/video/01-poster.webp', alt_text: '' },
+                { id: 'g1', url: '/media/so3/events/mobilite-grup-dersi/gallery/01.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/mobilite-grup-dersi/gallery/02.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/mobilite-grup-dersi/gallery/03.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/mobilite-grup-dersi/gallery/04.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/mobilite-grup-dersi/gallery/05.webp', thumbnail_url: '/media/so3/events/mobilite-grup-dersi/gallery/05.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '5', 
+            title: 'Kırlangıç Vadisi Yürüyüşü', 
+            slug: 'kirlangic-vadisi-yuruyusu', 
+            category: { id: '1', name: 'Doğa Yürüyüşleri', slug: 'doga-yuruyusleri' }, 
+            excerpt: 'SO3 topluluğunun Kırlangıç Vadisi yürüyüşünden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: false, 
+            featured_order: null,
+            cover_image: { id: 40, url: '/media/so3/events/kirlangic-vadisi-yuruyusu/cover.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/cover.webp', alt_text: 'Kırlangıç Vadisi Yürüyüşü Kapak' },
+            media: [
+                { id: 'g1', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/01.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/02.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/03.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/04.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/05.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/05.webp', alt_text: '' },
+                { id: 'g6', url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/06.webp', thumbnail_url: '/media/so3/events/kirlangic-vadisi-yuruyusu/gallery/06.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '6', 
+            title: 'Plaj Voleybolu', 
+            slug: 'plaj-voleybolu', 
+            category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, 
+            excerpt: 'SO3 topluluğunun plaj voleybolu etkinliğinden seçili anlar.', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: true, 
+            featured_order: null,
+            cover_image: { id: 54, url: '/media/so3/events/plaj-voleybolu/cover.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/cover.webp', alt_text: 'Plaj Voleybolu Kapak' },
+            media: [
+                { id: 'g1', url: '/media/so3/events/plaj-voleybolu/gallery/01.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/gallery/01.webp', alt_text: '' },
+                { id: 'g2', url: '/media/so3/events/plaj-voleybolu/gallery/02.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/gallery/02.webp', alt_text: '' },
+                { id: 'g3', url: '/media/so3/events/plaj-voleybolu/gallery/03.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/gallery/03.webp', alt_text: '' },
+                { id: 'g4', url: '/media/so3/events/plaj-voleybolu/gallery/04.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/gallery/04.webp', alt_text: '' },
+                { id: 'g5', url: '/media/so3/events/plaj-voleybolu/gallery/05.webp', thumbnail_url: '/media/so3/events/plaj-voleybolu/gallery/05.webp', alt_text: '' }
+            ]
+        },
+        { 
+            id: '7', 
+            title: 'Halı Saha', 
+            slug: 'hali-saha', 
+            category: { id: '2', name: 'Takımlı Oyunlar', slug: 'takimli-oyunlar' }, 
+            excerpt: 'So3 Ekibi Halısahada', 
+            content: '', 
+            event_date: null, 
+            location: '', 
+            status: 'published', 
+            is_featured: false, 
+            featured_order: null,
+            cover_image: { id: 104, url: '/media/so3/community-hali-saha.webp', thumbnail_url: '/media/so3/community-hali-saha.webp', alt_text: 'Halı Saha' },
+            media: []
+        }
     ]
 };
