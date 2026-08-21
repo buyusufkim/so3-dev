@@ -29,8 +29,8 @@ export function Dashboard() {
       try {
         const response = await apiClient.get('/api/admin/dashboard');
         setData(response as DashboardData);
-      } catch (err: any) {
-        setError(err.message || "Veriler alınamadı.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Veriler alınamadı.");
       } finally {
         setLoading(false);
       }

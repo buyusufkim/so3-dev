@@ -13,7 +13,7 @@ class AdminController
         try {
             $db = Database::getInstance()->getConnection();
             $stmt = $db->query("SELECT 1");
-            if ($stmt && $stmt->fetchColumn() === 1) {
+            if ($stmt && (int)$stmt->fetchColumn() === 1) {
                 $dbStatus = 'connected';
             }
         } catch (\Exception $e) {
