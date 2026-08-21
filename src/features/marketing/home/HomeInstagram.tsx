@@ -75,7 +75,6 @@ export function HomeInstagram({ content }: HomeInstagramProps) {
                   className="min-h-[550px] w-full"
                   frameBorder="0"
                   scrolling="no"
-                  allowTransparency={true}
                   allow="encrypted-media"
                   loading="lazy"
                   title={`Instagram ${reel.type === 'reel' ? 'Reel' : 'Gönderisi'}`}
