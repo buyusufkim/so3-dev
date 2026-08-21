@@ -1,8 +1,26 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
+interface DashboardMetrics {
+  events: {
+    published: number;
+    draft: number;
+    total: number;
+  };
+  media_active: number;
+  trainers_active: number;
+  branches_active: number;
+  homepage_sections_active: number;
+}
+
+interface DashboardData {
+  system_status: string;
+  database_status: string;
+  metrics: DashboardMetrics;
+}
+
 export function Dashboard() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -10,18 +28,20 @@ export function Dashboard() {
     const fetchDashboard = async () => {
       try {
         const response = await apiClient.get('/api/admin/dashboard');
-        setData(response);
+        setData(response as DashboardData);
       } catch (err: any) {
         setError(err.message || "Veriler alınamadı.");
       } finally {
         setLoading(false);
       }
     };
+
     fetchDashboard();
   }, []);
 
   if (loading) return <div className="text-white/50">Yükleniyor...</div>;
   if (error) return <div className="text-red-400">{error}</div>;
+  if (!data) return <div className="text-red-400">Veri bulunamadı.</div>;
 
   return (
     <div className="space-y-8">
@@ -30,7 +50,7 @@ export function Dashboard() {
         <p className="text-white/50 text-sm">SO3 PT Control paneline hoş geldiniz.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-[#121212] border border-white/10 p-6 rounded-lg">
           <div className="text-xs uppercase tracking-widest text-white/40 mb-2">Sistem Durumu</div>
           <div className="flex items-center gap-2">
@@ -48,30 +68,41 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-[#1a1a1a] border border-white/5 p-6 rounded-lg opacity-50">
-          <div className="text-xs uppercase tracking-widest text-white/40 mb-2">Etkinlikler</div>
-          <div className="text-3xl font-bold">{data.metrics?.events ?? <span className="text-sm font-normal text-white/50">Henüz aktif değil</span>}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg flex flex-col justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/40 mb-4">Etkinlikler</div>
+          <div>
+            <div className="text-3xl font-bold mb-2">{data.metrics.events.total}</div>
+            <div className="flex gap-4 text-sm text-white/50">
+              <span>{data.metrics.events.published} Yayında</span>
+              <span>{data.metrics.events.draft} Taslak</span>
+            </div>
+          </div>
         </div>
         
-        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg">
-          <div className="text-xs uppercase tracking-widest text-white/40 mb-2">Medya Assets</div>
-          <div className="text-3xl font-bold text-white">{data.metrics?.media ?? <span className="text-sm font-normal text-white/50">Henüz aktif değil</span>}</div>
-        </div>
-        
-        <div className="bg-[#1a1a1a] border border-white/5 p-6 rounded-lg opacity-50">
-          <div className="text-xs uppercase tracking-widest text-white/40 mb-2">Ziyaretçiler</div>
-          <div className="text-3xl font-bold">{data.metrics?.visitors ?? <span className="text-sm font-normal text-white/50">Henüz aktif değil</span>}</div>
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg flex flex-col justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/40 mb-4">Eğitmenler</div>
+          <div className="text-3xl font-bold text-white">{data.metrics.trainers_active}</div>
+          <div className="text-sm text-white/50 mt-2">Aktif Eğitmen</div>
         </div>
 
-        <div className="bg-[#1a1a1a] border border-white/5 p-6 rounded-lg opacity-50">
-          <div className="text-xs uppercase tracking-widest text-white/40 mb-2">Eğitmenler</div>
-          <div className="text-3xl font-bold">{data.metrics?.trainers ?? <span className="text-sm font-normal text-white/50">Henüz aktif değil</span>}</div>
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg flex flex-col justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/40 mb-4">Branşlar</div>
+          <div className="text-3xl font-bold text-white">{data.metrics.branches_active}</div>
+          <div className="text-sm text-white/50 mt-2">Aktif Branş</div>
         </div>
-      </div>
-      
-      <div className="mt-8 pt-8 border-t border-white/10">
-        <p className="text-xs text-white/30">CMS modülleri ve denetim kayıtları sonraki fazda aktif edilecektir.</p>
+
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg flex flex-col justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/40 mb-4">Ana Sayfa Bölümleri</div>
+          <div className="text-3xl font-bold text-white">{data.metrics.homepage_sections_active}</div>
+          <div className="text-sm text-white/50 mt-2">Aktif Bölüm</div>
+        </div>
+
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 rounded-lg flex flex-col justify-between">
+          <div className="text-xs uppercase tracking-widest text-white/40 mb-4">Medya Assets</div>
+          <div className="text-3xl font-bold text-white">{data.metrics.media_active}</div>
+          <div className="text-sm text-white/50 mt-2">Aktif Medya</div>
+        </div>
       </div>
     </div>
   );
