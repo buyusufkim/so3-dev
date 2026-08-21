@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../../lib/devFallback";
 import { useState, useEffect } from "react";
 import { type PublicCommunitySectionContent } from "@/features/homepage/publicHomepageContent";
 import { Link } from "react-router-dom";
@@ -17,7 +18,7 @@ export function HomeCommunity({ content }: HomeCommunityProps) {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch('/api/public/events?featured=1&limit=6');
+        const res = await publicApiFetch('/api/public/events?featured=1&limit=6');
         if (!res.ok) throw new Error('API Error');
         const json = await res.json();
         if (json.data && json.data.items) {

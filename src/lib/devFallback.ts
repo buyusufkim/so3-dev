@@ -4,43 +4,26 @@ import { FIXTURES } from './devFixtures';
 // IT NEVER RUNS IN PRODUCTION.
 // IT INTERCEPTS FAILED PUBLIC API REQUESTS AND PROVIDES FIXTURE DATA
 
-export function initDevFallback() {
-  if (!import.meta.env.DEV) {
-    return;
-  }
-
-  const originalFetch = window.fetch;
+export async function publicApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
   
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
-    
-    try {
-      const response = await originalFetch(input, init);
-      if (response.ok) {
-        return response;
-      }
-      
-      return handleDevFallback(url, response);
-    } catch (error) {
-      return handleDevFallback(url, null, error);
+  try {
+    const response = await fetch(input, init);
+    if (response.ok || !import.meta.env.DEV) {
+      return response;
     }
-  };
-
-  // Gracefully handle missing images without breaking layout or using base64
-  window.addEventListener('error', function(e) {
-    if (e.target instanceof HTMLImageElement) {
-        if (!e.target.dataset.fallbackApplied) {
-            e.target.dataset.fallbackApplied = 'true';
-            // Simple transparent SVG to prevent broken image icon without base64
-            e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>';
-        }
+    return handleDevFallback(url, response);
+  } catch (error) {
+    if (!import.meta.env.DEV) {
+      throw error;
     }
-  }, true);
+    return handleDevFallback(url, null, error);
+  }
 }
 
 function handleDevFallback(url: string, originalResponse: Response | null, error?: any): Response {
     try {
-        const urlObj = new URL(url, window.location.origin);
+        const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
         const path = urlObj.pathname;
         
         if (!path.startsWith('/api/public/')) {
@@ -79,7 +62,7 @@ function handleDevFallback(url: string, originalResponse: Response | null, error
             data = FIXTURES.EVENT_CATEGORIES;
         } else if (path.startsWith('/api/public/events/')) {
             const slug = path.split('/').pop();
-            const event = FIXTURES.EVENTS.find(e => e.slug === slug);
+            const event = FIXTURES.EVENTS.find((e: any) => e.slug === slug);
             if (event) {
                 data = event;
             } else {

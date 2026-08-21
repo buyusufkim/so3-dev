@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../lib/devFallback";
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { NotFound } from "../NotFound";
@@ -27,7 +28,7 @@ export function EventDetailPage() {
         let isApi404 = false;
 
         try {
-          const res = await fetch(`/api/public/events/${slug}`);
+          const res = await publicApiFetch(`/api/public/events/${slug}`);
           if (res.ok) {
             const json = await res.json();
             resolvedData = json.data;

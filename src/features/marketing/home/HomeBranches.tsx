@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../../lib/devFallback";
 import { useState, useEffect } from "react";
 import { BranchLightbox } from "./BranchLightbox";
 import { type PublicBranchesSectionContent } from "@/features/homepage/publicHomepageContent";
@@ -20,7 +21,7 @@ export function HomeBranches({ content }: HomeBranchesProps) {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch("/api/public/branches");
+        const res = await publicApiFetch("/api/public/branches");
         if (!res.ok) throw new Error("Failed to fetch branches");
         
         const json: unknown = await res.json();

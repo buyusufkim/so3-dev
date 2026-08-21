@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../lib/devFallback";
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { SiteSettingsResponse } from './types';
 
@@ -29,7 +30,7 @@ export function PublicSiteSettingsProvider({ children }: { children: ReactNode }
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch('/api/public/site-settings');
+        const res = await publicApiFetch('/api/public/site-settings');
         if (!res.ok) {
           throw new Error('Failed to fetch settings');
         }

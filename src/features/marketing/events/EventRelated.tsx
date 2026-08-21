@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../../lib/devFallback";
 import { useState, useEffect } from "react";
 import { EventCard, PublicEvent } from "./EventCard";
 
@@ -7,7 +8,7 @@ export function EventRelated({ currentSlug }: { currentSlug: string }) {
   useEffect(() => {
     async function fetchRelated() {
       try {
-        const res = await fetch('/api/public/events?limit=10');
+        const res = await publicApiFetch('/api/public/events?limit=10');
         if (!res.ok) throw new Error('API Error');
         const json = await res.json();
         if (json.data && json.data.items) {

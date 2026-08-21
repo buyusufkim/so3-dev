@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../../lib/devFallback";
 import { type PublicTrainersSectionContent } from "@/features/homepage/publicHomepageContent";
 import { type PublicTrainer, parsePublicTrainersResponse } from "@/features/trainers/publicTrainers";
 import { HomeMediaPlaceholder } from "./HomeMediaPlaceholder";
@@ -23,7 +24,7 @@ export function HomeTrainers({ content }: HomeTrainersProps) {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch("/api/public/trainers");
+        const res = await publicApiFetch("/api/public/trainers");
         if (!res.ok) throw new Error("Failed to fetch trainers");
         
         const json: unknown = await res.json();

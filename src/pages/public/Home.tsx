@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../lib/devFallback";
 import React, { useState, useEffect } from "react";
 import { HomeHero } from "@/features/marketing/home/HomeHero";
 import { HomeBrandBand } from "@/features/marketing/home/HomeBrandBand";
@@ -53,8 +54,8 @@ export function Home() {
         setLoading(true);
 
         const [structureRes, contentRes] = await Promise.all([
-          fetch("/api/public/homepage").catch(() => null),
-          fetch("/api/public/homepage/content").catch(() => null)
+          publicApiFetch("/api/public/homepage").catch(() => null),
+          publicApiFetch("/api/public/homepage/content").catch(() => null)
         ]);
 
         let parsedStructure = DEFAULT_HOME_SECTION_ORDER;

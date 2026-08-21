@@ -1,3 +1,4 @@
+import { publicApiFetch } from "../../../lib/devFallback";
 import { useState, useEffect } from "react";
 import { EventCard, PublicEvent } from "./EventCard";
 
@@ -11,7 +12,7 @@ export function EventArchive() {
       try {
         setLoading(true);
         setError(false);
-        const res = await fetch('/api/public/events?limit=50');
+        const res = await publicApiFetch('/api/public/events?limit=50');
         if (!res.ok) throw new Error('API Error');
         const data = await res.json();
         if (data.data && data.data.items) {
