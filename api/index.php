@@ -122,12 +122,12 @@ $matched = false;
 
 if (isset($routes[$method][$requestUri])) {
     $handler = $routes[$method][$requestUri];
-    if (is_callable($handler)) {
-        $handler();
-    } elseif (is_array($handler)) {
+    if (is_array($handler)) {
         $controller = new $handler[0]();
         $action = $handler[1];
         $controller->$action();
+    } elseif (is_callable($handler)) {
+        $handler();
     }
     $matched = true;
 } else {
