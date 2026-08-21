@@ -152,8 +152,8 @@ export function AdminBranchEditor() {
       slug,
       description,
       is_active: isActive,
-      cover_media_id: coverId,
-      gallery_media_ids: gallery.map(g => g.id)
+      cover_media_id: coverId === null ? null : Number(coverId),
+      gallery_media_ids: gallery.map(g => Number(g.id))
     };
 
     try {
