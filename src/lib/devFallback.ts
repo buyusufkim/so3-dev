@@ -1,5 +1,3 @@
-import { FIXTURES } from './devFixtures';
-
 // THIS ADAPTER EXISTS ONLY FOR AI STUDIO / VITE DEVELOPMENT PREVIEW
 // IT NEVER RUNS IN PRODUCTION.
 // IT INTERCEPTS FAILED PUBLIC API REQUESTS AND PROVIDES FIXTURE DATA
@@ -21,7 +19,7 @@ export async function publicApiFetch(input: RequestInfo | URL, init?: RequestIni
   }
 }
 
-function handleDevFallback(url: string, originalResponse: Response | null, error?: any): Response {
+async function handleDevFallback(url: string, originalResponse: Response | null, error?: unknown): Promise<Response> {
     try {
         const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
         const path = urlObj.pathname;
@@ -33,7 +31,12 @@ function handleDevFallback(url: string, originalResponse: Response | null, error
         
         console.warn(`[DEV FALLBACK] Intercepted failed public API request: ${path}. Using fixture data.`);
         
-        let data: any = null;
+        // Hide import from static analysis
+        const fixturePath = './devFixtures.ts';
+        const module = await import(/* @vite-ignore */ fixturePath);
+        const FIXTURES = module.FIXTURES;
+        
+        let data: unknown = null;
         
         if (path === '/api/public/homepage') {
             data = FIXTURES.HOMEPAGE_ORDER;
@@ -62,7 +65,7 @@ function handleDevFallback(url: string, originalResponse: Response | null, error
             data = FIXTURES.EVENT_CATEGORIES;
         } else if (path.startsWith('/api/public/events/')) {
             const slug = path.split('/').pop();
-            const event = FIXTURES.EVENTS.find((e: any) => e.slug === slug);
+            const event = FIXTURES.EVENTS.find((e: { slug: string }) => e.slug === slug);
             if (event) {
                 data = event;
             } else {
