@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Search, Image as ImageIcon, Video } from "lucide-react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { X, Search, Image as ImageIcon, Video, Upload, Loader2 } from "lucide-react";
 import { apiClient } from "../api/client";
 
 interface MediaAsset {
@@ -26,6 +26,14 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedType, setSelectedType] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const normalizeAsset = (asset: MediaAsset): MediaAsset => ({
+    ...asset,
+    id: Number(asset.id)
+  });
 
   const fetchAssets = async (p = 1) => {
     try {
@@ -34,11 +42,12 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
       if (mode !== 'all') { typeParam = `&type=${mode}`; } else if (selectedType) { typeParam = `&type=${selectedType}`; }
       
       const res = await apiClient.get(`/api/admin/media?page=${p}&limit=20&search=${encodeURIComponent(search)}${typeParam}`);
+      const normalizedAssets = (res.data as MediaAsset[]).map(normalizeAsset);
       if (p === 1) {
-        setAssets(res.data);
+        setAssets(normalizedAssets);
       } else {
         setAssets(prev => {
-          const newAssets = res.data.filter((a: MediaAsset) => !prev.some(p => p.id === a.id));
+          const newAssets = normalizedAssets.filter((a: MediaAsset) => !prev.some(p => p.id === a.id));
           return [...prev, ...newAssets];
         });
       }
@@ -67,6 +76,26 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
     return () => window.removeEventListener('keydown', handleEsc);
   }, [open, onClose]);
 
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      setUploadError('');
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploaded = normalizeAsset(await apiClient.post('/api/admin/media', formData) as MediaAsset);
+      setAssets(prev => [uploaded, ...prev.filter(asset => asset.id !== uploaded.id)]);
+      onSelect(uploaded);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Görsel yüklenemedi.');
+    } finally {
+      setUploading(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -75,6 +104,26 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#121212]">
           <h2 className="text-lg font-semibold text-white">Medya Seçin</h2>
           <div className="flex items-center space-x-4">
+            {mode !== 'video' && (
+              <>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-medium text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  <span>{uploading ? 'Yükleniyor...' : 'Yeni Görsel Yükle'}</span>
+                </button>
+              </>
+            )}
             <a href="/admin/media" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline">
               Medya Kütüphanesine Git
             </a>
@@ -84,6 +133,11 @@ export function MediaPicker({ open, onClose, onSelect, mode = 'all', selectedIds
           </div>
         </div>
 
+        {uploadError && (
+          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {uploadError}
+          </div>
+        )}
 
         <div className="p-4 border-b border-white/5 flex gap-4 bg-[#1a1a1a]">
           <div className="relative flex-1">
