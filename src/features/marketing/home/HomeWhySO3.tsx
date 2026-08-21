@@ -40,20 +40,18 @@ export function HomeWhySO3({ content }: HomeWhySO3Props) {
                 key={idx} 
                 className="bg-white rounded-lg p-8 md:p-10 border border-[#E5E3DB] flex flex-col group hover:border-[#851C35]/30 hover:shadow-xl hover:shadow-[#0A0A0A]/5 transition-all duration-300"
               >
-                <div className="mb-12 md:mb-16">
+                <div className="mb-8 md:mb-10">
                   <span className="text-[11px] font-bold uppercase tracking-widest text-[#851C35]">
                     {num}
                   </span>
                 </div>
-                
-                <div className="mt-auto">
-                  <h3 className="text-2xl font-bold tracking-tight mb-4">
-                    {val.title}
-                  </h3>
-                  <p className="text-[#0A0A0A]/60 font-medium leading-relaxed text-sm md:text-base">
-                    {val.description}
-                  </p>
-                </div>
+
+                <h3 className="text-2xl font-bold tracking-tight leading-tight">
+                  {val.title}
+                </h3>
+                <p className="mt-auto pt-8 text-[#0A0A0A]/60 font-medium leading-relaxed text-sm md:text-base">
+                  {val.description}
+                </p>
               </div>
             );
           })}
