@@ -1,4 +1,4 @@
-import { Outlet, Navigate, useNavigate, useLocation, Link } from "react-router-dom";
+import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
@@ -7,6 +7,12 @@ export function AdminLayout() {
   const [admin, setAdmin] = useState<any>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center px-2 py-2 text-sm rounded transition-colors ${
+      isActive
+        ? 'bg-white/10 text-white font-medium'
+        : 'text-white/70 hover:bg-white/5 hover:text-white'
+    }`;
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -70,19 +76,19 @@ export function AdminLayout() {
           <div>
             <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Genel</h3>
             <div className="space-y-1">
-              <Link to="/admin" className="flex items-center px-2 py-2 text-sm text-white bg-white/5 rounded">Dashboard</Link>
-              <Link to="/admin/settings" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition-colors">Ayarlar</Link>
+              <NavLink to="/admin" end className={navLinkClass}>Dashboard</NavLink>
+              <NavLink to="/admin/settings" className={navLinkClass}>Ayarlar</NavLink>
             </div>
           </div>
           
           <div>
             <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">İçerik</h3>
             <div className="space-y-1">
-              <Link to="/admin/homepage" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Ana Sayfa</Link>
-              <Link to="/admin/branches" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Branşlar</Link>
-              <Link to="/admin/trainers" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Eğitmenler</Link>
-              <Link to="/admin/events" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Etkinlikler</Link>
-              <Link to="/admin/media" className="flex items-center px-2 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white rounded transition">Medya</Link>
+              <NavLink to="/admin/homepage" className={navLinkClass}>Ana Sayfa</NavLink>
+              <NavLink to="/admin/branches" className={navLinkClass}>Branşlar</NavLink>
+              <NavLink to="/admin/trainers" className={navLinkClass}>Eğitmenler</NavLink>
+              <NavLink to="/admin/events" className={navLinkClass}>Etkinlikler</NavLink>
+              <NavLink to="/admin/media" className={navLinkClass}>Medya</NavLink>
             </div>
           </div>
           
