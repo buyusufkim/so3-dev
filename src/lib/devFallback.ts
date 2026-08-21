@@ -52,7 +52,7 @@ async function handleDevFallback(url: string, originalResponse: Response | null,
             let filteredEvents = [...FIXTURES.EVENTS];
             const featured = urlObj.searchParams.get('featured');
             if (featured === '1') {
-                filteredEvents = filteredEvents.filter(e => e.is_featured);
+                filteredEvents = filteredEvents.filter((e: { is_featured: boolean; featured_order: number | null }) => e.is_featured);
                 filteredEvents.sort((a, b) => (a.featured_order || 999) - (b.featured_order || 999));
             }
             
