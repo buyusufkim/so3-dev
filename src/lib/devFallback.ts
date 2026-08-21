@@ -7,15 +7,31 @@ export async function publicApiFetch(input: RequestInfo | URL, init?: RequestIni
   
   try {
     const response = await fetch(input, init);
-    if (response.ok || !import.meta.env.DEV) {
+    if (!import.meta.env.DEV) {
       return response;
     }
-    return handleDevFallback(url, response);
+
+    const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    if (urlObj.pathname.startsWith('/api/public/')) {
+      const contentType = response.headers.get("content-type") ?? "";
+      const isJson = contentType.toLowerCase().includes("application/json");
+      if (response.ok && isJson) {
+        return response;
+      }
+      return handleDevFallback(url, response);
+    }
+
+    return response;
   } catch (error) {
     if (!import.meta.env.DEV) {
       throw error;
     }
-    return handleDevFallback(url, null, error);
+    
+    const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    if (urlObj.pathname.startsWith('/api/public/')) {
+      return handleDevFallback(url, null, error);
+    }
+    throw error;
   }
 }
 
