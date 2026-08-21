@@ -127,6 +127,76 @@ class MediaController
         AuditLogger::log('media.updated', $_SESSION['admin_id'], 'media', $id, ['title' => $title]);
         Response::json(['success' => true]);
     }
+
+    public function updateVideoPoster($id) {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $posterMediaId = isset($input['poster_media_id']) ? (int)$input['poster_media_id'] : 0;
+
+        if ($posterMediaId <= 0) {
+            Response::error('Geçerli bir kapak görseli seçin.', 'INVALID_POSTER_MEDIA', 422);
+        }
+
+        $videoStmt = $this->db->prepare("
+            SELECT id
+            FROM media_assets
+            WHERE id = ? AND media_type = 'video' AND status = 'active' AND deleted_at IS NULL
+        ");
+        $videoStmt->execute([$id]);
+        if (!$videoStmt->fetchColumn()) {
+            Response::error('Video bulunamadı.', 'VIDEO_NOT_FOUND', 404);
+        }
+
+        $posterStmt = $this->db->prepare("
+            SELECT id, storage_path, width, height
+            FROM media_assets
+            WHERE id = ? AND media_type = 'image' AND status = 'active' AND deleted_at IS NULL
+        ");
+        $posterStmt->execute([$posterMediaId]);
+        $poster = $posterStmt->fetch();
+        if (!$poster) {
+            Response::error('Kapak görseli bulunamadı.', 'POSTER_MEDIA_NOT_FOUND', 404);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $updateStmt = $this->db->prepare("
+                UPDATE media_assets
+                SET thumbnail_path = ?, width = ?, height = ?
+                WHERE id = ?
+            ");
+            $updateStmt->execute([
+                $poster['storage_path'],
+                $poster['width'],
+                $poster['height'],
+                $id
+            ]);
+
+            $deleteUsageStmt = $this->db->prepare("
+                DELETE FROM media_usages
+                WHERE entity_type = 'media' AND entity_id = ? AND field_name = 'thumbnail'
+            ");
+            $deleteUsageStmt->execute([$id]);
+
+            $insertUsageStmt = $this->db->prepare("
+                INSERT INTO media_usages (media_id, entity_type, entity_id, field_name)
+                VALUES (?, 'media', ?, 'thumbnail')
+            ");
+            $insertUsageStmt->execute([$posterMediaId, $id]);
+
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Kapak görseli güncellenemedi.', 'POSTER_UPDATE_FAILED', 500);
+        }
+
+        AuditLogger::log('media.poster_updated', $_SESSION['admin_id'] ?? null, 'media', $id, [
+            'poster_media_id' => $posterMediaId
+        ]);
+        Response::json(['success' => true]);
+    }
     
     public function destroy($id) {
         // Soft delete
