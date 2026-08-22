@@ -63,6 +63,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\TrainerController())->index();
         },
+        '/api/admin/members' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\MemberController())->index();
+        },
         '/api/admin/site-settings' => function() {
             AuthMiddleware::handle();
             (new \Controllers\SiteSettingsController())->index();
@@ -114,6 +118,10 @@ $routes = [
         '/api/admin/trainers' => function() {
             AuthMiddleware::handle();
             (new \Controllers\TrainerController())->create();
+        },
+        '/api/admin/members' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\MemberController())->create();
         }
     ]
 ];
@@ -315,6 +323,31 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         } elseif ($method === 'DELETE') {
             $controller->delete($id);
+            $matched = true;
+        }
+    }
+
+    // Dynamic matching for admin members endpoints
+    if (preg_match('#^/api/admin/members/(\d+)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\MemberController();
+        if ($method === 'GET') {
+            $controller->show($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/members/(\d+)/restore$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST') {
+            (new \Controllers\MemberController())->restore((int)$matches[1]);
             $matched = true;
         }
     }
