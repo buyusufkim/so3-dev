@@ -2,9 +2,16 @@ import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-route
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
+interface AdminUser {
+  id: number;
+  email: string;
+  role: 'super_admin' | 'admin' | 'editor' | 'trainer' | 'reception';
+  display_name: string;
+}
+
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [admin, setAdmin] = useState<any>(null);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -89,6 +96,15 @@ export function AdminLayout() {
               <NavLink to="/admin/trainers" className={navLinkClass}>Eğitmenler</NavLink>
               <NavLink to="/admin/events" className={navLinkClass}>Etkinlikler</NavLink>
               <NavLink to="/admin/media" className={navLinkClass}>Medya</NavLink>
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
+            <div className="space-y-1">
+              {(admin?.role === 'super_admin' || admin?.role === 'admin') && (
+                <NavLink to="/admin/members" className={navLinkClass}>Üyeler</NavLink>
+              )}
             </div>
           </div>
           

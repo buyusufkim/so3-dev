@@ -111,7 +111,18 @@ class MemberController {
         
         $offset = ($page - 1) * $perPage;
         
-        $where = ["m.deleted_at IS NULL"];
+        $deleted = isset($_GET['deleted']) ? $_GET['deleted'] : 'active';
+        if (!is_string($deleted) || !in_array($deleted, ['active', 'deleted', 'all'])) {
+            Response::error('Geçersiz deleted parametresi.', 'VALIDATION_ERROR', 422);
+        }
+
+        $where = [];
+        if ($deleted === 'active') {
+            $where[] = "m.deleted_at IS NULL";
+        } elseif ($deleted === 'deleted') {
+            $where[] = "m.deleted_at IS NOT NULL";
+        }
+        
         $params = [];
 
         if ($q !== null && $q !== '') {
@@ -133,7 +144,11 @@ class MemberController {
             $params[] = $trainerId;
         }
 
-        $whereClause = implode(" AND ", $where);
+        if (empty($where)) {
+            $whereClause = "1=1";
+        } else {
+            $whereClause = implode(" AND ", $where);
+        }
 
         $countSql = "SELECT COUNT(*) FROM members m WHERE {$whereClause}";
         $stmtCount = $this->db->prepare($countSql);
@@ -143,7 +158,7 @@ class MemberController {
         $sql = "SELECT 
                     m.id, m.uuid, m.first_name, m.last_name, m.phone, m.email, 
                     m.status, m.membership_start_date, m.membership_end_date, 
-                    m.created_at, m.updated_at,
+                    m.created_at, m.updated_at, m.deleted_at,
                     t.id as trainer_id, t.name as trainer_name
                 FROM members m
                 LEFT JOIN trainers t ON m.trainer_id = t.id
@@ -177,6 +192,7 @@ class MemberController {
                 'membership_end_date' => $r['membership_end_date'],
                 'created_at' => $r['created_at'],
                 'updated_at' => $r['updated_at'],
+                'deleted_at' => $r['deleted_at'],
                 'trainer' => $r['trainer_id'] ? [
                     'id' => (int)$r['trainer_id'],
                     'name' => $r['trainer_name']
