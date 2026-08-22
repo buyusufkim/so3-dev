@@ -54,11 +54,31 @@ class MemberController {
     public function index() {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
-        $q = isset($_GET['q']) ? trim($_GET['q']) : null;
-        $status = isset($_GET['status']) ? trim($_GET['status']) : null;
-        $trainerId = isset($_GET['trainer_id']) ? trim($_GET['trainer_id']) : null;
-        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-        $perPage = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
+        $q = isset($_GET['q']) ? $_GET['q'] : null;
+        if ($q !== null) {
+            if (!is_scalar($q)) {
+                Response::error('Geçersiz q parametresi.', 'VALIDATION_ERROR', 422);
+            }
+            $q = trim((string)$q);
+        }
+
+        $status = isset($_GET['status']) ? $_GET['status'] : null;
+        if ($status !== null) {
+            if (!is_string($status) || !in_array($status, ['active', 'inactive'])) {
+                Response::error('status yalnızca active veya inactive olabilir.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
+        $trainerId = isset($_GET['trainer_id']) ? $_GET['trainer_id'] : null;
+        if ($trainerId !== null && $trainerId !== '') {
+            if (!is_scalar($trainerId) || !is_numeric($trainerId) || (int)$trainerId <= 0 || (string)(int)$trainerId !== (string)$trainerId) {
+                Response::error('Geçersiz trainer_id.', 'VALIDATION_ERROR', 422);
+            }
+            $trainerId = (int)$trainerId;
+        }
+
+        $page = isset($_GET['page']) && is_scalar($_GET['page']) ? (int)$_GET['page'] : 1;
+        $perPage = isset($_GET['per_page']) && is_scalar($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
 
         if ($page < 1) $page = 1;
         if ($perPage < 1) $perPage = 20;
@@ -79,15 +99,13 @@ class MemberController {
         }
 
         if ($status !== null && $status !== '') {
-            if (in_array($status, ['active', 'inactive'])) {
-                $where[] = "m.status = ?";
-                $params[] = $status;
-            }
+            $where[] = "m.status = ?";
+            $params[] = $status;
         }
 
         if ($trainerId !== null && $trainerId !== '') {
             $where[] = "m.trainer_id = ?";
-            $params[] = (int)$trainerId;
+            $params[] = $trainerId;
         }
 
         $whereClause = implode(" AND ", $where);
@@ -141,13 +159,16 @@ class MemberController {
             ];
         }
 
+        $lastPage = (int)ceil($total / $perPage);
+        if ($lastPage < 1) $lastPage = 1;
+
         Response::json([
-            'data' => $members,
-            'meta' => [
+            'items' => $members,
+            'pagination' => [
                 'total' => $total,
                 'page' => $page,
                 'per_page' => $perPage,
-                'last_page' => ceil($total / $perPage)
+                'last_page' => $lastPage
             ]
         ]);
     }
@@ -159,6 +180,7 @@ class MemberController {
                     m.id, m.uuid, m.first_name, m.last_name, m.phone, m.email, 
                     m.status, m.membership_start_date, m.membership_end_date, 
                     m.emergency_contact_name, m.emergency_contact_phone, m.notes,
+                    m.consent_given_at,
                     m.created_at, m.updated_at,
                     t.id as trainer_id, t.name as trainer_name
                 FROM members m
@@ -186,6 +208,7 @@ class MemberController {
             'emergency_contact_name' => $r['emergency_contact_name'],
             'emergency_contact_phone' => $r['emergency_contact_phone'],
             'notes' => $r['notes'],
+            'consent_given_at' => $r['consent_given_at'],
             'created_at' => $r['created_at'],
             'updated_at' => $r['updated_at'],
             'trainer' => $r['trainer_id'] ? [
@@ -202,12 +225,18 @@ class MemberController {
         $d = \DateTime::createFromFormat('Y-m-d', $date);
         return $d && $d->format('Y-m-d') === $date;
     }
+    
+    private function validateDateTime(?string $date): bool {
+        if ($date === null) return true;
+        $d = \DateTime::createFromFormat('Y-m-d H:i:s', $date);
+        return $d && $d->format('Y-m-d H:i:s') === $date;
+    }
 
     private function validateMemberData(array $data, bool $isUpdate): array {
         $allowedFields = [
             'first_name', 'last_name', 'phone', 'email', 'status', 'trainer_id',
             'membership_start_date', 'membership_end_date', 'emergency_contact_name', 
-            'emergency_contact_phone', 'notes'
+            'emergency_contact_phone', 'notes', 'consent_given_at'
         ];
         
         foreach (array_keys($data) as $key) {
@@ -219,8 +248,14 @@ class MemberController {
         if (!$isUpdate) {
             $required = ['first_name', 'last_name', 'phone', 'status'];
             foreach ($required as $req) {
-                if (!array_key_exists($req, $data) || $data[$req] === null || trim($data[$req]) === '') {
+                if (!array_key_exists($req, $data) || $data[$req] === null) {
                     Response::error("{$req} alanı zorunludur.", 'VALIDATION_ERROR', 422);
+                }
+                if (!is_string($data[$req])) {
+                    Response::error("{$req} alanı metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
+                }
+                if (trim($data[$req]) === '') {
+                    Response::error("{$req} alanı boş olamaz.", 'VALIDATION_ERROR', 422);
                 }
             }
         } else {
@@ -328,7 +363,6 @@ class MemberController {
             $val['membership_end_date'] = $edate;
         }
         
-        // Also validate end date does not precede start date if both are provided or context allows
         if (array_key_exists('membership_start_date', $val) && array_key_exists('membership_end_date', $val)) {
             if ($val['membership_start_date'] && $val['membership_end_date']) {
                 if (strtotime($val['membership_end_date']) < strtotime($val['membership_start_date'])) {
@@ -381,6 +415,17 @@ class MemberController {
                 $val['notes'] = null;
             }
         }
+        
+        if (array_key_exists('consent_given_at', $data)) {
+            if ($data['consent_given_at'] !== null && !is_string($data['consent_given_at'])) {
+                Response::error("consent_given_at metin formatında olmalıdır.", 'VALIDATION_ERROR', 422);
+            }
+            $cdate = $data['consent_given_at'] !== null ? trim($data['consent_given_at']) : null;
+            if ($cdate !== null && !$this->validateDateTime($cdate)) {
+                Response::error("Geçersiz consent_given_at (YYYY-MM-DD HH:MM:SS bekleniyor).", 'VALIDATION_ERROR', 422);
+            }
+            $val['consent_given_at'] = $cdate;
+        }
 
         return $val;
     }
@@ -401,8 +446,8 @@ class MemberController {
                     uuid, first_name, last_name, phone, email, 
                     status, trainer_id, membership_start_date, membership_end_date,
                     emergency_contact_name, emergency_contact_phone, notes,
-                    created_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    consent_given_at, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             $stmt->execute([
@@ -418,6 +463,7 @@ class MemberController {
                 $val['emergency_contact_name'] ?? null,
                 $val['emergency_contact_phone'] ?? null,
                 $val['notes'] ?? null,
+                $val['consent_given_at'] ?? null,
                 $adminId
             ]);
 
@@ -457,13 +503,11 @@ class MemberController {
             Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
         }
 
-        // Normalize numeric fields for comparison
         $member['trainer_id'] = $member['trainer_id'] !== null ? (int)$member['trainer_id'] : null;
 
         $data = $this->getJsonInput();
         $val = $this->validateMemberData($data, true);
         
-        // Handle partial update logic for dates if only one is updated
         $testStartDate = array_key_exists('membership_start_date', $val) ? $val['membership_start_date'] : $member['membership_start_date'];
         $testEndDate = array_key_exists('membership_end_date', $val) ? $val['membership_end_date'] : $member['membership_end_date'];
         
