@@ -77,12 +77,37 @@ class MemberController {
             $trainerId = (int)$trainerId;
         }
 
-        $page = isset($_GET['page']) && is_scalar($_GET['page']) ? (int)$_GET['page'] : 1;
-        $perPage = isset($_GET['per_page']) && is_scalar($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
+        $page = 1;
+        if (isset($_GET['page'])) {
+            $p = $_GET['page'];
+            if (!is_scalar($p) || is_bool($p)) {
+                Response::error('Geçersiz page parametresi.', 'VALIDATION_ERROR', 422);
+            }
+            $pStr = (string)$p;
+            $pFiltered = filter_var($pStr, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 1]
+            ]);
+            if ($pFiltered === false || (string)$pFiltered !== $pStr) {
+                Response::error('Geçersiz page parametresi.', 'VALIDATION_ERROR', 422);
+            }
+            $page = $pFiltered;
+        }
 
-        if ($page < 1) $page = 1;
-        if ($perPage < 1) $perPage = 20;
-        if ($perPage > 100) $perPage = 100;
+        $perPage = 20;
+        if (isset($_GET['per_page'])) {
+            $pp = $_GET['per_page'];
+            if (!is_scalar($pp) || is_bool($pp)) {
+                Response::error('Geçersiz per_page parametresi.', 'VALIDATION_ERROR', 422);
+            }
+            $ppStr = (string)$pp;
+            $ppFiltered = filter_var($ppStr, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 1, 'max_range' => 100]
+            ]);
+            if ($ppFiltered === false || (string)$ppFiltered !== $ppStr) {
+                Response::error('Geçersiz per_page parametresi.', 'VALIDATION_ERROR', 422);
+            }
+            $perPage = $ppFiltered;
+        }
         
         $offset = ($page - 1) * $perPage;
         
