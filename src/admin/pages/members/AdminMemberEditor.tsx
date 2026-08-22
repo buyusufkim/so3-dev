@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { Member } from "./types";
@@ -10,6 +10,7 @@ export function AdminMemberEditor() {
   const navigate = useNavigate();
   const isNew = !id;
 
+  const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,14 +41,36 @@ export function AdminMemberEditor() {
   }, [id]);
 
   // Prompt before leaving if there are unsaved changes
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  useEffect(() => {
+    if (blocker.state === "blocked") {
+      if (window.confirm("Kaydedilmemiş değişiklikleriniz var. Çıkmak istediğinize emin misiniz?")) {
+        blocker.proceed();
+      } else {
+        blocker.reset();
+      }
+    }
+  }, [blocker]);
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [isDirty]);
+
+  const handleFieldChange = <K extends keyof typeof formData>(field: K, value: (typeof formData)[K]) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setIsDirty(true);
+  };
 
   const fetchTrainers = async () => {
     try {
@@ -79,6 +102,7 @@ export function AdminMemberEditor() {
         notes: data.notes || "",
         consent_given: !!data.consent_given_at
       });
+      setIsDirty(false);
       setError(null);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -127,10 +151,12 @@ export function AdminMemberEditor() {
 
       if (isNew) {
         const res = await apiClient.post('/api/admin/members', payload) as { id: number };
+        setIsDirty(false);
         navigate(`/admin/members/${res.id}`);
       } else {
         await apiClient.patch(`/api/admin/members/${id}`, payload);
         alert("Üye başarıyla güncellendi.");
+        setIsDirty(false);
         // Refresh to update initialConsent if it was just granted
         fetchMember(); 
       }
@@ -147,12 +173,13 @@ export function AdminMemberEditor() {
 
   const handleArchive = async () => {
     if (!id) return;
-    if (!window.confirm("Bu üyeyi arşivlemek istediğinize emin misiniz? Üye pasif listesine düşecektir.")) {
+    if (!window.confirm("Bu üyeyi arşivlemek istediğinize emin misiniz? Kayıt arşiv listesine taşınacaktır.")) {
       return;
     }
     
     try {
       await apiClient.delete(`/api/admin/members/${id}`);
+      setIsDirty(false);
       navigate('/admin/members');
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -189,6 +216,7 @@ export function AdminMemberEditor() {
         <div className="flex gap-3">
           {!isNew && (
             <button
+              type="button"
               onClick={handleArchive}
               className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 text-sm font-medium rounded transition"
             >
@@ -197,7 +225,8 @@ export function AdminMemberEditor() {
             </button>
           )}
           <button
-            onClick={handleSubmit}
+            type="submit"
+            form="member-form"
             disabled={saving}
             className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition disabled:opacity-50"
           >
@@ -213,7 +242,7 @@ export function AdminMemberEditor() {
         </div>
       )}
 
-      <div className="bg-[#121212] border border-white/10 rounded-lg p-6 space-y-8">
+      <form id="member-form" onSubmit={handleSubmit} className="bg-[#121212] border border-white/10 rounded-lg p-6 space-y-8">
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
@@ -222,7 +251,7 @@ export function AdminMemberEditor() {
               type="text"
               required
               value={formData.first_name}
-              onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+              onChange={(e) => handleFieldChange("first_name", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -232,7 +261,7 @@ export function AdminMemberEditor() {
               type="text"
               required
               value={formData.last_name}
-              onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+              onChange={(e) => handleFieldChange("last_name", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -245,7 +274,7 @@ export function AdminMemberEditor() {
               type="tel"
               required
               value={formData.phone}
-              onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+              onChange={(e) => handleFieldChange("phone", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -254,7 +283,7 @@ export function AdminMemberEditor() {
             <input
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              onChange={(e) => handleFieldChange("email", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -265,7 +294,7 @@ export function AdminMemberEditor() {
             <label className="text-sm font-medium">Durum *</label>
             <select
               value={formData.status}
-              onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as "active" | "inactive" }))}
+              onChange={(e) => handleFieldChange("status", e.target.value as "active" | "inactive")}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             >
               <option value="active">Aktif</option>
@@ -276,7 +305,7 @@ export function AdminMemberEditor() {
             <label className="text-sm font-medium">Atanmış Eğitmen</label>
             <select
               value={formData.trainer_id}
-              onChange={(e) => setFormData(prev => ({ ...prev, trainer_id: e.target.value }))}
+              onChange={(e) => handleFieldChange("trainer_id", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             >
               <option value="">Seçiniz...</option>
@@ -293,7 +322,7 @@ export function AdminMemberEditor() {
             <input
               type="date"
               value={formData.membership_start_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, membership_start_date: e.target.value }))}
+              onChange={(e) => handleFieldChange("membership_start_date", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -302,7 +331,7 @@ export function AdminMemberEditor() {
             <input
               type="date"
               value={formData.membership_end_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, membership_end_date: e.target.value }))}
+              onChange={(e) => handleFieldChange("membership_end_date", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -314,7 +343,7 @@ export function AdminMemberEditor() {
             <input
               type="text"
               value={formData.emergency_contact_name}
-              onChange={(e) => setFormData(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
+              onChange={(e) => handleFieldChange("emergency_contact_name", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -323,7 +352,7 @@ export function AdminMemberEditor() {
             <input
               type="tel"
               value={formData.emergency_contact_phone}
-              onChange={(e) => setFormData(prev => ({ ...prev, emergency_contact_phone: e.target.value }))}
+              onChange={(e) => handleFieldChange("emergency_contact_phone", e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
@@ -334,7 +363,7 @@ export function AdminMemberEditor() {
           <textarea
             rows={4}
             value={formData.notes}
-            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            onChange={(e) => handleFieldChange("notes", e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
             placeholder="Üye ile ilgili genel notlar..."
           />
@@ -345,7 +374,7 @@ export function AdminMemberEditor() {
             type="checkbox"
             id="consent"
             checked={formData.consent_given}
-            onChange={(e) => setFormData(prev => ({ ...prev, consent_given: e.target.checked }))}
+            onChange={(e) => handleFieldChange("consent_given", e.target.checked)}
             className="w-4 h-4 rounded border-white/20 bg-white/5 text-white focus:ring-0"
           />
           <label htmlFor="consent" className="text-sm text-white/70">
@@ -356,7 +385,7 @@ export function AdminMemberEditor() {
           </label>
         </div>
 
-      </div>
+      </form>
     </div>
   );
 }

@@ -127,7 +127,7 @@ export function AdminMembersList() {
           <select
             value={status}
             onChange={(e) => {
-              setStatus(e.target.value as any);
+              setStatus(e.target.value as "all" | "active" | "inactive");
               handleFilterChange();
             }}
             className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/20"
@@ -152,7 +152,7 @@ export function AdminMembersList() {
           <select
             value={deleted}
             onChange={(e) => {
-              setDeleted(e.target.value as any);
+              setDeleted(e.target.value as "active" | "deleted" | "all");
               handleFilterChange();
             }}
             className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/20"
