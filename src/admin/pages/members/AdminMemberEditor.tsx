@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
@@ -10,6 +10,7 @@ export function AdminMemberEditor() {
   const navigate = useNavigate();
   const isNew = !id;
 
+  const bypassBlocker = useRef(false);
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -43,7 +44,7 @@ export function AdminMemberEditor() {
   // Prompt before leaving if there are unsaved changes
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname
+      !bypassBlocker.current && isDirty && currentLocation.pathname !== nextLocation.pathname
   );
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export function AdminMemberEditor() {
   const handleFieldChange = <K extends keyof typeof formData>(field: K, value: (typeof formData)[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setIsDirty(true);
+    bypassBlocker.current = false;
   };
 
   const fetchTrainers = async () => {
@@ -103,6 +105,7 @@ export function AdminMemberEditor() {
         consent_given: !!data.consent_given_at
       });
       setIsDirty(false);
+      bypassBlocker.current = false;
       setError(null);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -117,6 +120,7 @@ export function AdminMemberEditor() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     try {
       setSaving(true);
       setError(null);
@@ -152,11 +156,13 @@ export function AdminMemberEditor() {
       if (isNew) {
         const res = await apiClient.post('/api/admin/members', payload) as { id: number };
         setIsDirty(false);
+        bypassBlocker.current = true;
         navigate(`/admin/members/${res.id}`);
       } else {
         await apiClient.patch(`/api/admin/members/${id}`, payload);
         alert("Üye başarıyla güncellendi.");
         setIsDirty(false);
+        bypassBlocker.current = true;
         // Refresh to update initialConsent if it was just granted
         fetchMember(); 
       }
@@ -180,6 +186,7 @@ export function AdminMemberEditor() {
     try {
       await apiClient.delete(`/api/admin/members/${id}`);
       setIsDirty(false);
+      bypassBlocker.current = true;
       navigate('/admin/members');
     } catch (err: unknown) {
       if (err instanceof ApiError) {

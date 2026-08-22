@@ -5,6 +5,12 @@ import { apiClient, ApiError } from "../../api/client";
 import { Member, MembersResponse } from "./types";
 import { AdminTrainerListItem } from "../trainers/types";
 
+type StatusType = "all" | "active" | "inactive";
+const isValidStatus = (val: string): val is StatusType => ["all", "active", "inactive"].includes(val);
+
+type DeletedType = "active" | "deleted" | "all";
+const isValidDeleted = (val: string): val is DeletedType => ["active", "deleted", "all"].includes(val);
+
 export function AdminMembersList() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,8 +133,11 @@ export function AdminMembersList() {
           <select
             value={status}
             onChange={(e) => {
-              setStatus(e.target.value as "all" | "active" | "inactive");
-              handleFilterChange();
+              const val = e.target.value;
+              if (isValidStatus(val)) {
+                setStatus(val);
+                handleFilterChange();
+              }
             }}
             className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/20"
           >
@@ -152,8 +161,11 @@ export function AdminMembersList() {
           <select
             value={deleted}
             onChange={(e) => {
-              setDeleted(e.target.value as "active" | "deleted" | "all");
-              handleFilterChange();
+              const val = e.target.value;
+              if (isValidDeleted(val)) {
+                setDeleted(val);
+                handleFilterChange();
+              }
             }}
             className="bg-[#121212] border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-white/20"
           >
