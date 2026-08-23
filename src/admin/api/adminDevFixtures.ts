@@ -18,6 +18,7 @@ let mockMembers: Member[] = [
 ];
 
 let nextMemberId = 7;
+let currentDevRole = 'super_admin';
 
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
@@ -51,12 +52,22 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     return createResponse({ data: { token: 'dev-preview-csrf' } });
   }
   if (path === '/api/auth/me' && method === 'GET') {
+    if (currentDevRole === 'trainer') {
+      return createResponse({ data: { id: 888, email: 'trainer@preview.so3.dev', role: 'trainer', display_name: 'Preview Eğitmeni' } });
+    }
+    if (currentDevRole === 'reception') {
+      return createResponse({ data: { id: 777, email: 'reception@preview.so3.dev', role: 'reception', display_name: 'Preview Resepsiyon' } });
+    }
     return createResponse({ data: { id: 999, email: 'admin@preview.so3.dev', role: 'super_admin', display_name: 'Preview Yöneticisi' } });
   }
   if (path === '/api/auth/login' && method === 'POST') {
+    if (reqBody.username === 'trainer') currentDevRole = 'trainer';
+    else if (reqBody.username === 'reception') currentDevRole = 'reception';
+    else currentDevRole = 'super_admin';
     return createResponse({ data: { success: true } });
   }
   if (path === '/api/auth/logout' && method === 'POST') {
+    currentDevRole = 'super_admin';
     return createResponse({ data: { success: true } });
   }
 
@@ -206,6 +217,86 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       mockMembers[memberIndex].deleted_at = undefined;
       return createResponse({ data: { success: true } });
     }
+  }
+
+  // --- Trainer Members Endpoints ---
+  if (path === '/api/trainer/members' && method === 'GET') {
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const perPage = parseInt(url.searchParams.get('per_page') || '20', 10);
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const status = url.searchParams.get('status');
+
+    // Simulate trainer ID 1 (Ahmet Yılmaz) for the 'trainer' dev account
+    const myTrainerId = 1;
+
+    let filtered = mockMembers.filter(m => {
+      if (m.deleted_at) return false;
+      if (!m.trainer || m.trainer.id !== myTrainerId) return false;
+      if (status && m.status !== status) return false;
+      if (q) {
+        const searchStr = `${m.first_name} ${m.last_name} ${m.phone} ${m.email || ''}`.toLowerCase();
+        if (!searchStr.includes(q)) return false;
+      }
+      return true;
+    });
+
+    filtered.sort((a, b) => b.id - a.id);
+    const total = filtered.length;
+    const last_page = Math.ceil(total / perPage) || 1;
+    const items = filtered.slice((page - 1) * perPage, page * perPage).map(m => {
+      // Return TrainerMemberListItem structure
+      return {
+        id: m.id,
+        uuid: m.uuid,
+        first_name: m.first_name,
+        last_name: m.last_name,
+        phone: m.phone,
+        email: m.email,
+        status: m.status,
+        membership_start_date: m.membership_start_date,
+        membership_end_date: m.membership_end_date,
+        created_at: m.created_at,
+        updated_at: m.updated_at
+      };
+    });
+
+    return createResponse({
+      data: {
+        items,
+        pagination: { total, page, per_page: perPage, last_page }
+      }
+    });
+  }
+
+  if (path.startsWith('/api/trainer/members/') && method === 'GET') {
+    const parts = path.split('/');
+    const id = parseInt(parts[4], 10);
+    if (isNaN(id)) return createError('Invalid ID', 400);
+
+    const myTrainerId = 1;
+    const member = mockMembers.find(m => m.id === id && !m.deleted_at && m.trainer && m.trainer.id === myTrainerId);
+    
+    if (!member) return createError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.', 404, 'NOT_FOUND');
+
+    // Return TrainerMemberDetail structure
+    return createResponse({
+      data: {
+        id: member.id,
+        uuid: member.uuid,
+        first_name: member.first_name,
+        last_name: member.last_name,
+        phone: member.phone,
+        email: member.email,
+        status: member.status,
+        membership_start_date: member.membership_start_date,
+        membership_end_date: member.membership_end_date,
+        emergency_contact_name: member.emergency_contact_name || null,
+        emergency_contact_phone: member.emergency_contact_phone || null,
+        notes: member.notes || null,
+        created_at: member.created_at,
+        updated_at: member.updated_at
+      }
+    });
   }
 
   return createError('Not implemented in mock', 404);
