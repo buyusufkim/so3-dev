@@ -28,7 +28,8 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
     // Only intercept specific admin / auth routes
     const isTarget = endpoint.startsWith('/api/auth/') ||
                      endpoint.startsWith('/api/admin/members') ||
-                     endpoint.startsWith('/api/admin/trainers');
+                     endpoint.startsWith('/api/admin/trainers') ||
+                     endpoint.startsWith('/api/admin/dashboard');
                      
     if (isTarget) {
       const modulePath = "./adminDevFixtures.ts";

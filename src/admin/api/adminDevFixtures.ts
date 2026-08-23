@@ -60,6 +60,27 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     return createResponse({ data: { success: true } });
   }
 
+  // --- Dashboard Endpoints ---
+  if (path === '/api/admin/dashboard' && method === 'GET') {
+    return createResponse({
+      data: {
+        system_status: "ok",
+        database_status: "connected",
+        metrics: {
+          events: {
+            published: 5,
+            draft: 2,
+            total: 7
+          },
+          media_active: 24,
+          trainers_active: 13,
+          branches_active: 4,
+          homepage_sections_active: 12
+        }
+      }
+    });
+  }
+
   // --- Trainers Endpoints ---
   if (path === '/api/admin/trainers' && method === 'GET') {
     const status = url.searchParams.get('status');
