@@ -11,6 +11,7 @@ export function AdminMemberEditor() {
   const isNew = !id;
 
   const bypassBlocker = useRef(false);
+  const isSubmitting = useRef(false);
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -120,7 +121,8 @@ export function AdminMemberEditor() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || isSubmitting.current) return;
+    isSubmitting.current = true;
     try {
       setSaving(true);
       setError(null);
@@ -174,6 +176,7 @@ export function AdminMemberEditor() {
       }
     } finally {
       setSaving(false);
+      isSubmitting.current = false;
     }
   };
 
