@@ -18,8 +18,9 @@ export function Login() {
       await apiClient.post('/api/auth/login', { username, password });
       apiClient.clearAuth();
       navigate('/admin');
-    } catch (err: any) {
-      setError(err.message || 'Giriş bilgileri geçersiz.');
+    } catch (err: unknown) {
+      const errorObj = err as Error;
+      setError(errorObj.message || 'Giriş bilgileri geçersiz.');
     } finally {
       setLoading(false);
     }

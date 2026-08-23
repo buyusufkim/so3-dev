@@ -22,6 +22,8 @@ const AdminTrainerEditor = lazy(() => import("../admin/pages/trainers/AdminTrain
 const AdminMembersList = lazy(() => import("../admin/pages/members/AdminMembersList").then(m => ({ default: m.AdminMembersList })));
 const AdminMemberEditor = lazy(() => import("../admin/pages/members/AdminMemberEditor").then(m => ({ default: m.AdminMemberEditor })));
 const AdminSettings = lazy(() => import("../admin/pages/settings/AdminSettings").then(m => ({ default: m.AdminSettings })));
+const TrainerMembersPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.TrainerMembersPlaceholder })));
+const ReceptionPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.ReceptionPlaceholder })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -148,6 +150,14 @@ const router = createBrowserRouter([
       {
         path: "settings",
         element: <AdminSuspense><AdminSettings /></AdminSuspense>,
+      },
+      {
+        path: "my-members",
+        element: <AdminSuspense><TrainerMembersPlaceholder /></AdminSuspense>,
+      },
+      {
+        path: "reception",
+        element: <AdminSuspense><ReceptionPlaceholder /></AdminSuspense>,
       },
     ]
   }

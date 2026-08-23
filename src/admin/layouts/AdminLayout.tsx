@@ -2,12 +2,41 @@ import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-route
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
-interface AdminUser {
+export type AdminRole = 'super_admin' | 'admin' | 'editor' | 'trainer' | 'reception';
+
+export interface AdminUser {
   id: number;
   email: string;
-  role: 'super_admin' | 'admin' | 'editor' | 'trainer' | 'reception';
+  role: AdminRole;
   display_name: string;
 }
+
+export const getRoleStartRoute = (role: AdminRole): string => {
+  switch (role) {
+    case 'super_admin':
+    case 'admin':
+      return '/admin';
+    case 'editor':
+      return '/admin/homepage';
+    case 'trainer':
+      return '/admin/my-members';
+    case 'reception':
+      return '/admin/reception';
+    default:
+      return '/admin/login';
+  }
+};
+
+export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
+  if (role === 'super_admin' || role === 'admin') return true;
+  if (role === 'trainer') return pathname.startsWith('/admin/my-members');
+  if (role === 'reception') return pathname.startsWith('/admin/reception');
+  if (role === 'editor') {
+    const cmsRoutes = ['/admin/homepage', '/admin/branches', '/admin/trainers', '/admin/events', '/admin/media'];
+    return cmsRoutes.some(r => pathname === r || pathname.startsWith(r + '/'));
+  }
+  return false;
+};
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -25,9 +54,9 @@ export function AdminLayout() {
     const checkAuth = async () => {
       try {
         const data = await apiClient.get('/api/auth/me');
-        setAdmin(data);
+        setAdmin(data as AdminUser);
         setIsAuthenticated(true);
-      } catch (err) {
+      } catch (err: unknown) {
         setIsAuthenticated(false);
       }
     };
@@ -51,8 +80,15 @@ export function AdminLayout() {
     return <Navigate to="/admin/login" replace />;
   }
 
-  if (isAuthenticated && location.pathname === '/admin/login') {
-    return <Navigate to="/admin" replace />;
+  if (isAuthenticated && admin) {
+    if (location.pathname === '/admin/login') {
+      return <Navigate to={getRoleStartRoute(admin.role)} replace />;
+    }
+    
+    // Boundary check
+    if (!hasRoleAccess(admin.role, location.pathname)) {
+      return <Navigate to={getRoleStartRoute(admin.role)} replace />;
+    }
   }
 
   if (!isAuthenticated) {
@@ -65,10 +101,16 @@ export function AdminLayout() {
       apiClient.clearAuth();
       setIsAuthenticated(false);
       navigate('/admin/login');
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Logout failed');
     }
   };
+
+  const isSuperOrAdmin = admin?.role === 'super_admin' || admin?.role === 'admin';
+  const isEditor = admin?.role === 'editor';
+  const isTrainer = admin?.role === 'trainer';
+  const isReception = admin?.role === 'reception';
+  const showCMS = isSuperOrAdmin || isEditor;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex font-sans">
@@ -80,40 +122,55 @@ export function AdminLayout() {
         </div>
         
         <nav className="flex-1 py-6 px-4 space-y-8">
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Genel</h3>
-            <div className="space-y-1">
-              <NavLink to="/admin" end className={navLinkClass}>Dashboard</NavLink>
-              <NavLink to="/admin/settings" className={navLinkClass}>Ayarlar</NavLink>
+          {isSuperOrAdmin && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Genel</h3>
+              <div className="space-y-1">
+                <NavLink to="/admin" end className={navLinkClass}>Dashboard</NavLink>
+                <NavLink to="/admin/settings" className={navLinkClass}>Ayarlar</NavLink>
+              </div>
             </div>
-          </div>
+          )}
           
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">İçerik</h3>
-            <div className="space-y-1">
-              <NavLink to="/admin/homepage" className={navLinkClass}>Ana Sayfa</NavLink>
-              <NavLink to="/admin/branches" className={navLinkClass}>Branşlar</NavLink>
-              <NavLink to="/admin/trainers" className={navLinkClass}>Eğitmenler</NavLink>
-              <NavLink to="/admin/events" className={navLinkClass}>Etkinlikler</NavLink>
-              <NavLink to="/admin/media" className={navLinkClass}>Medya</NavLink>
+          {showCMS && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">İçerik</h3>
+              <div className="space-y-1">
+                <NavLink to="/admin/homepage" className={navLinkClass}>Ana Sayfa</NavLink>
+                <NavLink to="/admin/branches" className={navLinkClass}>Branşlar</NavLink>
+                <NavLink to="/admin/trainers" className={navLinkClass}>Eğitmenler</NavLink>
+                <NavLink to="/admin/events" className={navLinkClass}>Etkinlikler</NavLink>
+                <NavLink to="/admin/media" className={navLinkClass}>Medya</NavLink>
+              </div>
             </div>
-          </div>
+          )}
           
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
-            <div className="space-y-1">
-              {(admin?.role === 'super_admin' || admin?.role === 'admin') && (
+          {isSuperOrAdmin && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
+              <div className="space-y-1">
                 <NavLink to="/admin/members" className={navLinkClass}>Üyeler</NavLink>
-              )}
+              </div>
             </div>
-          </div>
+          )}
           
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Yakında</h3>
-            <div className="space-y-1">
-              {/* Other disabled items can go here */}
+          {isTrainer && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Eğitmen</h3>
+              <div className="space-y-1">
+                <NavLink to="/admin/my-members" className={navLinkClass}>Bana Atanan Üyeler</NavLink>
+              </div>
             </div>
-          </div>
+          )}
+
+          {isReception && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
+              <div className="space-y-1">
+                <NavLink to="/admin/reception" className={navLinkClass}>Resepsiyon</NavLink>
+              </div>
+            </div>
+          )}
         </nav>
         
         <div className="p-4 border-t border-white/10">
