@@ -239,8 +239,7 @@ class TrainerAccountController
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
 
-        $trainer_id = (int)$trainer_id;
-        if ($trainer_id <= 0) {
+        if (!is_int($trainer_id) || $trainer_id <= 0) {
             Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
         }
 
@@ -321,6 +320,7 @@ class TrainerAccountController
                     'trainer',
                     (int)$trainer_id,
                     [
+                        'trainer_id' => $trainer_id,
                         'account_id' => $admin_id,
                         'new_status' => $status
                     ]
@@ -347,8 +347,7 @@ class TrainerAccountController
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
 
-        $trainer_id = (int)$trainer_id;
-        if ($trainer_id <= 0) {
+        if (!is_int($trainer_id) || $trainer_id <= 0) {
             Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
         }
 
@@ -438,6 +437,7 @@ class TrainerAccountController
                     'trainer',
                     (int)$trainer_id,
                     [
+                        'trainer_id' => $trainer_id,
                         'account_id' => $admin_id
                     ]
                 );
