@@ -340,6 +340,22 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/admin/trainer-accounts/(\d+)/status$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\TrainerAccountController())->updateStatus((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/trainer-accounts/(\d+)/reset-password$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST') {
+            (new \Controllers\TrainerAccountController())->resetPassword((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for admin members endpoints
     if (preg_match('#^/api/admin/members/(\d+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();

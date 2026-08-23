@@ -233,5 +233,217 @@ class TrainerAccountController
             error_log('TrainerAccountController@create Exception: ' . $e->getMessage());
             Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
         }
+    public function updateStatus($trainer_id)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+
+        // Check content type
+        $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
+        if (strpos(strtolower($contentType), 'application/json') !== 0) {
+            Response::error('Yalnızca JSON kabul edilmektedir.', 'UNSUPPORTED_MEDIA_TYPE', 415);
+        }
+
+        // Check payload size limit (16 KB)
+        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+        if ($contentLength > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+        $input = file_get_contents('php://input');
+        if (strlen($input) > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+        $data = json_decode($input, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+        }
+
+        // Strict payload validation: only allow 'status' key
+        if (count($data) !== 1 || !array_key_exists('status', $data)) {
+            Response::error('Sadece status alanı gönderilebilir.', 'VALIDATION_ERROR', 422);
+        }
+
+        $status = $data['status'];
+        if ($status !== 'active' && $status !== 'inactive') {
+            Response::error('Geçersiz hesap durumu.', 'VALIDATION_ERROR', 422);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare("SELECT id, admin_id FROM trainers WHERE id = ? AND deleted_at IS NULL FOR UPDATE");
+            $stmt->execute([$trainer_id]);
+            $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$trainer) {
+                $this->db->rollBack();
+                Response::error('Eğitmen bulunamadı.', 'TRAINER_NOT_FOUND', 404);
+            }
+
+            if (empty($trainer['admin_id'])) {
+                $this->db->rollBack();
+                Response::error('Bu eğitmenin bağlı bir hesabı yok.', 'TRAINER_ACCOUNT_NOT_LINKED', 409);
+            }
+
+            $admin_id = (int)$trainer['admin_id'];
+            $stmt = $this->db->prepare("SELECT id, role, status FROM admins WHERE id = ? FOR UPDATE");
+            $stmt->execute([$admin_id]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || $admin['role'] !== 'trainer') {
+                $this->db->rollBack();
+                Response::error('Geçersiz veya yetkisiz hesap bağlantısı.', 'TRAINER_ACCOUNT_INVALID_LINK', 409);
+            }
+
+            if ($admin['status'] !== $status) {
+                $stmt = $this->db->prepare("UPDATE admins SET status = ?, updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$status, $admin_id]);
+
+                if ($stmt->rowCount() !== 1) {
+                    throw new \RuntimeException('Status update failed');
+                }
+            }
+
+            $this->db->commit();
+
+            // Audit
+            try {
+                $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+                AuditLogger::log(
+                    'trainer_account.status_update',
+                    $currentAdminId,
+                    'trainer',
+                    (int)$trainer_id,
+                    [
+                        'account_id' => $admin_id,
+                        'new_status' => $status
+                    ]
+                );
+            } catch (\Exception $e) {
+                error_log('AuditLogger failed during trainer account status update: ' . $e->getMessage());
+            }
+
+            Response::json([
+                'trainer_id' => (int)$trainer_id,
+                'account_id' => $admin_id,
+                'status' => $status
+            ]);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log('TrainerAccountController@updateStatus Exception: ' . $e->getMessage());
+            Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    public function resetPassword($trainer_id)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+
+        // Check content type
+        $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
+        if (strpos(strtolower($contentType), 'application/json') !== 0) {
+            Response::error('Yalnızca JSON kabul edilmektedir.', 'UNSUPPORTED_MEDIA_TYPE', 415);
+        }
+
+        // Check payload size limit (16 KB)
+        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+        if ($contentLength > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+        $input = file_get_contents('php://input');
+        if (strlen($input) > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+        $data = json_decode($input, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+        }
+
+        // Strict payload validation: only allow 'password' key
+        if (count($data) !== 1 || !array_key_exists('password', $data)) {
+            Response::error('Sadece password alanı gönderilebilir.', 'VALIDATION_ERROR', 422);
+        }
+
+        $password = $data['password'];
+        if (!is_string($password)) {
+            Response::error('Şifre geçerli bir metin olmalıdır.', 'VALIDATION_ERROR', 422);
+        }
+
+        $len = mb_strlen($password, 'UTF-8');
+        if ($len < 12 || $len > 256) {
+            Response::error('Şifre 12-256 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare("SELECT id, admin_id FROM trainers WHERE id = ? AND deleted_at IS NULL FOR UPDATE");
+            $stmt->execute([$trainer_id]);
+            $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$trainer) {
+                $this->db->rollBack();
+                Response::error('Eğitmen bulunamadı.', 'TRAINER_NOT_FOUND', 404);
+            }
+
+            if (empty($trainer['admin_id'])) {
+                $this->db->rollBack();
+                Response::error('Bu eğitmenin bağlı bir hesabı yok.', 'TRAINER_ACCOUNT_NOT_LINKED', 409);
+            }
+
+            $admin_id = (int)$trainer['admin_id'];
+            $stmt = $this->db->prepare("SELECT id, role FROM admins WHERE id = ? FOR UPDATE");
+            $stmt->execute([$admin_id]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || $admin['role'] !== 'trainer') {
+                $this->db->rollBack();
+                Response::error('Geçersiz veya yetkisiz hesap bağlantısı.', 'TRAINER_ACCOUNT_INVALID_LINK', 409);
+            }
+
+            $hashAlgo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
+            $password_hash = password_hash($password, $hashAlgo);
+            if ($password_hash === false) {
+                throw new \RuntimeException('Password hashing failed');
+            }
+
+            $stmt = $this->db->prepare("UPDATE admins SET password_hash = ?, password_changed_at = CURRENT_TIMESTAMP, updated_at = NOW() WHERE id = ?");
+            $stmt->execute([$password_hash, $admin_id]);
+
+            if ($stmt->rowCount() !== 1) {
+                throw new \RuntimeException('Password reset update failed');
+            }
+
+            $this->db->commit();
+
+            // Audit
+            try {
+                $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+                AuditLogger::log(
+                    'trainer_account.password_reset',
+                    $currentAdminId,
+                    'trainer',
+                    (int)$trainer_id,
+                    [
+                        'account_id' => $admin_id
+                    ]
+                );
+            } catch (\Exception $e) {
+                error_log('AuditLogger failed during trainer account password reset: ' . $e->getMessage());
+            }
+
+            Response::json([
+                'trainer_id' => (int)$trainer_id,
+                'account_id' => $admin_id,
+                'password_changed' => true
+            ]);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log('TrainerAccountController@resetPassword Exception: ' . $e->getMessage());
+            Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
+        }
     }
 }
