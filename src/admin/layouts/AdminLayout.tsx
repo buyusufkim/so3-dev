@@ -1,42 +1,7 @@
 import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
-
-export type AdminRole = 'super_admin' | 'admin' | 'editor' | 'trainer' | 'reception';
-
-export interface AdminUser {
-  id: number;
-  email: string;
-  role: AdminRole;
-  display_name: string;
-}
-
-export const getRoleStartRoute = (role: AdminRole): string => {
-  switch (role) {
-    case 'super_admin':
-    case 'admin':
-      return '/admin';
-    case 'editor':
-      return '/admin/homepage';
-    case 'trainer':
-      return '/admin/my-members';
-    case 'reception':
-      return '/admin/reception';
-    default:
-      return '/admin/login';
-  }
-};
-
-export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
-  if (role === 'super_admin' || role === 'admin') return true;
-  if (role === 'trainer') return pathname.startsWith('/admin/my-members');
-  if (role === 'reception') return pathname.startsWith('/admin/reception');
-  if (role === 'editor') {
-    const cmsRoutes = ['/admin/homepage', '/admin/branches', '/admin/trainers', '/admin/events', '/admin/media'];
-    return cmsRoutes.some(r => pathname === r || pathname.startsWith(r + '/'));
-  }
-  return false;
-};
+import { AdminUser, getRoleStartRoute, hasRoleAccess } from "../auth/roles";
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
