@@ -1,3 +1,5 @@
+import { adminApiFetch } from './adminDevFallback';
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -14,10 +16,10 @@ export class ApiError extends Error {
 
 export const apiClient = {
   csrfToken: null as string | null,
-
+  
   async getCsrf() {
     if (this.csrfToken) return this.csrfToken;
-    const res = await fetch('/api/auth/csrf');
+    const res = await adminApiFetch('/api/auth/csrf');
     const data = await res.json();
     this.csrfToken = data.data.token;
     return this.csrfToken;
@@ -49,7 +51,7 @@ export const apiClient = {
       headers
     };
 
-    const response = await fetch(endpoint, config);
+    const response = await adminApiFetch(endpoint, config);
     const json = await response.json().catch(() => ({}));
 
     if (!response.ok) {
