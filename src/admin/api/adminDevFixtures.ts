@@ -197,6 +197,87 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
+  const statusMatch = path.match(/^\/api\/admin\/trainer-accounts\/([1-9]\d*)\/status$/);
+  if (statusMatch && method === 'PATCH') {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlemi yapma yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+
+    const trainer_id = parseInt(statusMatch[1], 10);
+    
+    if (!reqBody || Object.keys(reqBody).length !== 1 || !('status' in reqBody)) {
+      return createError('Sadece status alanı gönderilebilir.', 422, 'VALIDATION_ERROR');
+    }
+
+    const status = reqBody.status;
+    if (status !== 'active' && status !== 'inactive') {
+      return createError('Geçersiz hesap durumu.', 422, 'VALIDATION_ERROR');
+    }
+
+    const trainer = mockTrainers.find(t => t.id === trainer_id);
+    if (!trainer) {
+      return createError('Eğitmen bulunamadı.', 404, 'TRAINER_NOT_FOUND');
+    }
+
+    const account = mockTrainerAccounts.find(a => a.trainer_id === trainer_id);
+    if (!account) {
+      return createError('Bu eğitmenin bağlı bir hesabı yok.', 409, 'TRAINER_ACCOUNT_NOT_LINKED');
+    }
+
+    account.status = status;
+    
+    return createResponse({
+      data: {
+        trainer_id,
+        account_id: account.id,
+        status
+      }
+    });
+  }
+
+  const pwdMatch = path.match(/^\/api\/admin\/trainer-accounts\/([1-9]\d*)\/reset-password$/);
+  if (pwdMatch && method === 'POST') {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlemi yapma yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+
+    const trainer_id = parseInt(pwdMatch[1], 10);
+
+    if (!reqBody || Object.keys(reqBody).length !== 1 || !('password' in reqBody)) {
+      return createError('Sadece password alanı gönderilebilir.', 422, 'VALIDATION_ERROR');
+    }
+
+    const password = reqBody.password;
+    if (typeof password !== 'string') {
+      return createError('Şifre geçerli bir metin olmalıdır.', 422, 'VALIDATION_ERROR');
+    }
+
+    const pwdLength = Array.from(password).length;
+    if (pwdLength < 12 || pwdLength > 256) {
+      return createError('Şifre 12-256 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+    }
+
+    const trainer = mockTrainers.find(t => t.id === trainer_id);
+    if (!trainer) {
+      return createError('Eğitmen bulunamadı.', 404, 'TRAINER_NOT_FOUND');
+    }
+
+    const account = mockTrainerAccounts.find(a => a.trainer_id === trainer_id);
+    if (!account) {
+      return createError('Bu eğitmenin bağlı bir hesabı yok.', 409, 'TRAINER_ACCOUNT_NOT_LINKED');
+    }
+
+    account.password_changed_at = new Date().toISOString();
+    
+    return createResponse({
+      data: {
+        trainer_id,
+        account_id: account.id,
+        password_changed: true
+      }
+    });
+  }
+
   // --- Members Endpoints ---
   if (path === '/api/admin/members') {
     if (method === 'GET') {

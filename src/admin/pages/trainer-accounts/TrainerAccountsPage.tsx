@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient, ApiError } from '../../api/client';
-import { TrainerAccountRow, isTrainerAccountRows } from './types';
+import { TrainerAccountRow, isTrainerAccountRows, isTrainerAccountStatusResponse, isTrainerAccountPasswordResponse } from './types';
 
 export function TrainerAccountsPage() {
   const [data, setData] = useState<TrainerAccountRow[]>([]);
@@ -21,6 +21,20 @@ export function TrainerAccountsPage() {
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const isUpdatingStatusRef = useRef(false);
+
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [selectedTrainerForPassword, setSelectedTrainerForPassword] = useState<{trainer: TrainerAccountRow['trainer'], account: NonNullable<TrainerAccountRow['account']>} | null>(null);
+  const [passwordFormData, setPasswordFormData] = useState({
+    password: '',
+    password_confirmation: ''
+  });
+  const [passwordFormError, setPasswordFormError] = useState<string | null>(null);
+  const [passwordFormSuccess, setPasswordFormSuccess] = useState<string | null>(null);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const isSubmittingPasswordRef = useRef(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -75,6 +89,123 @@ export function TrainerAccountsPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleToggleStatus = async (trainerId: number, currentStatus: 'active' | 'inactive') => {
+    if (isUpdatingStatusRef.current) return;
+    
+    const isActivating = currentStatus === 'inactive';
+    const confirmMsg = isActivating 
+      ? "Bu eğitmen hesabı aktifleştirilecek ve sisteme giriş yapabilecektir. Devam etmek istiyor musunuz?" 
+      : "Bu eğitmen hesabı pasife alınacak ve kullanıcı giriş yapamayacaktır. Devam etmek istiyor musunuz?";
+      
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsUpdatingStatus(true);
+    isUpdatingStatusRef.current = true;
+    setError(null);
+
+    try {
+      const payload = {
+        status: isActivating ? 'active' : 'inactive'
+      };
+      const json = await apiClient.patch(`/api/admin/trainer-accounts/${trainerId}/status`, payload);
+      
+      if (isTrainerAccountStatusResponse(json)) {
+        await fetchData();
+      } else {
+        setError('Hesap durumu güncellendi ancak sunucu yanıtı doğrulanamadı.');
+      }
+    } catch (error: unknown) {
+      let errMsg = 'Durum güncellenirken bilinmeyen bir hata oluştu.';
+      if (error instanceof ApiError) {
+        switch (error.code) {
+          case 'TRAINER_NOT_FOUND': errMsg = 'Eğitmen kaydı bulunamadı.'; break;
+          case 'TRAINER_ACCOUNT_NOT_LINKED': errMsg = 'Bu eğitmenin bağlı bir hesabı yok.'; break;
+          case 'TRAINER_ACCOUNT_INVALID_LINK': errMsg = 'Geçersiz veya yetkisiz hesap bağlantısı.'; break;
+          case 'VALIDATION_ERROR': errMsg = error.message || 'Gönderilen veriler geçersiz.'; break;
+          case 'FORBIDDEN': errMsg = 'Bu işlemi yapma yetkiniz yok.'; break;
+          default: errMsg = error.message || errMsg;
+        }
+      }
+      setError(errMsg);
+    } finally {
+      setIsUpdatingStatus(false);
+      isUpdatingStatusRef.current = false;
+    }
+  };
+
+  const handleOpenPasswordModal = (trainer: TrainerAccountRow['trainer'], account: NonNullable<TrainerAccountRow['account']>) => {
+    setSelectedTrainerForPassword({ trainer, account });
+    setPasswordFormData({ password: '', password_confirmation: '' });
+    setPasswordFormError(null);
+    setPasswordFormSuccess(null);
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleClosePasswordModal = () => {
+    setIsPasswordModalOpen(false);
+    setSelectedTrainerForPassword(null);
+    setPasswordFormData({ password: '', password_confirmation: '' });
+    setPasswordFormError(null);
+    setPasswordFormSuccess(null);
+  };
+
+  const handlePasswordInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPasswordFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmittingPasswordRef.current || !selectedTrainerForPassword) return;
+
+    setPasswordFormError(null);
+    setPasswordFormSuccess(null);
+
+    const { password, password_confirmation } = passwordFormData;
+
+    if (!password || Array.from(password).length < 12 || Array.from(password).length > 256) {
+      setPasswordFormError('Şifre 12-256 karakter arasında olmalıdır.');
+      return;
+    }
+
+    if (password !== password_confirmation) {
+      setPasswordFormError('Şifreler eşleşmiyor.');
+      return;
+    }
+
+    setIsSubmittingPassword(true);
+    isSubmittingPasswordRef.current = true;
+
+    try {
+      const payload = { password };
+      const json = await apiClient.post(`/api/admin/trainer-accounts/${selectedTrainerForPassword.trainer.id}/reset-password`, payload);
+      
+      if (isTrainerAccountPasswordResponse(json)) {
+        setPasswordFormData({ password: '', password_confirmation: '' });
+        await fetchData();
+        handleClosePasswordModal();
+      } else {
+        setPasswordFormError('Şifre yenilendi ancak sunucu yanıtı doğrulanamadı.');
+      }
+    } catch (error: unknown) {
+      let errMsg = 'Şifre yenilenirken bilinmeyen bir hata oluştu.';
+      if (error instanceof ApiError) {
+        switch (error.code) {
+          case 'TRAINER_NOT_FOUND': errMsg = 'Eğitmen kaydı bulunamadı.'; break;
+          case 'TRAINER_ACCOUNT_NOT_LINKED': errMsg = 'Bu eğitmenin bağlı bir hesabı yok.'; break;
+          case 'TRAINER_ACCOUNT_INVALID_LINK': errMsg = 'Geçersiz veya yetkisiz hesap bağlantısı.'; break;
+          case 'VALIDATION_ERROR': errMsg = error.message || 'Gönderilen veriler geçersiz.'; break;
+          case 'FORBIDDEN': errMsg = 'Bu işlemi yapma yetkiniz yok.'; break;
+          default: errMsg = error.message || errMsg;
+        }
+      }
+      setPasswordFormError(errMsg);
+    } finally {
+      setIsSubmittingPassword(false);
+      isSubmittingPasswordRef.current = false;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -245,6 +376,29 @@ export function TrainerAccountsPage() {
                         </div>
                       )}
                     </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(row.trainer.id, row.account!.status)}
+                        disabled={isUpdatingStatus}
+                        className={`flex-1 px-3 py-2 text-[10px] font-medium uppercase tracking-wider rounded transition-colors ${
+                          row.account.status === 'active' 
+                            ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
+                            : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
+                        }`}
+                      >
+                        {row.account.status === 'active' ? 'Hesabı Pasife Al' : 'Hesabı Aktifleştir'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPasswordModal(row.trainer, row.account!)}
+                        disabled={isUpdatingStatus}
+                        className="flex-1 px-3 py-2 text-[10px] font-medium uppercase tracking-wider rounded bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10 transition-colors"
+                      >
+                        Şifreyi Yenile
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-white/5 rounded p-3 border border-white/5 mt-4 border-dashed flex flex-col items-center justify-center py-6">
@@ -396,6 +550,108 @@ export function TrainerAccountsPage() {
                   className="px-6 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'Oluşturuluyor...' : 'Oluştur'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Modal */}
+      {isPasswordModalOpen && selectedTrainerForPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0F0F0F] border border-white/10 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-white/10 flex justify-between items-center bg-[#0A0A0A]">
+              <h3 className="text-lg font-medium text-white">Şifreyi Yenile</h3>
+              <button 
+                type="button"
+                onClick={handleClosePasswordModal} 
+                disabled={isSubmittingPassword}
+                className="text-white/40 hover:text-white transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+            
+            <form onSubmit={handlePasswordSubmit} className="p-5 space-y-4">
+              {passwordFormError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded text-sm">
+                  {passwordFormError}
+                </div>
+              )}
+              {passwordFormSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-2 rounded text-sm">
+                  {passwordFormSuccess}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">
+                  Eğitmen Profili
+                </label>
+                <div className="px-3 py-2 bg-white/5 border border-white/10 rounded text-white/70 text-sm">
+                  {selectedTrainerForPassword.trainer.name}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">
+                  Kullanıcı Adı
+                </label>
+                <div className="px-3 py-2 bg-white/5 border border-white/10 rounded text-white/70 text-sm font-mono">
+                  {selectedTrainerForPassword.account.username}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">
+                  Yeni Şifre
+                </label>
+                <input 
+                  type="password" 
+                  name="password"
+                  value={passwordFormData.password}
+                  onChange={handlePasswordInputChange}
+                  disabled={isSubmittingPassword}
+                  autoComplete="new-password"
+                  className="w-full bg-[#050505] border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30 transition-colors"
+                  placeholder="En az 12 karakter"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">
+                  Yeni Şifre (Tekrar)
+                </label>
+                <input 
+                  type="password" 
+                  name="password_confirmation"
+                  value={passwordFormData.password_confirmation}
+                  onChange={handlePasswordInputChange}
+                  disabled={isSubmittingPassword}
+                  autoComplete="new-password"
+                  className="w-full bg-[#050505] border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30 transition-colors"
+                  placeholder="Şifreyi onaylayın"
+                  required
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={handleClosePasswordModal}
+                  disabled={isSubmittingPassword}
+                  className="px-4 py-2 text-sm font-medium text-white/60 hover:text-white transition-colors"
+                >
+                  İptal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingPassword}
+                  className="px-6 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingPassword ? 'Yenileniyor...' : 'Yenile'}
                 </button>
               </div>
             </form>

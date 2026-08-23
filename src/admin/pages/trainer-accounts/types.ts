@@ -60,3 +60,35 @@ export function isTrainerAccountRows(obj: unknown): obj is TrainerAccountRow[] {
   if (!Array.isArray(obj)) return false;
   return obj.every(isTrainerAccountRow);
 }
+
+export interface TrainerAccountStatusResponse {
+  trainer_id: number;
+  account_id: number;
+  status: 'active' | 'inactive';
+}
+
+export interface TrainerAccountPasswordResponse {
+  trainer_id: number;
+  account_id: number;
+  password_changed: true;
+}
+
+export function isTrainerAccountStatusResponse(obj: unknown): obj is TrainerAccountStatusResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const r = obj as Record<string, unknown>;
+  return (
+    typeof r.trainer_id === 'number' && Number.isInteger(r.trainer_id) && r.trainer_id > 0 &&
+    typeof r.account_id === 'number' && Number.isInteger(r.account_id) && r.account_id > 0 &&
+    (r.status === 'active' || r.status === 'inactive')
+  );
+}
+
+export function isTrainerAccountPasswordResponse(obj: unknown): obj is TrainerAccountPasswordResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const r = obj as Record<string, unknown>;
+  return (
+    typeof r.trainer_id === 'number' && Number.isInteger(r.trainer_id) && r.trainer_id > 0 &&
+    typeof r.account_id === 'number' && Number.isInteger(r.account_id) && r.account_id > 0 &&
+    r.password_changed === true
+  );
+}
