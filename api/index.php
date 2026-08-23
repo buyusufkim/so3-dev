@@ -68,6 +68,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\TrainerController())->index();
         },
+        '/api/admin/trainer-accounts' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\TrainerAccountController())->index();
+        },
         '/api/admin/members' => function() {
             AuthMiddleware::handle();
             (new \Controllers\MemberController())->index();
@@ -123,6 +127,10 @@ $routes = [
         '/api/admin/trainers' => function() {
             AuthMiddleware::handle();
             (new \Controllers\TrainerController())->create();
+        },
+        '/api/admin/trainer-accounts' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\TrainerAccountController())->create();
         },
         '/api/admin/members' => function() {
             AuthMiddleware::handle();
