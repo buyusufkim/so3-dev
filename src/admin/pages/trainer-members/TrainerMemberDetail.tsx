@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { apiClient } from "../../api/client";
+import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "./types";
 
 export function TrainerMemberDetail() {
@@ -21,17 +21,19 @@ export function TrainerMemberDetail() {
         } else {
           throw new Error('Geçersiz sunucu yanıtı.');
         }
-      } catch (err) {
-        if (err instanceof Error) {
-          // If the error message from server is passed directly
-          if (err.message.includes('NOT_FOUND') || err.message.includes('404')) {
-            setError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
-          } else if (err.message.includes('TRAINER_PROFILE_NOT_LINKED')) {
+      } catch (err: unknown) {
+        if (err instanceof ApiError) {
+          if (err.code === 'TRAINER_PROFILE_NOT_LINKED') {
             setError('Aktif eğitmen profiliniz hesabınıza bağlanmamış.');
+          } else if (err.status === 403) {
+            setError('Bu alana erişim yetkiniz yok.');
+          } else if (err.status === 404 || err.code === 'NOT_FOUND') {
+            setError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
           } else {
-            // Check message directly (our apiClient puts response message into Error message if possible)
             setError(err.message || 'Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
           }
+        } else if (err instanceof Error) {
+          setError(err.message);
         } else {
           setError('Bilinmeyen bir hata oluştu.');
         }

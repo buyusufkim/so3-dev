@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { apiClient } from "../../api/client";
+import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberListItem, TrainerMembersResponse, isTrainerMembersResponse } from "./types";
 import { Search } from "lucide-react";
 
@@ -43,8 +43,18 @@ export function TrainerMembersList() {
       } else {
         throw new Error('Geçersiz sunucu yanıtı.');
       }
-    } catch (err) {
-      if (err instanceof Error) {
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.code === 'TRAINER_PROFILE_NOT_LINKED') {
+          setError('Aktif eğitmen profiliniz hesabınıza bağlanmamış.');
+        } else if (err.status === 403) {
+          setError('Bu alana erişim yetkiniz yok.');
+        } else if (err.status === 404 || err.code === 'NOT_FOUND') {
+          setError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
+        } else {
+          setError(err.message || 'Üyeler yüklenirken bir hata oluştu.');
+        }
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError('Bilinmeyen bir hata oluştu.');
@@ -82,8 +92,11 @@ export function TrainerMembersList() {
           <select
             value={status}
             onChange={(e) => {
-              setStatus(e.target.value as "" | "active" | "inactive");
-              setPage(1);
+              const val = e.target.value;
+              if (val === "" || val === "active" || val === "inactive") {
+                setStatus(val);
+                setPage(1);
+              }
             }}
             className="w-full bg-[#1A1A1A] border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#851C35] transition"
           >

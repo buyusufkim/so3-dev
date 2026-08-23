@@ -9,14 +9,20 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
 
   try {
     res = await fetch(endpoint, options);
-    // Vite SPA fallback returns 200 with HTML instead of JSON for non-existent backend routes
     const contentType = res.headers.get('content-type') || '';
+
+    // If it is explicitly JSON, it is a real API response (even 404, 502, 503)
+    if (contentType.includes('application/json')) {
+      return res;
+    }
+
+    // Vite SPA fallback returns 200 with HTML instead of JSON for non-existent backend routes
     if (res.status === 404 || res.status === 502 || res.status === 503) {
       needsFallback = true;
     } else if (contentType.includes('text/html')) {
       needsFallback = true;
     } else {
-      // It's a real JSON response (even if 401, 403, 422, etc.), return it
+      // It's a real response, return it
       return res;
     }
   } catch (e) {

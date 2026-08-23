@@ -50,7 +50,7 @@ export function isTrainerMemberListItem(value: unknown): value is TrainerMemberL
 
 export function isTrainerMemberDetail(value: unknown): value is TrainerMemberDetail {
   if (!isTrainerMemberListItem(value)) return false;
-  const item = value as unknown as Record<string, unknown>;
+  const item = value as Partial<TrainerMemberDetail>;
   return (
     (item.emergency_contact_name === null || typeof item.emergency_contact_name === 'string') &&
     (item.emergency_contact_phone === null || typeof item.emergency_contact_phone === 'string') &&
@@ -68,10 +68,10 @@ export function isTrainerMembersResponse(value: unknown): value is TrainerMember
   const p = data.pagination as Record<string, unknown>;
   if (!p || typeof p !== 'object') return false;
   if (
-    typeof p.total !== 'number' ||
-    typeof p.page !== 'number' ||
-    typeof p.per_page !== 'number' ||
-    typeof p.last_page !== 'number'
+    typeof p.total !== 'number' || !Number.isInteger(p.total) || p.total < 0 ||
+    typeof p.page !== 'number' || !Number.isInteger(p.page) || p.page < 1 ||
+    typeof p.per_page !== 'number' || !Number.isInteger(p.per_page) || p.per_page < 1 ||
+    typeof p.last_page !== 'number' || !Number.isInteger(p.last_page) || p.last_page < 1
   ) return false;
   
   return true;
