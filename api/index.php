@@ -352,6 +352,23 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    // Dynamic matching for trainer members endpoints
+    if (preg_match('#^/api/trainer/members$#', $requestUri)) {
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'GET') {
+            (new \Controllers\TrainerMemberController())->index();
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/trainer/members/(\d+)$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $id = (int)$matches[1];
+        if ($method === 'GET') {
+            (new \Controllers\TrainerMemberController())->show($id);
+            $matched = true;
+        }
+    }
+
     if (preg_match('#^/api/admin/site-settings/([^/]+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         $key = $matches[1];
