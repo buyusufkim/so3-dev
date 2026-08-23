@@ -32,6 +32,11 @@ if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
     CsrfMiddleware::handle();
 }
 
+// Admin namespace role firewall
+if (strpos($requestUri, '/api/admin/') === 0) {
+    AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+}
+
 $routes = [
     'GET' => [
         '/api/health' => function() {
