@@ -18,6 +18,12 @@ let mockMembers: Member[] = [
 ];
 
 let nextMemberId = 7;
+let nextAccountId = 3;
+
+let mockTrainerAccounts: Array<{ id: number; trainer_id: number; username: string; email: string; display_name: string; role: 'trainer'; status: 'active'|'inactive'; last_login_at: string | null; password_changed_at: string | null }> = [
+  { id: 1, trainer_id: 1, username: 'ahmet.yilmaz', email: 'ahmet@example.com', display_name: 'Ahmet Yılmaz', role: 'trainer', status: 'active', last_login_at: '2023-10-01 10:00:00', password_changed_at: null },
+];
+
 let currentDevRole = 'super_admin';
 
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
@@ -98,6 +104,83 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     let res = [...mockTrainers];
     if (status === 'active') res = res.filter(t => t.is_active);
     return createResponse({ data: res });
+  }
+
+  // --- Trainer Accounts Endpoints ---
+  if (path === '/api/admin/trainer-accounts') {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlemi yapma yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+
+    if (method === 'GET') {
+      const data = mockTrainers.map(trainer => {
+        const account = mockTrainerAccounts.find(a => a.trainer_id === trainer.id);
+        return {
+          trainer: {
+            id: trainer.id,
+            name: trainer.name,
+            slug: trainer.slug,
+            is_active: trainer.is_active
+          },
+          account: account ? {
+            id: account.id,
+            username: account.username,
+            email: account.email,
+            display_name: account.display_name,
+            role: account.role,
+            status: account.status,
+            last_login_at: account.last_login_at,
+            password_changed_at: account.password_changed_at
+          } : null
+        };
+      });
+      return createResponse(data);
+    }
+
+    if (method === 'POST') {
+      const trainer_id = Number(reqBody.trainer_id);
+      const username = String(reqBody.username || '');
+      const email = String(reqBody.email || '');
+      const display_name = String(reqBody.display_name || '');
+      const password = String(reqBody.password || '');
+
+      const trainer = mockTrainers.find(t => t.id === trainer_id);
+      if (!trainer) {
+        return createError('Eğitmen bulunamadı.', 404, 'TRAINER_NOT_FOUND');
+      }
+
+      if (mockTrainerAccounts.some(a => a.trainer_id === trainer_id)) {
+        return createError('Bu eğitmen zaten bir hesaba bağlı.', 409, 'TRAINER_ACCOUNT_ALREADY_LINKED');
+      }
+
+      if (mockTrainerAccounts.some(a => a.username === username || a.email === email)) {
+        return createError('Kullanıcı adı veya e-posta adresi zaten kullanımda.', 409, 'ACCOUNT_IDENTITY_CONFLICT');
+      }
+
+      const newAccount = {
+        id: nextAccountId++,
+        trainer_id,
+        username,
+        email,
+        display_name,
+        role: 'trainer' as const,
+        status: 'active' as const,
+        last_login_at: null,
+        password_changed_at: null
+      };
+
+      mockTrainerAccounts.push(newAccount);
+
+      return createResponse({
+        id: newAccount.id,
+        trainer_id: newAccount.trainer_id,
+        username: newAccount.username,
+        email: newAccount.email,
+        display_name: newAccount.display_name,
+        role: newAccount.role,
+        status: newAccount.status
+      }, 201);
+    }
   }
 
   // --- Members Endpoints ---

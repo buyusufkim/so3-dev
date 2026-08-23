@@ -120,6 +120,7 @@ export function AdminLayout() {
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
               <div className="space-y-1">
                 <NavLink to="/admin/members" className={navLinkClass}>Üyeler</NavLink>
+                <NavLink to="/admin/trainer-accounts" className={navLinkClass}>Eğitmen Hesapları</NavLink>
               </div>
             </div>
           )}

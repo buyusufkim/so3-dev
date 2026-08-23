@@ -35,6 +35,7 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
     const isTarget = endpoint.startsWith('/api/auth/') ||
                      endpoint.startsWith('/api/admin/members') ||
                      endpoint.startsWith('/api/admin/trainers') ||
+                     endpoint.startsWith('/api/admin/trainer-accounts') ||
                      endpoint.startsWith('/api/admin/dashboard') ||
                      endpoint.startsWith('/api/trainer/members');
                      

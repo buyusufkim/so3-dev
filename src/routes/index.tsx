@@ -22,6 +22,7 @@ const AdminTrainerEditor = lazy(() => import("../admin/pages/trainers/AdminTrain
 const AdminMembersList = lazy(() => import("../admin/pages/members/AdminMembersList").then(m => ({ default: m.AdminMembersList })));
 const AdminMemberEditor = lazy(() => import("../admin/pages/members/AdminMemberEditor").then(m => ({ default: m.AdminMemberEditor })));
 const AdminSettings = lazy(() => import("../admin/pages/settings/AdminSettings").then(m => ({ default: m.AdminSettings })));
+const TrainerAccountsPage = lazy(() => import("../admin/pages/trainer-accounts/TrainerAccountsPage").then(m => ({ default: m.TrainerAccountsPage })));
 const TrainerMembersList = lazy(() => import("../admin/pages/trainer-members/TrainerMembersList").then(m => ({ default: m.TrainerMembersList })));
 const TrainerMemberDetail = lazy(() => import("../admin/pages/trainer-members/TrainerMemberDetail").then(m => ({ default: m.TrainerMemberDetail })));
 const ReceptionPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.ReceptionPlaceholder })));
@@ -139,6 +140,10 @@ const router = createBrowserRouter([
       {
         path: "members",
         element: <AdminSuspense><AdminMembersList /></AdminSuspense>,
+      },
+      {
+        path: "trainer-accounts",
+        element: <AdminSuspense><TrainerAccountsPage /></AdminSuspense>,
       },
       {
         path: "members/new",
