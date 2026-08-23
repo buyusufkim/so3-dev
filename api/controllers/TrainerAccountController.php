@@ -233,9 +233,16 @@ class TrainerAccountController
             error_log('TrainerAccountController@create Exception: ' . $e->getMessage());
             Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
         }
+    }
+
     public function updateStatus($trainer_id)
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
+
+        $trainer_id = (int)$trainer_id;
+        if ($trainer_id <= 0) {
+            Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
+        }
 
         // Check content type
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
@@ -339,6 +346,11 @@ class TrainerAccountController
     public function resetPassword($trainer_id)
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
+
+        $trainer_id = (int)$trainer_id;
+        if ($trainer_id <= 0) {
+            Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
+        }
 
         // Check content type
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
