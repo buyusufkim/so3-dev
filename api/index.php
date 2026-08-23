@@ -410,6 +410,43 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
+
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/training-programs$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainingProgramController();
+        if ($method === 'GET') {
+            $controller->index($id);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->create($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/training-programs/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainingProgramController();
+        if ($method === 'GET') {
+            $controller->show($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/training-programs/([1-9]\d*)/restore$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST') {
+            (new \Controllers\TrainingProgramController())->restore((int)$matches[1]);
+            $matched = true;
+        }
+    }
 }
 
 if (!$matched) {
