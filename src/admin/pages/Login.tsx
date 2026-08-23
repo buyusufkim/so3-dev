@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../api/client";
-import { AdminRole, getRoleStartRoute } from "../auth/roles";
+import { getRoleStartRoute, isAdminUser } from "../auth/roles";
 
 export function Login() {
   const [username, setUsername] = useState("");
@@ -18,9 +18,15 @@ export function Login() {
     try {
       await apiClient.post('/api/auth/login', { username, password });
       apiClient.clearAuth();
-      const meData = await apiClient.get('/api/auth/me') as { role: string };
-      const startRoute = getRoleStartRoute(meData.role as AdminRole);
-      navigate(startRoute, { replace: true });
+      const meData = await apiClient.get('/api/auth/me');
+      
+      if (isAdminUser(meData)) {
+        const startRoute = getRoleStartRoute(meData.role);
+        navigate(startRoute, { replace: true });
+      } else {
+        apiClient.clearAuth();
+        setError('Oturum bilgileri doğrulanamadı.');
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || 'Giriş bilgileri geçersiz.');

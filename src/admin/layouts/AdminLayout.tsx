@@ -1,7 +1,7 @@
 import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
-import { AdminUser, getRoleStartRoute, hasRoleAccess } from "../auth/roles";
+import { AdminUser, getRoleStartRoute, hasRoleAccess, isAdminUser } from "../auth/roles";
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -19,8 +19,13 @@ export function AdminLayout() {
     const checkAuth = async () => {
       try {
         const data = await apiClient.get('/api/auth/me');
-        setAdmin(data as AdminUser);
-        setIsAuthenticated(true);
+        if (isAdminUser(data)) {
+          setAdmin(data);
+          setIsAuthenticated(true);
+        } else {
+          setAdmin(null);
+          setIsAuthenticated(false);
+        }
       } catch (err: unknown) {
         setIsAuthenticated(false);
       }

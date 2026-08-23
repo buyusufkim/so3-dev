@@ -7,6 +7,23 @@ export interface AdminUser {
   display_name: string;
 }
 
+export function isAdminRole(value: unknown): value is AdminRole {
+  return typeof value === 'string' && ['super_admin', 'admin', 'editor', 'trainer', 'reception'].includes(value);
+}
+
+export function isAdminUser(value: unknown): value is AdminUser {
+  if (!value || typeof value !== 'object') return false;
+  
+  const user = value as Record<string, unknown>;
+  
+  if (typeof user.id !== 'number' || !Number.isInteger(user.id) || user.id <= 0) return false;
+  if (typeof user.email !== 'string') return false;
+  if (typeof user.display_name !== 'string') return false;
+  if (!isAdminRole(user.role)) return false;
+  
+  return true;
+}
+
 export const getRoleStartRoute = (role: AdminRole): string => {
   switch (role) {
     case 'super_admin':
