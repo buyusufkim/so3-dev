@@ -134,15 +134,27 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
           } : null
         };
       });
-      return createResponse(data);
+      return createResponse({ data });
     }
 
     if (method === 'POST') {
-      const trainer_id = Number(reqBody.trainer_id);
-      const username = String(reqBody.username || '');
-      const email = String(reqBody.email || '');
-      const display_name = String(reqBody.display_name || '');
-      const password = String(reqBody.password || '');
+      const { trainer_id, username, email, display_name, password } = reqBody;
+
+      if (typeof trainer_id !== 'number' || !Number.isInteger(trainer_id) || trainer_id <= 0) {
+        return createError('Geçerli bir eğitmen ID gereklidir.', 422, 'VALIDATION_ERROR');
+      }
+      if (typeof username !== 'string' || username.length < 3 || username.length > 50 || !/^[A-Za-z0-9._-]+$/.test(username)) {
+        return createError('Kullanıcı adı 3-50 karakter uzunluğunda olmalı ve sadece harf, sayı, nokta, tire veya alt çizgi içermelidir.', 422, 'VALIDATION_ERROR');
+      }
+      if (typeof email !== 'string' || email.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return createError('Geçerli bir e-posta adresi gereklidir (maksimum 100 karakter).', 422, 'VALIDATION_ERROR');
+      }
+      if (typeof display_name !== 'string' || Array.from(display_name).length < 2 || Array.from(display_name).length > 100) {
+        return createError('Görünen ad 2-100 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+      }
+      if (typeof password !== 'string' || Array.from(password).length < 12 || Array.from(password).length > 256) {
+        return createError('Şifre 12-256 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+      }
 
       const trainer = mockTrainers.find(t => t.id === trainer_id);
       if (!trainer) {
@@ -172,13 +184,15 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       mockTrainerAccounts.push(newAccount);
 
       return createResponse({
-        id: newAccount.id,
-        trainer_id: newAccount.trainer_id,
-        username: newAccount.username,
-        email: newAccount.email,
-        display_name: newAccount.display_name,
-        role: newAccount.role,
-        status: newAccount.status
+        data: {
+          id: newAccount.id,
+          trainer_id: newAccount.trainer_id,
+          username: newAccount.username,
+          email: newAccount.email,
+          display_name: newAccount.display_name,
+          role: newAccount.role,
+          status: newAccount.status
+        }
       }, 201);
     }
   }

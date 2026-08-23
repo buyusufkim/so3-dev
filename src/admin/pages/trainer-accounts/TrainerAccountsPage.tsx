@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient, ApiError } from '../../api/client';
-import { TrainerAccountRow } from './types';
+import { TrainerAccountRow, isTrainerAccountRows } from './types';
 
 export function TrainerAccountsPage() {
   const [data, setData] = useState<TrainerAccountRow[]>([]);
@@ -27,14 +27,13 @@ export function TrainerAccountsPage() {
     setError(null);
     try {
       const json = await apiClient.get('/api/admin/trainer-accounts');
-      if (Array.isArray(json)) {
+      if (isTrainerAccountRows(json)) {
         setData(json);
-      } else if (json.data && Array.isArray(json.data)) {
-        setData(json.data);
       } else {
         setData([]);
+        setError('Eğitmen hesabı verisi doğrulanamadı.');
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
       setError('Veriler yüklenirken bir sorun oluştu.');
     } finally {
       setIsLoading(false);
@@ -86,7 +85,10 @@ export function TrainerAccountsPage() {
     setFormSuccess(null);
 
     // Client side validation
-    const { username, email, display_name, password, password_confirmation } = formData;
+    const username = formData.username.trim();
+    const email = formData.email.trim();
+    const display_name = formData.display_name.trim();
+    const { password, password_confirmation } = formData;
     
     if (!username || username.length < 3 || username.length > 50 || !/^[A-Za-z0-9._-]+$/.test(username)) {
       setFormError('Kullanıcı adı 3-50 karakter uzunluğunda olmalı ve sadece harf, sayı, nokta, tire veya alt çizgi içermelidir.');
@@ -137,16 +139,14 @@ export function TrainerAccountsPage() {
         password_confirmation: ''
       }));
 
-      // Reload list and close after brief delay
-      fetchData();
-      setTimeout(() => {
-        handleCloseModal();
-      }, 1500);
+      // Reload list and close immediately
+      await fetchData();
+      handleCloseModal();
 
-    } catch (e: any) {
+    } catch (error: unknown) {
       let errMsg = 'Bilinmeyen bir hata oluştu.';
-      if (e instanceof ApiError) {
-        switch (e.code) {
+      if (error instanceof ApiError) {
+        switch (error.code) {
           case 'TRAINER_ACCOUNT_ALREADY_LINKED':
             errMsg = 'Bu eğitmen zaten bir hesaba bağlı.';
             break;
@@ -160,13 +160,11 @@ export function TrainerAccountsPage() {
             errMsg = 'Bu işlemi yapma yetkiniz yok.';
             break;
           case 'VALIDATION_ERROR':
-            errMsg = e.message || 'Gönderilen veriler geçersiz.';
+            errMsg = error.message || 'Gönderilen veriler geçersiz.';
             break;
           default:
-            errMsg = e.message || errMsg;
+            errMsg = error.message || errMsg;
         }
-      } else {
-        errMsg = e.message || errMsg;
       }
       setFormError(errMsg);
     } finally {
