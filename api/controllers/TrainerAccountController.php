@@ -104,7 +104,7 @@ class TrainerAccountController
         $password = isset($data['password']) ? $data['password'] : null;
 
         if (
-            ($trainer_id !== null && !is_int($trainer_id) && !is_string($trainer_id) && !is_float($trainer_id)) ||
+            ($trainer_id !== null && !is_int($trainer_id)) ||
             ($username !== null && !is_string($username)) ||
             ($email !== null && !is_string($email)) ||
             ($display_name !== null && !is_string($display_name)) ||
@@ -118,11 +118,7 @@ class TrainerAccountController
         $display_name = $display_name !== null ? trim($display_name) : null;
 
         // Validations
-        if (!is_int($trainer_id) && (!is_numeric($trainer_id) || (int)$trainer_id != $trainer_id)) {
-            Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
-        }
-        $trainer_id = (int)$trainer_id;
-        if ($trainer_id <= 0) {
+        if (!is_int($trainer_id) || $trainer_id <= 0) {
             Response::error('Geçerli bir eğitmen ID gereklidir.', 'VALIDATION_ERROR', 422);
         }
 
@@ -134,11 +130,11 @@ class TrainerAccountController
             Response::error('Geçerli bir e-posta adresi gereklidir (maksimum 100 karakter).', 'VALIDATION_ERROR', 422);
         }
 
-        if (!$display_name || strlen($display_name) < 2 || strlen($display_name) > 100) {
+        if (!$display_name || mb_strlen($display_name, 'UTF-8') < 2 || mb_strlen($display_name, 'UTF-8') > 100) {
             Response::error('Görünen ad 2-100 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
         }
 
-        if (!$password || strlen($password) < 12 || strlen($password) > 256) {
+        if (!$password || mb_strlen($password, 'UTF-8') < 12 || mb_strlen($password, 'UTF-8') > 256) {
             Response::error('Şifre 12-256 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
         }
 
@@ -171,6 +167,9 @@ class TrainerAccountController
             // Hash password
             $hashAlgo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
             $password_hash = password_hash($password, $hashAlgo);
+            if ($password_hash === false) {
+                throw new \RuntimeException('Password hashing failed');
+            }
 
             // Create admin
             $stmt = $this->db->prepare("
@@ -183,6 +182,10 @@ class TrainerAccountController
             // Link trainer
             $stmt = $this->db->prepare("UPDATE trainers SET admin_id = ?, updated_at = NOW() WHERE id = ?");
             $stmt->execute([$admin_id, $trainer_id]);
+            
+            if ($stmt->rowCount() !== 1) {
+                throw new \RuntimeException('Trainer link update failed');
+            }
 
             $this->db->commit();
 
@@ -207,14 +210,23 @@ class TrainerAccountController
             Response::json([
                 'id' => (int)$admin_id,
                 'trainer_id' => (int)$trainer_id,
-                'username' => $username,
+                'username' => $username,                
                 'email' => $email,
                 'display_name' => $display_name,
                 'role' => 'trainer',
                 'status' => 'active'
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (\PDOException $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            if ($e->getCode() == 23000 && isset($e->errorInfo[1]) && $e->errorInfo[1] == 1062) {
+                Response::error('Kullanıcı adı veya e-posta adresi zaten kullanımda.', 'ACCOUNT_IDENTITY_CONFLICT', 409);
+            }
+            error_log('TrainerAccountController@create PDOException: ' . $e->getMessage());
+            Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
+        } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
