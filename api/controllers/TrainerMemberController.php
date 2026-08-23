@@ -4,7 +4,6 @@ namespace Controllers;
 
 use Core\Database;
 use Core\Response;
-use Core\AuditLogger;
 use Middleware\AuthMiddleware;
 use PDO;
 
@@ -35,31 +34,52 @@ class TrainerMemberController {
         return (int)$trainer['id'];
     }
 
+    private function validatePaginationParam($value, $default, $min, $max = null) {
+        if ($value === null) return $default;
+        if (is_array($value) || is_bool($value) || is_object($value)) return false;
+        
+        $val = (string)$value;
+        $filtered = filter_var($val, FILTER_VALIDATE_INT);
+        
+        if ($filtered === false) return false;
+        if ((string)$filtered !== $val) return false;
+        if ($filtered < $min) return false;
+        if ($max !== null && $filtered > $max) return false;
+        
+        return $filtered;
+    }
+
     public function index() {
+        AuthMiddleware::hasRole(['trainer']);
+        
         $trainerId = $this->getTrainerProfileId();
 
-        $page = isset($_GET['page']) ? $_GET['page'] : 1;
-        $perPage = isset($_GET['per_page']) ? $_GET['per_page'] : 20;
+        $pageInput = isset($_GET['page']) ? $_GET['page'] : null;
+        $perPageInput = isset($_GET['per_page']) ? $_GET['per_page'] : null;
         
-        // Strict validation for pagination
-        if (filter_var($page, FILTER_VALIDATE_INT) === false || (int)$page < 1) {
+        $page = $this->validatePaginationParam($pageInput, 1, 1);
+        $perPage = $this->validatePaginationParam($perPageInput, 20, 1, 100);
+
+        if ($page === false) {
             Response::error('Geçersiz sayfa numarası', 'VALIDATION_ERROR', 422);
         }
-        if (filter_var($perPage, FILTER_VALIDATE_INT) === false || (int)$perPage < 1 || (int)$perPage > 100) {
+        if ($perPage === false) {
             Response::error('Geçersiz per_page değeri', 'VALIDATION_ERROR', 422);
         }
         
-        $page = (int)$page;
-        $perPage = (int)$perPage;
-        
-        $status = $_GET['status'] ?? null;
-        if ($status !== null && !in_array($status, ['active', 'inactive'])) {
-            Response::error('Geçersiz durum', 'VALIDATION_ERROR', 422);
+        $status = isset($_GET['status']) ? $_GET['status'] : null;
+        if ($status !== null) {
+            if (is_array($status) || !is_string($status) || !in_array($status, ['active', 'inactive'])) {
+                Response::error('Geçersiz durum', 'VALIDATION_ERROR', 422);
+            }
         }
 
-        $q = $_GET['q'] ?? null;
-        if ($q !== null && is_array($q)) {
-            Response::error('Geçersiz arama parametresi', 'VALIDATION_ERROR', 422);
+        $q = isset($_GET['q']) ? $_GET['q'] : null;
+        if ($q !== null) {
+            if (is_array($q) || is_bool($q) || is_object($q)) {
+                Response::error('Geçersiz arama parametresi', 'VALIDATION_ERROR', 422);
+            }
+            $q = trim((string)$q);
         }
 
         $conditions = ['m.trainer_id = ?', 'm.deleted_at IS NULL'];
@@ -97,15 +117,30 @@ class TrainerMemberController {
             FROM members m
             WHERE $where
             ORDER BY m.id DESC
-            LIMIT $perPage OFFSET $offset
+            LIMIT ? OFFSET ?
         ";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        
+        $paramIndex = 1;
+        foreach ($params as $param) {
+            // All where-clause parameters here happen to be strings or can be bound as default strings
+            $stmt->bindValue($paramIndex++, $param);
+        }
+        $stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);
+        $stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Normalize response types
+        $normalizedItems = array_map(function($item) {
+            $item['id'] = (int)$item['id'];
+            return $item;
+        }, $items);
 
         Response::json([
-            'items' => $items,
+            'items' => $normalizedItems,
             'pagination' => [
                 'total' => (int)$total,
                 'page' => $page,
@@ -116,12 +151,21 @@ class TrainerMemberController {
     }
 
     public function show($id) {
+        AuthMiddleware::hasRole(['trainer']);
+        
         $trainerId = $this->getTrainerProfileId();
         
-        // Ensure ID is positive integer
-        if (filter_var($id, FILTER_VALIDATE_INT) === false || (int)$id < 1) {
+        if (is_array($id) || is_bool($id) || is_object($id)) {
             Response::error('Geçersiz ID', 'VALIDATION_ERROR', 422);
         }
+
+        $idStr = (string)$id;
+        $filteredId = filter_var($idStr, FILTER_VALIDATE_INT);
+        if ($filteredId === false || (string)$filteredId !== $idStr || $filteredId < 1) {
+            Response::error('Geçersiz ID', 'VALIDATION_ERROR', 422);
+        }
+
+        $idInt = (int)$filteredId;
 
         $sql = "
             SELECT 
@@ -134,16 +178,18 @@ class TrainerMemberController {
         ";
         
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([$id, $trainerId]);
+        $stmt->bindValue(1, $idInt, PDO::PARAM_INT);
+        $stmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $stmt->execute();
+        
         $member = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$member) {
             Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
         }
         
-        if (class_exists('Core\AuditLogger')) {
-            AuditLogger::log('member_view', 'trainer read member', $member['id'], $_SESSION['admin_id'] ?? null);
-        }
+        // Normalize
+        $member['id'] = (int)$member['id'];
 
         Response::json($member);
     }
