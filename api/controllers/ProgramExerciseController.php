@@ -41,10 +41,13 @@ class ProgramExerciseController {
         return $data;
     }
 
-    private function validateProgramExists($programId) {
-        $stmt = $this->db->prepare("SELECT id FROM training_programs WHERE id = ? AND deleted_at IS NULL");
+    private function validateProgramExists($programId, $forUpdate = false) {
+        $sql = "SELECT id, deleted_at FROM training_programs WHERE id = ?";
+        if ($forUpdate) $sql .= " FOR UPDATE";
+        $stmt = $this->db->prepare($sql);
         $stmt->execute([$programId]);
-        if (!$stmt->fetchColumn()) {
+        $program = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$program || $program['deleted_at'] !== null) {
             if ($this->db->inTransaction()) { $this->db->rollBack(); }
             Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
         }
@@ -112,7 +115,7 @@ class ProgramExerciseController {
 
         $sets = array_key_exists('sets', $val) ? $val['sets'] : null;
         if ($sets !== null) {
-            if (!is_int($sets) || $sets < 0 || $sets > 65535) {
+            if (!is_int($sets) || $sets < 1 || $sets > 65535) {
                 Response::error("sets geçersiz.", 'VALIDATION_ERROR', 422);
             }
         }
@@ -129,7 +132,7 @@ class ProgramExerciseController {
 
         $duration_seconds = array_key_exists('duration_seconds', $val) ? $val['duration_seconds'] : null;
         if ($duration_seconds !== null) {
-            if (!is_int($duration_seconds) || $duration_seconds < 0 || $duration_seconds > 4294967295) {
+            if (!is_int($duration_seconds) || $duration_seconds < 1 || $duration_seconds > 4294967295) {
                 Response::error("duration_seconds geçersiz.", 'VALIDATION_ERROR', 422);
             }
         }
@@ -152,13 +155,13 @@ class ProgramExerciseController {
         }
 
         $sort_order = array_key_exists('sort_order', $val) ? $val['sort_order'] : 0;
-        if (!is_int($sort_order) || $sort_order < 0) {
-            Response::error("sort_order geçerli bir pozitif tam sayı olmalıdır.", 'VALIDATION_ERROR', 422);
+        if (!is_int($sort_order) || $sort_order < 0 || $sort_order > 2147483647) {
+            Response::error("sort_order 0 veya daha büyük tam sayı olmalıdır.", 'VALIDATION_ERROR', 422);
         }
 
         try {
             $this->db->beginTransaction();
-            $this->validateProgramExists($programId);
+            $this->validateProgramExists($programId, true);
 
             $stmt = $this->db->prepare("
                 INSERT INTO program_exercises 
@@ -222,17 +225,25 @@ class ProgramExerciseController {
         try {
             $this->db->beginTransaction();
             
-            $stmt = $this->db->prepare("SELECT program_id FROM program_exercises WHERE id = ? FOR UPDATE");
+            $stmt = $this->db->prepare("SELECT program_id, exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order FROM program_exercises WHERE id = ? FOR UPDATE");
             $stmt->execute([$id]);
-            $programId = $stmt->fetchColumn();
+            $currentExercise = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-            if (!$programId) {
+            if (!$currentExercise) {
                 if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Egzersiz bulunamadı.", 'NOT_FOUND', 404);
             }
             
-            $programId = (int)$programId;
-            $this->validateProgramExists($programId);
+            $programId = (int)$currentExercise['program_id'];
+            $this->validateProgramExists($programId, true);
+
+            $curr_exercise_name = $currentExercise['exercise_name'];
+            $curr_sets = $currentExercise['sets'] !== null ? (int)$currentExercise['sets'] : null;
+            $curr_repetitions = $currentExercise['repetitions'];
+            $curr_duration = $currentExercise['duration_seconds'] !== null ? (int)$currentExercise['duration_seconds'] : null;
+            $curr_rest = $currentExercise['rest_seconds'] !== null ? (int)$currentExercise['rest_seconds'] : null;
+            $curr_instructions = $currentExercise['instructions'];
+            $curr_sort = (int)$currentExercise['sort_order'];
 
             $updates = [];
             $params = [];
@@ -249,20 +260,24 @@ class ProgramExerciseController {
                     if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("exercise_name 1-160 karakter arasında olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
-                $updates[] = "exercise_name = ?";
-                $params[] = $val['exercise_name'];
-                $changedFields[] = 'exercise_name';
+                if ($val['exercise_name'] !== $curr_exercise_name) {
+                    $updates[] = "exercise_name = ?";
+                    $params[] = $val['exercise_name'];
+                    $changedFields[] = 'exercise_name';
+                }
             }
 
             if (array_key_exists('sets', $val)) {
                 $sets = $val['sets'];
-                if ($sets !== null && (!is_int($sets) || $sets < 0 || $sets > 65535)) {
+                if ($sets !== null && (!is_int($sets) || $sets < 1 || $sets > 65535)) {
                     if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("sets geçersiz.", 'VALIDATION_ERROR', 422);
                 }
-                $updates[] = "sets = ?";
-                $params[] = $sets;
-                $changedFields[] = 'sets';
+                if ($sets !== $curr_sets) {
+                    $updates[] = "sets = ?";
+                    $params[] = $sets;
+                    $changedFields[] = 'sets';
+                }
             }
 
             if (array_key_exists('repetitions', $val)) {
@@ -277,20 +292,24 @@ class ProgramExerciseController {
                         Response::error("repetitions çok uzun.", 'VALIDATION_ERROR', 422);
                     }
                 }
-                $updates[] = "repetitions = ?";
-                $params[] = $repetitions;
-                $changedFields[] = 'repetitions';
+                if ($repetitions !== $curr_repetitions) {
+                    $updates[] = "repetitions = ?";
+                    $params[] = $repetitions;
+                    $changedFields[] = 'repetitions';
+                }
             }
 
             if (array_key_exists('duration_seconds', $val)) {
                 $duration_seconds = $val['duration_seconds'];
-                if ($duration_seconds !== null && (!is_int($duration_seconds) || $duration_seconds < 0 || $duration_seconds > 4294967295)) {
+                if ($duration_seconds !== null && (!is_int($duration_seconds) || $duration_seconds < 1 || $duration_seconds > 4294967295)) {
                     if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("duration_seconds geçersiz.", 'VALIDATION_ERROR', 422);
                 }
-                $updates[] = "duration_seconds = ?";
-                $params[] = $duration_seconds;
-                $changedFields[] = 'duration_seconds';
+                if ($duration_seconds !== $curr_duration) {
+                    $updates[] = "duration_seconds = ?";
+                    $params[] = $duration_seconds;
+                    $changedFields[] = 'duration_seconds';
+                }
             }
 
             if (array_key_exists('rest_seconds', $val)) {
@@ -299,9 +318,11 @@ class ProgramExerciseController {
                     if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("rest_seconds geçersiz.", 'VALIDATION_ERROR', 422);
                 }
-                $updates[] = "rest_seconds = ?";
-                $params[] = $rest_seconds;
-                $changedFields[] = 'rest_seconds';
+                if ($rest_seconds !== $curr_rest) {
+                    $updates[] = "rest_seconds = ?";
+                    $params[] = $rest_seconds;
+                    $changedFields[] = 'rest_seconds';
+                }
             }
 
             if (array_key_exists('instructions', $val)) {
@@ -316,20 +337,24 @@ class ProgramExerciseController {
                         Response::error("instructions çok uzun.", 'VALIDATION_ERROR', 422);
                     }
                 }
-                $updates[] = "instructions = ?";
-                $params[] = $instructions;
-                $changedFields[] = 'instructions';
+                if ($instructions !== $curr_instructions) {
+                    $updates[] = "instructions = ?";
+                    $params[] = $instructions;
+                    $changedFields[] = 'instructions';
+                }
             }
 
             if (array_key_exists('sort_order', $val)) {
                 $sort_order = $val['sort_order'];
-                if (!is_int($sort_order) || $sort_order < 0) {
+                if (!is_int($sort_order) || $sort_order < 0 || $sort_order > 2147483647) {
                     if ($this->db->inTransaction()) { $this->db->rollBack(); }
-                    Response::error("sort_order geçerli bir pozitif tam sayı olmalıdır.", 'VALIDATION_ERROR', 422);
+                    Response::error("sort_order 0 veya daha büyük tam sayı olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
-                $updates[] = "sort_order = ?";
-                $params[] = $sort_order;
-                $changedFields[] = 'sort_order';
+                if ($sort_order !== $curr_sort) {
+                    $updates[] = "sort_order = ?";
+                    $params[] = $sort_order;
+                    $changedFields[] = 'sort_order';
+                }
             }
 
             if (!empty($updates)) {
@@ -337,24 +362,24 @@ class ProgramExerciseController {
                 $params[] = $id;
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute($params);
+                
+                $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+                try {
+                    AuditLogger::log(
+                        'program_exercise.update',
+                        $currentAdminId,
+                        'program_exercise',
+                        $id,
+                        [
+                            'exercise_id' => $id,
+                            'program_id' => $programId,
+                            'changed_fields' => $changedFields
+                        ]
+                    );
+                } catch (\Throwable $e) {}
             }
 
             $this->db->commit();
-
-            $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
-            try {
-                AuditLogger::log(
-                    'program_exercise.update',
-                    $currentAdminId,
-                    'program_exercise',
-                    $id,
-                    [
-                        'exercise_id' => $id,
-                        'program_id' => $programId,
-                        'changed_fields' => $changedFields
-                    ]
-                );
-            } catch (\Throwable $e) {}
 
             Response::json(['success' => true]);
         } catch (\Throwable $e) {
@@ -383,7 +408,7 @@ class ProgramExerciseController {
             }
             
             $programId = (int)$programId;
-            $this->validateProgramExists($programId);
+            $this->validateProgramExists($programId, true);
 
             $stmt = $this->db->prepare("DELETE FROM program_exercises WHERE id = ? AND program_id = ?");
             $stmt->execute([$id, $programId]);
