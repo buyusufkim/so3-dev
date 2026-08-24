@@ -2,6 +2,16 @@ import type { Member } from '../pages/members/types';
 import type { AdminTrainerListItem } from '../pages/trainers/types';
 
 // Sentetik veriler
+
+import type { TrainingProgramListItem, TrainingProgramDetail } from '../pages/training-programs/types';
+
+let mockPrograms: TrainingProgramDetail[] = [
+  { id: 1, uuid: 'p1', title: 'Full Body Başlangıç', status: 'active', start_date: '2023-11-01', end_date: '2023-12-01', notes: 'Haftada 3 gün.', created_at: '2023-10-15', updated_at: '2023-10-15', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null } as any,
+  { id: 2, uuid: 'p2', title: 'Hipertrofi', status: 'draft', start_date: null, end_date: null, notes: null, created_at: '2023-11-01', updated_at: '2023-11-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null } as any,
+  { id: 3, uuid: 'p3', title: 'Kardiyo Odaklı', status: 'archived', start_date: '2023-01-01', end_date: '2023-02-01', notes: null, created_at: '2023-01-01', updated_at: '2023-02-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: '2023-03-01' } as any,
+];
+let nextProgramId = 4;
+
 let mockTrainers: AdminTrainerListItem[] = [
   { id: 1, uuid: 't1', slug: 'ahmet-yilmaz', name: 'Ahmet Yılmaz', role_title: 'Baş Antrenör', branch: { id: 1, name: 'Pilates', slug: 'pilates', is_active: true }, is_active: true, sort_order: 1, updated_at: '2023-01-01', profile: null },
   { id: 2, uuid: 't2', slug: 'ayse-demir', name: 'Ayşe Demir', role_title: 'Fitness Eğitmeni', branch: { id: 2, name: 'Fitness', slug: 'fitness', is_active: true }, is_active: true, sort_order: 2, updated_at: '2023-01-01', profile: null },
@@ -342,7 +352,124 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
+
+  // --- Training Programs Endpoints ---
+  if (path.match(/^\/api\/admin\/members\/\d+\/training-programs$/)) {
+    const memberId = parseInt(path.split('/')[4], 10);
+    const member = mockMembers.find(m => m.id === memberId);
+    if (!member) return createError('Üye bulunamadı', 404, 'NOT_FOUND');
+
+    if (method === 'GET') {
+      let filtered = mockPrograms.filter(p => p.member.id === memberId);
+      
+      const statusFilter = url.searchParams.get('status');
+      if (statusFilter && statusFilter !== 'all') {
+        filtered = filtered.filter(p => p.status === statusFilter);
+      }
+      
+      const deletedFilter = url.searchParams.get('deleted');
+      if (deletedFilter === 'deleted') {
+        filtered = filtered.filter(p => (p as any).deleted_at !== null);
+      } else if (deletedFilter === 'all') {
+        // no filter
+      } else {
+        // 'active' by default
+        filtered = filtered.filter(p => (p as any).deleted_at === null);
+      }
+
+      const total = filtered.length;
+      const page = parseInt(url.searchParams.get('page') || '1', 10);
+      const perPage = parseInt(url.searchParams.get('per_page') || '20', 10);
+      const start = (page - 1) * perPage;
+      const paginated = filtered.slice(start, start + perPage);
+
+      const items: TrainingProgramListItem[] = paginated.map(p => ({
+        id: p.id,
+        uuid: p.uuid,
+        title: p.title,
+        status: p.status,
+        start_date: p.start_date,
+        end_date: p.end_date,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        deleted_at: (p as any).deleted_at || null,
+        trainer: p.trainer
+      }));
+
+      return createResponse({
+        data: {
+          items,
+          pagination: {
+            total,
+            page,
+            per_page: perPage,
+            last_page: Math.ceil(total / perPage) || 1
+          }
+        }
+      });
+    }
+
+    if (method === 'POST') {
+      if (!member.trainer) {
+        return createError('Üyeye atanmış bir eğitmen bulunmuyor.', 422, 'MEMBER_TRAINER_NOT_ASSIGNED');
+      }
+
+      const { title, status, start_date, end_date, notes } = reqBody;
+      const newProgram: TrainingProgramDetail = {
+        id: nextProgramId++,
+        uuid: `p${nextProgramId}`,
+        title: String(title).trim(),
+        status: status as 'draft' | 'active' | 'archived',
+        start_date: start_date ? String(start_date) : null,
+        end_date: end_date ? String(end_date) : null,
+        notes: notes ? String(notes) : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        member: { id: member.id, uuid: member.uuid, first_name: member.first_name, last_name: member.last_name },
+        trainer: { id: member.trainer.id, name: member.trainer.name },
+      };
+      (newProgram as any).deleted_at = null;
+      mockPrograms.push(newProgram);
+      return createResponse({ data: { id: newProgram.id, uuid: newProgram.uuid } }, 201);
+    }
+  }
+
+  if (path.match(/^\/api\/admin\/training-programs\/\d+$/)) {
+    const programId = parseInt(path.split('/')[4], 10);
+    const program = mockPrograms.find(p => p.id === programId);
+    if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
+
+    if (method === 'GET') {
+      return createResponse({ data: program });
+    }
+
+    if (method === 'PATCH') {
+      const { title, status, start_date, end_date, notes } = reqBody;
+      if ('title' in reqBody) program.title = String(title).trim();
+      if ('status' in reqBody) program.status = status as 'draft' | 'active' | 'archived';
+      if ('start_date' in reqBody) program.start_date = start_date ? String(start_date) : null;
+      if ('end_date' in reqBody) program.end_date = end_date ? String(end_date) : null;
+      if ('notes' in reqBody) program.notes = notes ? String(notes) : null;
+      program.updated_at = new Date().toISOString();
+      return createResponse({ data: { success: true } });
+    }
+
+    if (method === 'DELETE') {
+      (program as any).deleted_at = new Date().toISOString();
+      return createResponse({ data: { success: true } });
+    }
+  }
+
+  if (path.match(/^\/api\/admin\/training-programs\/\d+\/restore$/) && method === 'POST') {
+    const programId = parseInt(path.split('/')[4], 10);
+    const program = mockPrograms.find(p => p.id === programId);
+    if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
+    (program as any).deleted_at = null;
+    return createResponse({ data: { success: true } });
+  }
+
   if (path.startsWith('/api/admin/members/')) {
+
     const parts = path.split('/');
     const idPart = parts[4];
     const action = parts[5];
