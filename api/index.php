@@ -397,6 +397,38 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
+    if (preg_match('#^/api/trainer/members/([1-9]\d*)/training-programs$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $memberId = (int)$matches[1];
+        $controller = new \Controllers\TrainerTrainingProgramController();
+        if ($method === 'GET') {
+            $controller->index($memberId);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            AuthMiddleware::verifyCsrfToken();
+            $controller->create($memberId);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/training-programs/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainerTrainingProgramController();
+        if ($method === 'GET') {
+            $controller->show($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            AuthMiddleware::verifyCsrfToken();
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            AuthMiddleware::verifyCsrfToken();
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
+
 
     if (preg_match('#^/api/admin/site-settings/([^/]+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
