@@ -426,6 +426,32 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/trainer/training-programs/([1-9]\d*)/exercises$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $programId = (int)$matches[1];
+        $controller = new \Controllers\TrainerProgramExerciseController();
+        if ($method === 'GET') {
+            $controller->index($programId);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->create($programId);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/program-exercises/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainerProgramExerciseController();
+        if ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
+
 
     if (preg_match('#^/api/admin/site-settings/([^/]+)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
