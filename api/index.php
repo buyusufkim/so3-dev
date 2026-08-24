@@ -405,7 +405,6 @@ if (isset($routes[$method][$requestUri])) {
             $controller->index($memberId);
             $matched = true;
         } elseif ($method === 'POST') {
-            AuthMiddleware::verifyCsrfToken();
             $controller->create($memberId);
             $matched = true;
         }
@@ -419,11 +418,9 @@ if (isset($routes[$method][$requestUri])) {
             $controller->show($id);
             $matched = true;
         } elseif ($method === 'PATCH') {
-            AuthMiddleware::verifyCsrfToken();
             $controller->update($id);
             $matched = true;
         } elseif ($method === 'DELETE') {
-            AuthMiddleware::verifyCsrfToken();
             $controller->delete($id);
             $matched = true;
         }

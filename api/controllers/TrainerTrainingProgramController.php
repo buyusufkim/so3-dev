@@ -363,20 +363,20 @@ class TrainerTrainingProgramController {
             $this->db->beginTransaction();
 
             $stmt = $this->db->prepare("
-                SELECT tp.*, m.deleted_at as member_deleted_at, m.trainer_id as member_trainer_id 
+                SELECT tp.* 
                 FROM training_programs tp
                 JOIN members m ON tp.member_id = m.id
-                WHERE tp.id = ? FOR UPDATE
+                WHERE tp.id = ? 
+                  AND tp.trainer_id = ? 
+                  AND tp.deleted_at IS NULL
+                  AND m.trainer_id = ?
+                  AND m.deleted_at IS NULL 
+                FOR UPDATE
             ");
-            $stmt->execute([$id]);
+            $stmt->execute([$id, $trainerId, $trainerId]);
             $program = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$program || 
-                $program['deleted_at'] !== null || 
-                (int)$program['trainer_id'] !== $trainerId ||
-                $program['member_deleted_at'] !== null ||
-                (int)$program['member_trainer_id'] !== $trainerId
-            ) {
+            if (!$program) {
                 if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
@@ -481,10 +481,10 @@ class TrainerTrainingProgramController {
             $stmt = $this->db->prepare("
                 UPDATE training_programs 
                 SET title = ?, status = ?, start_date = ?, end_date = ?, notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL
             ");
             $stmt->execute([
-                $finalTitle, $finalStatus, $finalStartDate, $finalEndDate, $finalNotes, $currentAdminId, $id
+                $finalTitle, $finalStatus, $finalStartDate, $finalEndDate, $finalNotes, $currentAdminId, $id, $trainerId
             ]);
 
             $this->db->commit();
@@ -522,20 +522,20 @@ class TrainerTrainingProgramController {
             $this->db->beginTransaction();
 
             $stmt = $this->db->prepare("
-                SELECT tp.*, m.deleted_at as member_deleted_at, m.trainer_id as member_trainer_id 
+                SELECT tp.* 
                 FROM training_programs tp
                 JOIN members m ON tp.member_id = m.id
-                WHERE tp.id = ? FOR UPDATE
+                WHERE tp.id = ? 
+                  AND tp.trainer_id = ? 
+                  AND tp.deleted_at IS NULL
+                  AND m.trainer_id = ?
+                  AND m.deleted_at IS NULL 
+                FOR UPDATE
             ");
-            $stmt->execute([$id]);
+            $stmt->execute([$id, $trainerId, $trainerId]);
             $program = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$program || 
-                $program['deleted_at'] !== null || 
-                (int)$program['trainer_id'] !== $trainerId ||
-                $program['member_deleted_at'] !== null ||
-                (int)$program['member_trainer_id'] !== $trainerId
-            ) {
+            if (!$program) {
                 if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
@@ -545,9 +545,9 @@ class TrainerTrainingProgramController {
             $stmt = $this->db->prepare("
                 UPDATE training_programs 
                 SET deleted_at = CURRENT_TIMESTAMP, updated_by = ? 
-                WHERE id = ?
+                WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL
             ");
-            $stmt->execute([$currentAdminId, $id]);
+            $stmt->execute([$currentAdminId, $id, $trainerId]);
 
             if ($stmt->rowCount() !== 1) {
                 if ($this->db->inTransaction()) { $this->db->rollBack(); }
