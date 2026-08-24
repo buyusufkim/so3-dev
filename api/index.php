@@ -447,6 +447,31 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
+    if (preg_match('#^/api/admin/training-programs/([1-9]\d*)/exercises$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\ProgramExerciseController();
+        if ($method === 'GET') {
+            $controller->index($id);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->create($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/program-exercises/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\ProgramExerciseController();
+        if ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->delete($id);
+            $matched = true;
+        }
+    }
 }
 
 if (!$matched) {
