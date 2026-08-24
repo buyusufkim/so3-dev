@@ -401,7 +401,6 @@ export function TrainerTrainingProgramEditor() {
             <input
               type="text"
               required
-              maxLength={160}
               value={formData.title}
               onChange={(e) => handleFieldChange("title", e.target.value)}
               placeholder="Örn: 4 Haftalık Güç ve Kondisyon Programı"
@@ -451,7 +450,6 @@ export function TrainerTrainingProgramEditor() {
           <label className="text-sm font-medium">Notlar</label>
           <textarea
             rows={5}
-            maxLength={3000}
             value={formData.notes}
             onChange={(e) => handleFieldChange("notes", e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
