@@ -8,6 +8,7 @@ import {
   isTrainingProgramStatus,
   isSuccessResponse
 } from "./types";
+import { TrainerProgramExercisesPanel } from "./TrainerProgramExercisesPanel";
 
 class ContractValidationError extends Error {
   constructor(message: string) {
@@ -458,10 +459,8 @@ export function TrainerTrainingProgramEditor() {
         </div>
       </form>
 
-      {!isNew ? (
-        <div className="bg-[#121212] border border-white/10 rounded-lg p-6 text-center text-white/50 text-sm">
-          Program egzersiz yönetimi bir sonraki modülde aktif olacaktır.
-        </div>
+      {!isNew && canonicalProgramId ? (
+        <TrainerProgramExercisesPanel programId={parseInt(canonicalProgramId, 10)} />
       ) : (
         <div className="bg-[#121212] border border-white/10 rounded-lg p-6 text-center text-white/50 text-sm">
           Egzersiz eklemek için önce programı kaydedin.
