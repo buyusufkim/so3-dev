@@ -3,7 +3,7 @@ namespace Controllers;
 
 use Core\Database;
 use Core\Response;
-use Core\AuthMiddleware;
+use Middleware\AuthMiddleware;
 use Core\AuditLogger;
 
 class TrainingProgramController {
@@ -19,7 +19,6 @@ class TrainingProgramController {
         $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
-}
 
     private function getJsonInput(): array {
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
@@ -33,8 +32,12 @@ class TrainingProgramController {
         }
 
         $raw = file_get_contents('php://input');
-        if (empty(trim($raw))) {
+        if ($raw === false || empty(trim((string)$raw))) {
             Response::error('Boş istek.', 'BAD_REQUEST', 400);
+        }
+        
+        if (strlen($raw) > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
         }
 
         $data = json_decode($raw, true);
@@ -70,7 +73,7 @@ class TrainingProgramController {
             }
         }
 
-        if (!isset($val['title']) || !is_string($val['title'])) {
+        if (!array_key_exists('title', $val) || !is_string($val['title'])) {
             Response::error("title zorunludur ve metin olmalıdır.", 'VALIDATION_ERROR', 422);
         }
         $val['title'] = trim($val['title']);
@@ -79,17 +82,17 @@ class TrainingProgramController {
             Response::error("title 1-160 karakter arasında olmalıdır.", 'VALIDATION_ERROR', 422);
         }
 
-        $status = isset($val['status']) ? $val['status'] : 'draft';
-        if (!in_array($status, ['draft', 'active', 'archived'])) {
+        $status = array_key_exists('status', $val) ? $val['status'] : 'draft';
+        if (!is_string($status) || !in_array($status, ['draft', 'active', 'archived'], true)) {
             Response::error("status geçersiz.", 'VALIDATION_ERROR', 422);
         }
 
-        $start_date = isset($val['start_date']) ? $val['start_date'] : null;
+        $start_date = array_key_exists('start_date', $val) ? $val['start_date'] : null;
         if (!$this->validateDate($start_date)) {
             Response::error("start_date geçersiz.", 'VALIDATION_ERROR', 422);
         }
 
-        $end_date = isset($val['end_date']) ? $val['end_date'] : null;
+        $end_date = array_key_exists('end_date', $val) ? $val['end_date'] : null;
         if (!$this->validateDate($end_date)) {
             Response::error("end_date geçersiz.", 'VALIDATION_ERROR', 422);
         }
@@ -98,7 +101,7 @@ class TrainingProgramController {
             Response::error("end_date, start_date'den önce olamaz.", 'VALIDATION_ERROR', 422);
         }
 
-        $notes = isset($val['notes']) ? $val['notes'] : null;
+        $notes = array_key_exists('notes', $val) ? $val['notes'] : null;
         if ($notes !== null) {
             if (!is_string($notes)) {
                 Response::error("notes metin olmalıdır.", 'VALIDATION_ERROR', 422);
@@ -116,10 +119,12 @@ class TrainingProgramController {
             $member = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$member || $member['deleted_at'] !== null) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Üye bulunamadı.", 'NOT_FOUND', 404);
             }
 
             if ($member['trainer_id'] === null) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Üyeye atanmış bir eğitmen yok.", 'MEMBER_TRAINER_NOT_ASSIGNED', 409);
             }
 
@@ -130,6 +135,7 @@ class TrainingProgramController {
             $trainer = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$trainer || $trainer['deleted_at'] !== null || (int)$trainer['is_active'] !== 1) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Bağlı eğitmen pasif veya silinmiş.", 'MEMBER_TRAINER_INVALID', 409);
             }
 
@@ -164,7 +170,7 @@ class TrainingProgramController {
                         'new_status' => $status
                     ]
                 );
-            } catch (\Exception $e) {}
+            } catch (\Throwable $e) {}
 
             Response::json(['id' => $program_id, 'uuid' => $uuid], 201);
 
@@ -202,26 +208,31 @@ class TrainingProgramController {
             $program = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$program) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
 
             if ($program['deleted_at'] !== null) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Silinmiş program güncellenemez.", 'VALIDATION_ERROR', 422);
             }
 
-            if (isset($val['title'])) {
+            if (array_key_exists('title', $val)) {
                 if (!is_string($val['title'])) {
+                    if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("title metin olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
                 $val['title'] = trim($val['title']);
                 $titleLen = mb_strlen($val['title'], 'UTF-8');
                 if ($titleLen < 1 || $titleLen > 160) {
+                    if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("title 1-160 karakter arasında olmalıdır.", 'VALIDATION_ERROR', 422);
                 }
             }
 
-            if (isset($val['status'])) {
-                if (!in_array($val['status'], ['draft', 'active', 'archived'])) {
+            if (array_key_exists('status', $val)) {
+                if (!is_string($val['status']) || !in_array($val['status'], ['draft', 'active', 'archived'], true)) {
+                    if ($this->db->inTransaction()) { $this->db->rollBack(); }
                     Response::error("status geçersiz.", 'VALIDATION_ERROR', 422);
                 }
             }
@@ -233,13 +244,16 @@ class TrainingProgramController {
             $new_end = array_key_exists('end_date', $val) ? $val['end_date'] : $current_end;
 
             if (array_key_exists('start_date', $val) && !$this->validateDate($new_start)) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("start_date geçersiz.", 'VALIDATION_ERROR', 422);
             }
             if (array_key_exists('end_date', $val) && !$this->validateDate($new_end)) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("end_date geçersiz.", 'VALIDATION_ERROR', 422);
             }
 
             if ($new_start !== null && $new_end !== null && $new_end < $new_start) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("end_date, start_date'den önce olamaz.", 'VALIDATION_ERROR', 422);
             }
 
@@ -247,9 +261,11 @@ class TrainingProgramController {
                 $notes = $val['notes'];
                 if ($notes !== null) {
                     if (!is_string($notes)) {
+                        if ($this->db->inTransaction()) { $this->db->rollBack(); }
                         Response::error("notes metin olmalıdır.", 'VALIDATION_ERROR', 422);
                     }
                     if (mb_strlen($notes, 'UTF-8') > 3000) {
+                        if ($this->db->inTransaction()) { $this->db->rollBack(); }
                         Response::error("notes en fazla 3000 karakter olabilir.", 'VALIDATION_ERROR', 422);
                     }
                 }
@@ -299,7 +315,7 @@ class TrainingProgramController {
                             'new_status' => isset($val['status']) ? $val['status'] : $program['status']
                         ]
                     );
-                } catch (\Exception $e) {}
+                } catch (\Throwable $e) {}
             }
 
             Response::json(['success' => true]);
@@ -326,6 +342,7 @@ class TrainingProgramController {
             $program = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$program || $program['deleted_at'] !== null) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
 
@@ -333,6 +350,10 @@ class TrainingProgramController {
 
             $stmt = $this->db->prepare("UPDATE training_programs SET deleted_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?");
             $stmt->execute([$currentAdminId, $id]);
+            
+            if ($stmt->rowCount() !== 1) {
+                throw new \RuntimeException("Delete update count mismatch.");
+            }
 
             $this->db->commit();
 
@@ -348,7 +369,7 @@ class TrainingProgramController {
                         'trainer_id' => (int)$program['trainer_id']
                     ]
                 );
-            } catch (\Exception $e) {}
+            } catch (\Throwable $e) {}
 
             Response::json(['success' => true]);
 
@@ -374,10 +395,12 @@ class TrainingProgramController {
             $program = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if (!$program) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
 
             if ($program['deleted_at'] === null) {
+                if ($this->db->inTransaction()) { $this->db->rollBack(); }
                 Response::error("Program silinmemiş.", 'PROGRAM_NOT_ARCHIVED', 409);
             }
 
@@ -385,6 +408,10 @@ class TrainingProgramController {
 
             $stmt = $this->db->prepare("UPDATE training_programs SET deleted_at = NULL, updated_by = ? WHERE id = ?");
             $stmt->execute([$currentAdminId, $id]);
+            
+            if ($stmt->rowCount() !== 1) {
+                throw new \RuntimeException("Restore update count mismatch.");
+            }
 
             $this->db->commit();
 
@@ -400,7 +427,7 @@ class TrainingProgramController {
                         'trainer_id' => (int)$program['trainer_id']
                     ]
                 );
-            } catch (\Exception $e) {}
+            } catch (\Throwable $e) {}
 
             Response::json(['success' => true]);
 
@@ -429,21 +456,31 @@ class TrainingProgramController {
             Response::error('Geçersiz sayfa boyutu.', 'VALIDATION_ERROR', 422);
         }
         $per_page = (int)$per_page;
-        if ($per_page > 100) $per_page = 100;
+        if ($per_page > 100) {
+            Response::error('Geçersiz sayfa boyutu.', 'VALIDATION_ERROR', 422);
+        }
 
         $status = isset($_GET['status']) ? $_GET['status'] : null;
         if ($status !== null) {
-            if (!in_array($status, ['draft', 'active', 'archived'])) {
+            if (!is_string($status) || !in_array($status, ['draft', 'active', 'archived'], true)) {
                 Response::error('Geçersiz status filtresi.', 'VALIDATION_ERROR', 422);
             }
         }
 
         $deleted = isset($_GET['deleted']) ? $_GET['deleted'] : 'active';
-        if (!in_array($deleted, ['active', 'deleted', 'all'])) {
+        if (!is_string($deleted) || !in_array($deleted, ['active', 'deleted', 'all'], true)) {
             Response::error('Geçersiz deleted filtresi.', 'VALIDATION_ERROR', 422);
         }
 
         try {
+            $stmt = $this->db->prepare("SELECT deleted_at FROM members WHERE id = ?");
+            $stmt->execute([$member_id]);
+            $member = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$member || $member['deleted_at'] !== null) {
+                Response::error("Üye bulunamadı.", 'NOT_FOUND', 404);
+            }
+
             $where = ["p.member_id = ?"];
             $params = [$member_id];
 
