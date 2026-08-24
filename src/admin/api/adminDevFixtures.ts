@@ -124,6 +124,11 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     return createResponse({ data: { success: true } });
   }
 
+  // --- Trainer Namespace Role Firewall ---
+  if (path.startsWith('/api/trainer/') && currentDevRole !== 'trainer') {
+    return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+  }
+
   // --- Dashboard Endpoints ---
   if (path === '/api/admin/dashboard' && method === 'GET') {
     return createResponse({
