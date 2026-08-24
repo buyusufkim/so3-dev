@@ -155,3 +155,50 @@ export function isSuccessResponse(res: unknown): res is SuccessResponse {
   if (typeof res.success !== 'boolean') return false;
   return true;
 }
+
+// --- PROGRAM EXERCISES ---
+export interface ProgramExercise {
+  id: number;
+  program_id: number;
+  exercise_name: string;
+  sets: number | null;
+  repetitions: string | null;
+  duration_seconds: number | null;
+  rest_seconds: number | null;
+  instructions: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramExerciseCreateResponse {
+  id: number;
+  program_id: number;
+}
+
+export function isProgramExercise(val: unknown): val is ProgramExercise {
+  if (!isObject(val)) return false;
+  if (!isPosInt(val.id)) return false;
+  if (!isPosInt(val.program_id)) return false;
+  if (!isString(val.exercise_name)) return false;
+  if (val.sets !== null && !isPosInt(val.sets)) return false;
+  if (!isStringOrNull(val.repetitions)) return false;
+  if (val.duration_seconds !== null && !isPosInt(val.duration_seconds)) return false;
+  if (val.rest_seconds !== null && !isNonNegInt(val.rest_seconds)) return false;
+  if (!isStringOrNull(val.instructions)) return false;
+  if (!isNonNegInt(val.sort_order)) return false;
+  if (!isString(val.created_at)) return false;
+  if (!isString(val.updated_at)) return false;
+  return true;
+}
+
+export function isProgramExerciseArray(val: unknown): val is ProgramExercise[] {
+  return Array.isArray(val) && val.every(isProgramExercise);
+}
+
+export function isProgramExerciseCreateResponse(val: unknown): val is ProgramExerciseCreateResponse {
+  if (!isObject(val)) return false;
+  if (!isPosInt(val.id)) return false;
+  if (!isPosInt(val.program_id)) return false;
+  return true;
+}

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainingProgramDetail, isTrainingProgramDetail, isTrainingProgramCreateResponse, isTrainingProgramStatus, isSuccessResponse } from "./types";
+import { ProgramExercisesPanel } from './ProgramExercisesPanel';
 
 export function TrainingProgramEditor() {
   const { memberId, programId } = useParams<{ memberId?: string; programId?: string }>();
@@ -357,6 +358,14 @@ export function TrainingProgramEditor() {
           />
         </div>
       </form>
+
+      {!isNew && canonicalProgramId ? (
+        <ProgramExercisesPanel programId={parseInt(canonicalProgramId, 10)} />
+      ) : (
+        <div className="bg-[#121212] border border-white/10 rounded-lg p-6 text-center text-white/50 text-sm">
+          Egzersiz eklemek için önce programı kaydedin.
+        </div>
+      )}
     </div>
   );
 }

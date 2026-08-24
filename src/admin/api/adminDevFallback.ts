@@ -37,7 +37,9 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
                      endpoint.startsWith('/api/admin/trainers') ||
                      endpoint.startsWith('/api/admin/trainer-accounts') ||
                      endpoint.startsWith('/api/admin/dashboard') ||
-                     endpoint.startsWith('/api/trainer/members');
+                     endpoint.startsWith('/api/trainer/members') ||
+                     endpoint.startsWith('/api/admin/training-programs') ||
+                     endpoint.startsWith('/api/admin/program-exercises');
                      
     if (isTarget) {
       const modulePath = "./adminDevFixtures.ts";

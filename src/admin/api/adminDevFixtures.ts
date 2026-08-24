@@ -16,6 +16,39 @@ let mockPrograms: InternalTrainingProgramDetail[] = [
 ];
 let nextProgramId = 4;
 
+import type { ProgramExercise } from '../pages/training-programs/types';
+
+let mockProgramExercises: ProgramExercise[] = [
+  {
+    id: 1,
+    program_id: 1,
+    exercise_name: 'Bench Press',
+    sets: 3,
+    repetitions: '10-12',
+    duration_seconds: null,
+    rest_seconds: 60,
+    instructions: 'Barı kontrollü indirin.',
+    sort_order: 1,
+    created_at: '2023-11-01T10:00:00Z',
+    updated_at: '2023-11-01T10:00:00Z'
+  },
+  {
+    id: 2,
+    program_id: 1,
+    exercise_name: 'Squat',
+    sets: 4,
+    repetitions: '8-10',
+    duration_seconds: null,
+    rest_seconds: 90,
+    instructions: 'Topuklardan güç alın.',
+    sort_order: 2,
+    created_at: '2023-11-01T10:05:00Z',
+    updated_at: '2023-11-01T10:05:00Z'
+  }
+];
+let nextExerciseId = 3;
+
+
 let mockTrainers: AdminTrainerListItem[] = [
   { id: 1, uuid: 't1', slug: 'ahmet-yilmaz', name: 'Ahmet Yılmaz', role_title: 'Baş Antrenör', branch: { id: 1, name: 'Pilates', slug: 'pilates', is_active: true }, is_active: true, sort_order: 1, updated_at: '2023-01-01', profile: null },
   { id: 2, uuid: 't2', slug: 'ayse-demir', name: 'Ayşe Demir', role_title: 'Fitness Eğitmeni', branch: { id: 2, name: 'Fitness', slug: 'fitness', is_active: true }, is_active: true, sort_order: 2, updated_at: '2023-01-01', profile: null },
@@ -356,6 +389,191 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
+
+  // --- Program Exercises Endpoints ---
+  if (path.match(/^\/api\/admin\/training-programs\/[1-9]\d*\/exercises$/)) {
+    const programId = parseInt(path.split('/')[4], 10);
+    const program = mockPrograms.find(p => p.id === programId);
+    if (!program || program.deleted_at !== null) return createError('Program bulunamadı', 404, 'NOT_FOUND');
+
+    if (method === 'GET') {
+      const exercises = mockProgramExercises
+        .filter(e => e.program_id === programId)
+        .sort((a, b) => {
+          if (a.sort_order === b.sort_order) return a.id - b.id;
+          return a.sort_order - b.sort_order;
+        });
+      return createResponse({ data: exercises });
+    }
+
+    if (method === 'POST') {
+      const bodyObj = reqBody as Record<string, unknown>;
+      
+      const { exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order } = bodyObj;
+
+      if (typeof exercise_name !== 'string') return createError('exercise_name geçerli olmalıdır.', 422, 'VALIDATION_ERROR');
+      const trimmedName = exercise_name.trim();
+      if (trimmedName.length < 1 || trimmedName.length > 160) return createError('exercise_name 1-160 karakter arası olmalıdır.', 422, 'VALIDATION_ERROR');
+
+      let parsedSets: number | null = null;
+      if (sets !== undefined && sets !== null) {
+        if (typeof sets !== 'number' || !Number.isInteger(sets) || sets < 1 || sets > 65535) {
+          return createError('sets 1-65535 arası olmalıdır.', 422, 'VALIDATION_ERROR');
+        }
+        parsedSets = sets;
+      }
+
+      let parsedReps: string | null = null;
+      if (repetitions !== undefined && repetitions !== null) {
+        if (typeof repetitions !== 'string' || Array.from(repetitions).length > 40) {
+          return createError('repetitions max 40 karakter.', 422, 'VALIDATION_ERROR');
+        }
+        parsedReps = repetitions;
+      }
+
+      let parsedDuration: number | null = null;
+      if (duration_seconds !== undefined && duration_seconds !== null) {
+        if (typeof duration_seconds !== 'number' || !Number.isInteger(duration_seconds) || duration_seconds < 1 || duration_seconds > 4294967295) {
+          return createError('duration_seconds 1-4294967295 arası olmalıdır.', 422, 'VALIDATION_ERROR');
+        }
+        parsedDuration = duration_seconds;
+      }
+
+      let parsedRest: number | null = null;
+      if (rest_seconds !== undefined && rest_seconds !== null) {
+        if (typeof rest_seconds !== 'number' || !Number.isInteger(rest_seconds) || rest_seconds < 0 || rest_seconds > 65535) {
+          return createError('rest_seconds 0-65535 arası olmalıdır.', 422, 'VALIDATION_ERROR');
+        }
+        parsedRest = rest_seconds;
+      }
+
+      let parsedInst: string | null = null;
+      if (instructions !== undefined && instructions !== null) {
+        if (typeof instructions !== 'string' || Array.from(instructions).length > 1000) {
+          return createError('instructions max 1000 karakter.', 422, 'VALIDATION_ERROR');
+        }
+        parsedInst = instructions;
+      }
+
+      let parsedSortOrder = 0;
+      if (sort_order !== undefined && sort_order !== null) {
+        if (typeof sort_order !== 'number' || !Number.isInteger(sort_order) || sort_order < 0 || sort_order > 2147483647) {
+          return createError('sort_order geçersiz.', 422, 'VALIDATION_ERROR');
+        }
+        parsedSortOrder = sort_order;
+      }
+
+      const newExercise: ProgramExercise = {
+        id: nextExerciseId++,
+        program_id: programId,
+        exercise_name: trimmedName,
+        sets: parsedSets,
+        repetitions: parsedReps,
+        duration_seconds: parsedDuration,
+        rest_seconds: parsedRest,
+        instructions: parsedInst,
+        sort_order: parsedSortOrder,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      mockProgramExercises.push(newExercise);
+      return createResponse({ data: { id: newExercise.id, program_id: newExercise.program_id } }, 201);
+    }
+  }
+
+  if (path.match(/^\/api\/admin\/program-exercises\/[1-9]\d*$/)) {
+    const exerciseId = parseInt(path.split('/')[4], 10);
+    const exerciseIndex = mockProgramExercises.findIndex(e => e.id === exerciseId);
+    
+    if (exerciseIndex === -1) return createError('Egzersiz bulunamadı', 404, 'NOT_FOUND');
+    const exercise = mockProgramExercises[exerciseIndex];
+    const program = mockPrograms.find(p => p.id === exercise.program_id);
+    if (!program || program.deleted_at !== null) return createError('Program bulunamadı', 404, 'NOT_FOUND');
+
+    if (method === 'DELETE') {
+      mockProgramExercises.splice(exerciseIndex, 1);
+      return createResponse({ data: { success: true } });
+    }
+
+    if (method === 'PATCH') {
+      const bodyObj = reqBody as Record<string, unknown>;
+      if (Object.keys(bodyObj).length === 0) return createError('Boş istek', 422, 'VALIDATION_ERROR');
+      
+      let finalName = exercise.exercise_name;
+      let finalSets = exercise.sets;
+      let finalReps = exercise.repetitions;
+      let finalDuration = exercise.duration_seconds;
+      let finalRest = exercise.rest_seconds;
+      let finalInst = exercise.instructions;
+      let finalSortOrder = exercise.sort_order;
+
+      if ('exercise_name' in bodyObj) {
+        const en = bodyObj.exercise_name;
+        if (typeof en !== 'string') return createError('exercise_name metin olmalıdır.', 422, 'VALIDATION_ERROR');
+        const trimmed = en.trim();
+        if (trimmed.length < 1 || trimmed.length > 160) return createError('exercise_name uzunluk hatası.', 422, 'VALIDATION_ERROR');
+        finalName = trimmed;
+      }
+
+      if ('sets' in bodyObj) {
+        const s = bodyObj.sets;
+        if (s !== null) {
+          if (typeof s !== 'number' || !Number.isInteger(s) || s < 1 || s > 65535) return createError('sets hatalı.', 422, 'VALIDATION_ERROR');
+        }
+        finalSets = s as number | null;
+      }
+
+      if ('repetitions' in bodyObj) {
+        const r = bodyObj.repetitions;
+        if (r !== null) {
+          if (typeof r !== 'string' || Array.from(r).length > 40) return createError('repetitions hatalı.', 422, 'VALIDATION_ERROR');
+        }
+        finalReps = r as string | null;
+      }
+
+      if ('duration_seconds' in bodyObj) {
+        const d = bodyObj.duration_seconds;
+        if (d !== null) {
+          if (typeof d !== 'number' || !Number.isInteger(d) || d < 1 || d > 4294967295) return createError('duration_seconds hatalı.', 422, 'VALIDATION_ERROR');
+        }
+        finalDuration = d as number | null;
+      }
+
+      if ('rest_seconds' in bodyObj) {
+        const rs = bodyObj.rest_seconds;
+        if (rs !== null) {
+          if (typeof rs !== 'number' || !Number.isInteger(rs) || rs < 0 || rs > 65535) return createError('rest_seconds hatalı.', 422, 'VALIDATION_ERROR');
+        }
+        finalRest = rs as number | null;
+      }
+
+      if ('instructions' in bodyObj) {
+        const ins = bodyObj.instructions;
+        if (ins !== null) {
+          if (typeof ins !== 'string' || Array.from(ins).length > 1000) return createError('instructions hatalı.', 422, 'VALIDATION_ERROR');
+        }
+        finalInst = ins as string | null;
+      }
+
+      if ('sort_order' in bodyObj) {
+        const so = bodyObj.sort_order;
+        if (typeof so !== 'number' || !Number.isInteger(so) || so < 0 || so > 2147483647) return createError('sort_order hatalı.', 422, 'VALIDATION_ERROR');
+        finalSortOrder = so;
+      }
+
+      exercise.exercise_name = finalName;
+      exercise.sets = finalSets;
+      exercise.repetitions = finalReps;
+      exercise.duration_seconds = finalDuration;
+      exercise.rest_seconds = finalRest;
+      exercise.instructions = finalInst;
+      exercise.sort_order = finalSortOrder;
+      exercise.updated_at = new Date().toISOString();
+
+      return createResponse({ data: { success: true } });
+    }
+  }
 
   // --- Training Programs Endpoints ---
   if (path.match(/^\/api\/admin\/members\/[1-9]\d*\/training-programs$/)) {
