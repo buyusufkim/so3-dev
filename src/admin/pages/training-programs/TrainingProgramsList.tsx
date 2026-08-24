@@ -67,7 +67,7 @@ export function TrainingProgramsList() {
 
   const handleStatusChange = (val: string) => {
     if (val === "all" || isTrainingProgramStatus(val)) {
-      setStatusFilter(val as "all" | "draft" | "active" | "archived");
+      setStatusFilter(val);
       setPage(1);
     }
   };

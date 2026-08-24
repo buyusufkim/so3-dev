@@ -367,7 +367,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       let filtered = mockPrograms.filter(p => p.member.id === memberId);
       
       const statusFilter = url.searchParams.get('status');
-      if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter !== null) {
         if (!['draft', 'active', 'archived'].includes(statusFilter)) {
           return createError('Geçersiz durum filtresi', 422, 'VALIDATION_ERROR');
         }
@@ -375,9 +375,16 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       }
       
       const deletedFilter = url.searchParams.get('deleted');
-      if (deletedFilter === 'deleted') {
+      if (deletedFilter !== null) {
+        if (!['active', 'deleted', 'all'].includes(deletedFilter)) {
+          return createError('Geçersiz silinme durumu filtresi', 422, 'VALIDATION_ERROR');
+        }
+      }
+      
+      const effectiveDeletedFilter = deletedFilter || 'active';
+      if (effectiveDeletedFilter === 'deleted') {
         filtered = filtered.filter(p => p.deleted_at !== null);
-      } else if (deletedFilter === 'all') {
+      } else if (effectiveDeletedFilter === 'all') {
         // no filter
       } else {
         // 'active' by default
@@ -389,11 +396,19 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       const pageParam = url.searchParams.get('page');
       const perPageParam = url.searchParams.get('per_page');
       
-      const page = pageParam ? parseInt(pageParam, 10) : 1;
-      const perPage = perPageParam ? parseInt(perPageParam, 10) : 20;
-      
-      if (isNaN(page) || page < 1 || isNaN(perPage) || perPage < 1 || perPage > 100) {
-        return createError('Geçersiz sayfalama parametreleri', 422, 'VALIDATION_ERROR');
+      let page = 1;
+      let perPage = 20;
+
+      if (pageParam !== null) {
+        if (!/^[1-9]\d*$/.test(pageParam)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+        page = Number(pageParam);
+        if (!Number.isSafeInteger(page)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+      }
+
+      if (perPageParam !== null) {
+        if (!/^[1-9]\d*$/.test(perPageParam)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+        perPage = Number(perPageParam);
+        if (!Number.isSafeInteger(perPage) || perPage > 100) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
       }
       
       const start = (page - 1) * perPage;
@@ -430,7 +445,6 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         return createError('Üyeye atanmış bir eğitmen bulunmuyor.', 409, 'MEMBER_TRAINER_NOT_ASSIGNED');
       }
       
-      // Ensure only allowed keys
       const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
       for (const k of Object.keys(reqBody)) {
         if (!allowedKeys.includes(k)) {
@@ -438,15 +452,58 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         }
       }
 
-      const { title, status, start_date, end_date, notes } = reqBody;
+      const bodyObj = reqBody as Record<string, unknown>;
+      const { title, status, start_date, end_date, notes } = bodyObj;
+
+      if (typeof title !== 'string') return createError('title metin olmalıdır.', 422, 'VALIDATION_ERROR');
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length < 1 || trimmedTitle.length > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+
+      let parsedStatus: 'draft' | 'active' | 'archived' = 'draft';
+      if (status !== undefined) {
+        if (status === 'draft' || status === 'active' || status === 'archived') {
+          parsedStatus = status;
+        } else {
+          return createError('status geçersiz.', 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const isValidDate = (d: unknown): d is string => {
+        if (typeof d !== 'string') return false;
+        if (!dateRegex.test(d)) return false;
+        const parsed = new Date(d);
+        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+      };
+
+      if (start_date !== undefined && start_date !== null) {
+        if (!isValidDate(start_date)) return createError('Geçersiz tarih', 422, 'VALIDATION_ERROR');
+      }
+      if (end_date !== undefined && end_date !== null) {
+        if (!isValidDate(end_date)) return createError('Geçersiz tarih', 422, 'VALIDATION_ERROR');
+      }
+
+      const finalStart = start_date === undefined ? null : (start_date as string);
+      const finalEnd = end_date === undefined ? null : (end_date as string);
+
+      if (finalStart && finalEnd && finalEnd < finalStart) {
+        return createError('Bitiş tarihi başlangıç tarihinden önce olamaz', 422, 'VALIDATION_ERROR');
+      }
+
+      if (notes !== undefined && notes !== null) {
+        if (typeof notes !== 'string' || Array.from(notes).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
+      }
+
+      const finalNotes = notes === undefined ? null : (notes as string);
+
       const newProgram: InternalTrainingProgramDetail = {
         id: nextProgramId++,
         uuid: `p${nextProgramId}`,
-        title: String(title).trim(),
-        status: status as 'draft' | 'active' | 'archived',
-        start_date: start_date ? String(start_date) : null,
-        end_date: end_date ? String(end_date) : null,
-        notes: notes ? String(notes) : null,
+        title: trimmedTitle,
+        status: parsedStatus,
+        start_date: finalStart,
+        end_date: finalEnd,
+        notes: finalNotes,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         member: { id: member.id, uuid: member.uuid, first_name: member.first_name, last_name: member.last_name },
@@ -464,32 +521,98 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
 
     if (method === 'GET') {
+      if (program.deleted_at !== null) {
+        return createError('Program bulunamadı', 404, 'NOT_FOUND');
+      }
       // Strip deleted_at before sending Detail response (as per contract)
       const { deleted_at, ...detail } = program;
       return createResponse({ data: detail });
     }
 
     if (method === 'PATCH') {
+      if (program.deleted_at !== null) {
+        return createError('Program bulunamadı', 404, 'NOT_FOUND');
+      }
+
+      const keys = Object.keys(reqBody);
+      if (keys.length === 0) return createError('Boş istek', 422, 'VALIDATION_ERROR');
+
       const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
-      for (const k of Object.keys(reqBody)) {
+      for (const k of keys) {
         if (!allowedKeys.includes(k)) {
           return createError('Bilinmeyen alan', 422, 'VALIDATION_ERROR');
         }
       }
     
-      const { title, status, start_date, end_date, notes } = reqBody;
-      if ('title' in reqBody) program.title = String(title).trim();
-      if ('status' in reqBody) program.status = status as 'draft' | 'active' | 'archived';
-      if ('start_date' in reqBody) program.start_date = start_date ? String(start_date) : null;
-      if ('end_date' in reqBody) program.end_date = end_date ? String(end_date) : null;
-      if ('notes' in reqBody) program.notes = notes ? String(notes) : null;
+      const bodyObj = reqBody as Record<string, unknown>;
+      let finalTitle = program.title;
+      let finalStatus = program.status;
+      let finalStart = program.start_date;
+      let finalEnd = program.end_date;
+      let finalNotes = program.notes;
+
+      if ('title' in bodyObj) {
+        const titleVal = bodyObj.title;
+        if (typeof titleVal !== 'string') return createError('title metin olmalıdır', 422, 'VALIDATION_ERROR');
+        const trimmed = titleVal.trim();
+        if (trimmed.length < 1 || trimmed.length > 160) return createError('title geçersiz', 422, 'VALIDATION_ERROR');
+        finalTitle = trimmed;
+      }
+      
+      if ('status' in bodyObj) {
+        const statusVal = bodyObj.status;
+        if (statusVal === 'draft' || statusVal === 'active' || statusVal === 'archived') {
+          finalStatus = statusVal;
+        } else {
+          return createError('status geçersiz', 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const isValidDate = (d: unknown): d is string => {
+        if (typeof d !== 'string') return false;
+        if (!dateRegex.test(d)) return false;
+        const parsed = new Date(d);
+        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+      };
+
+      if ('start_date' in bodyObj) {
+        const sdVal = bodyObj.start_date;
+        if (sdVal !== null && !isValidDate(sdVal)) return createError('Geçersiz tarih', 422, 'VALIDATION_ERROR');
+        finalStart = sdVal === null ? null : sdVal;
+      }
+      
+      if ('end_date' in bodyObj) {
+        const edVal = bodyObj.end_date;
+        if (edVal !== null && !isValidDate(edVal)) return createError('Geçersiz tarih', 422, 'VALIDATION_ERROR');
+        finalEnd = edVal === null ? null : edVal;
+      }
+
+      if (finalStart && finalEnd && finalEnd < finalStart) {
+        return createError('Bitiş tarihi başlangıç tarihinden önce olamaz', 422, 'VALIDATION_ERROR');
+      }
+
+      if ('notes' in bodyObj) {
+        const notesVal = bodyObj.notes;
+        if (notesVal !== null) {
+          if (typeof notesVal !== 'string' || Array.from(notesVal).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
+        }
+        finalNotes = notesVal === null ? null : notesVal;
+      }
+
+      program.title = finalTitle;
+      program.status = finalStatus;
+      program.start_date = finalStart;
+      program.end_date = finalEnd;
+      program.notes = finalNotes;
+      
       program.updated_at = new Date().toISOString();
       return createResponse({ data: { success: true } });
     }
 
     if (method === 'DELETE') {
       if (program.deleted_at !== null) {
-        return createError('Program zaten silinmiş', 422, 'VALIDATION_ERROR');
+        return createError('Program bulunamadı.', 404, 'NOT_FOUND');
       }
       program.deleted_at = new Date().toISOString();
       return createResponse({ data: { success: true } });
@@ -501,12 +624,11 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     const program = mockPrograms.find(p => p.id === programId);
     if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
     if (program.deleted_at === null) {
-      return createError('Program silinmemiş', 422, 'VALIDATION_ERROR');
+      return createError('Program silinmemiş.', 409, 'PROGRAM_NOT_ARCHIVED');
     }
     program.deleted_at = null;
     return createResponse({ data: { success: true } });
   }
-
   if (path.startsWith('/api/admin/members/')) {
 
     const parts = path.split('/');
