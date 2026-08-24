@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Pen, Trash2, Plus } from 'lucide-react';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 import { 
   ProgramExercise, 
   isProgramExerciseArray, 
@@ -11,6 +11,17 @@ import {
 interface ProgramExercisesPanelProps {
   programId: number;
 }
+
+const getErrorMessage = (err: unknown) => {
+  if (err instanceof ApiError) {
+    if (err.status === 404 || err.code === 'NOT_FOUND') return "Program veya egzersiz bulunamadı.";
+    if (err.status === 403 || err.code === 'FORBIDDEN') return "Bu işlem için yetkiniz yok.";
+    if (err.status === 422 || err.code === 'VALIDATION_ERROR') return err.message;
+    return err.message || "İşlem başarısız oldu.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Bilinmeyen bir hata oluştu.";
+};
 
 export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps) {
   const [exercises, setExercises] = useState<ProgramExercise[]>([]);
@@ -28,6 +39,8 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
   const [restSeconds, setRestSeconds] = useState("");
   const [instructions, setInstructions] = useState("");
   const [sortOrder, setSortOrder] = useState("0");
+  
+  const [snapshot, setSnapshot] = useState("");
 
   const [formError, setFormError] = useState<string | null>(null);
   const [formSaving, setFormSaving] = useState(false);
@@ -45,8 +58,8 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       } else {
         throw new Error("Geçersiz yanıt formatı.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Egzersizler yüklenemedi.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -56,49 +69,79 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
     fetchExercises();
   }, [programId]);
 
-  const openNewModal = () => {
-    setEditingId(null);
+  const getFormSnapshot = (
+    exName: string, 
+    s: string, 
+    r: string, 
+    d: string, 
+    rst: string, 
+    ins: string, 
+    so: string
+  ) => {
+    return JSON.stringify({ exerciseName: exName, sets: s, repetitions: r, durationSeconds: d, restSeconds: rst, instructions: ins, sortOrder: so });
+  };
+
+  const resetForm = () => {
     setExerciseName("");
     setSets("");
     setRepetitions("");
     setDurationSeconds("");
     setRestSeconds("");
     setInstructions("");
-    // sortOrder: En büyük sort_order + 1
+    setSortOrder("0");
+    setSnapshot("");
+    setFormError(null);
+    setEditingId(null);
+    setIsModalOpen(false);
+  };
+
+  const openNewModal = () => {
+    setEditingId(null);
     const nextSort = exercises.length > 0 ? Math.max(...exercises.map(e => e.sort_order)) + 1 : 0;
-    setSortOrder(nextSort.toString());
+    const soStr = nextSort.toString();
+    setExerciseName("");
+    setSets("");
+    setRepetitions("");
+    setDurationSeconds("");
+    setRestSeconds("");
+    setInstructions("");
+    setSortOrder(soStr);
+    setSnapshot(getFormSnapshot("", "", "", "", "", "", soStr));
     setFormError(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (ex: ProgramExercise) => {
     setEditingId(ex.id);
-    setExerciseName(ex.exercise_name);
-    setSets(ex.sets === null ? "" : ex.sets.toString());
-    setRepetitions(ex.repetitions === null ? "" : ex.repetitions);
-    setDurationSeconds(ex.duration_seconds === null ? "" : ex.duration_seconds.toString());
-    setRestSeconds(ex.rest_seconds === null ? "" : ex.rest_seconds.toString());
-    setInstructions(ex.instructions === null ? "" : ex.instructions);
-    setSortOrder(ex.sort_order.toString());
+    const exName = ex.exercise_name;
+    const s = ex.sets === null ? "" : ex.sets.toString();
+    const r = ex.repetitions === null ? "" : ex.repetitions;
+    const d = ex.duration_seconds === null ? "" : ex.duration_seconds.toString();
+    const rst = ex.rest_seconds === null ? "" : ex.rest_seconds.toString();
+    const ins = ex.instructions === null ? "" : ex.instructions;
+    const soStr = ex.sort_order.toString();
+
+    setExerciseName(exName);
+    setSets(s);
+    setRepetitions(r);
+    setDurationSeconds(d);
+    setRestSeconds(rst);
+    setInstructions(ins);
+    setSortOrder(soStr);
+    setSnapshot(getFormSnapshot(exName, s, r, d, rst, ins, soStr));
     setFormError(null);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
-    const isDirty = 
-      exerciseName !== "" || 
-      sets !== "" || 
-      repetitions !== "" || 
-      durationSeconds !== "" || 
-      restSeconds !== "" || 
-      instructions !== "";
+    const currentSnapshot = getFormSnapshot(exerciseName, sets, repetitions, durationSeconds, restSeconds, instructions, sortOrder);
+    const isDirty = currentSnapshot !== snapshot;
       
-    if (!editingId && isDirty && !window.confirm("Kaydedilmemiş değişiklikler var. Kapatmak istediğinize emin misiniz?")) {
+    if (isDirty && !window.confirm("Kaydedilmemiş değişiklikler var. Kapatmak istediğinize emin misiniz?")) {
       return;
     }
     
-    setIsModalOpen(false);
-    setEditingId(null);
+    resetForm();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,9 +150,8 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
 
     setFormError(null);
 
-    // Validations
     const trimmedName = exerciseName.trim();
-    if (trimmedName.length < 1 || trimmedName.length > 160) {
+    if (trimmedName.length < 1 || Array.from(trimmedName).length > 160) {
       setFormError("Egzersiz adı 1-160 karakter arasında olmalıdır.");
       return;
     }
@@ -118,7 +160,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       exercise_name: trimmedName,
     };
 
-    // Parse Sets
     if (sets.trim() !== "") {
       if (!/^[1-9]\d*$/.test(sets.trim())) {
         setFormError("Set geçerli bir pozitif tam sayı olmalıdır.");
@@ -134,7 +175,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       payload.sets = null;
     }
 
-    // Parse Reps
     if (repetitions.trim() !== "") {
       const repsTrimmed = repetitions.trim();
       if (Array.from(repsTrimmed).length > 40) {
@@ -146,7 +186,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       payload.repetitions = null;
     }
 
-    // Parse Duration
     if (durationSeconds.trim() !== "") {
       if (!/^[1-9]\d*$/.test(durationSeconds.trim())) {
         setFormError("Süre geçerli bir pozitif tam sayı olmalıdır.");
@@ -162,7 +201,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       payload.duration_seconds = null;
     }
 
-    // Parse Rest
     if (restSeconds.trim() !== "") {
       if (!/^(0|[1-9]\d*)$/.test(restSeconds.trim())) {
         setFormError("Dinlenme geçerli bir negatif olmayan tam sayı olmalıdır.");
@@ -178,7 +216,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       payload.rest_seconds = null;
     }
 
-    // Parse Instructions
     if (instructions.trim() !== "") {
       const instTrimmed = instructions.trim();
       if (Array.from(instTrimmed).length > 1000) {
@@ -190,7 +227,6 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       payload.instructions = null;
     }
 
-    // Parse Sort Order
     if (!/^(0|[1-9]\d*)$/.test(sortOrder.trim())) {
       setFormError("Sıra geçerli bir tam sayı olmalıdır.");
       return;
@@ -217,10 +253,10 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
           throw new Error("Geçersiz yanıt.");
         }
       }
-      setIsModalOpen(false);
-      fetchExercises();
-    } catch (err: any) {
-      setFormError(err?.message || "İşlem başarısız.");
+      await fetchExercises();
+      resetForm();
+    } catch (err: unknown) {
+      setFormError(getErrorMessage(err));
     } finally {
       isSubmitting.current = false;
       setFormSaving(false);
@@ -237,9 +273,9 @@ export function ProgramExercisesPanel({ programId }: ProgramExercisesPanelProps)
       if (!isSuccessResponse(res) || !res.success) {
         throw new Error("Geçersiz yanıt.");
       }
-      fetchExercises();
-    } catch (err: any) {
-      alert("Silinemedi: " + (err?.message || "Bilinmeyen hata"));
+      await fetchExercises();
+    } catch (err: unknown) {
+      alert("Silinemedi: " + getErrorMessage(err));
     } finally {
       isDeleting.current = false;
     }

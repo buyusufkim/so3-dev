@@ -409,11 +409,16 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     if (method === 'POST') {
       const bodyObj = reqBody as Record<string, unknown>;
       
+      const allowedExerciseKeys = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
+      for (const k of Object.keys(bodyObj)) {
+        if (!allowedExerciseKeys.includes(k)) return createError(`Bilinmeyen alan: ${k}`, 422, 'VALIDATION_ERROR');
+      }
+
       const { exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order } = bodyObj;
 
       if (typeof exercise_name !== 'string') return createError('exercise_name geçerli olmalıdır.', 422, 'VALIDATION_ERROR');
       const trimmedName = exercise_name.trim();
-      if (trimmedName.length < 1 || trimmedName.length > 160) return createError('exercise_name 1-160 karakter arası olmalıdır.', 422, 'VALIDATION_ERROR');
+      if (trimmedName.length < 1 || Array.from(trimmedName).length > 160) return createError('exercise_name 1-160 karakter arası olmalıdır.', 422, 'VALIDATION_ERROR');
 
       let parsedSets: number | null = null;
       if (sets !== undefined && sets !== null) {
@@ -456,7 +461,10 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       }
 
       let parsedSortOrder = 0;
-      if (sort_order !== undefined && sort_order !== null) {
+      if (sort_order === null) {
+        return createError('sort_order null olamaz.', 422, 'VALIDATION_ERROR');
+      }
+      if (sort_order !== undefined) {
         if (typeof sort_order !== 'number' || !Number.isInteger(sort_order) || sort_order < 0 || sort_order > 2147483647) {
           return createError('sort_order geçersiz.', 422, 'VALIDATION_ERROR');
         }
@@ -498,21 +506,28 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
     if (method === 'PATCH') {
       const bodyObj = reqBody as Record<string, unknown>;
-      if (Object.keys(bodyObj).length === 0) return createError('Boş istek', 422, 'VALIDATION_ERROR');
+      const keys = Object.keys(bodyObj);
+      if (keys.length === 0) return createError('Boş istek', 422, 'VALIDATION_ERROR');
       
+      const allowedExerciseKeys = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
+      for (const k of keys) {
+        if (!allowedExerciseKeys.includes(k)) return createError(`Bilinmeyen alan: ${k}`, 422, 'VALIDATION_ERROR');
+      }
+
       let finalName = exercise.exercise_name;
-      let finalSets = exercise.sets;
-      let finalReps = exercise.repetitions;
-      let finalDuration = exercise.duration_seconds;
-      let finalRest = exercise.rest_seconds;
-      let finalInst = exercise.instructions;
+      let finalSets: number | null = exercise.sets;
+      let finalReps: string | null = exercise.repetitions;
+      let finalDuration: number | null = exercise.duration_seconds;
+      let finalRest: number | null = exercise.rest_seconds;
+      let finalInst: string | null = exercise.instructions;
       let finalSortOrder = exercise.sort_order;
 
       if ('exercise_name' in bodyObj) {
         const en = bodyObj.exercise_name;
+        if (en === null) return createError('exercise_name null olamaz.', 422, 'VALIDATION_ERROR');
         if (typeof en !== 'string') return createError('exercise_name metin olmalıdır.', 422, 'VALIDATION_ERROR');
         const trimmed = en.trim();
-        if (trimmed.length < 1 || trimmed.length > 160) return createError('exercise_name uzunluk hatası.', 422, 'VALIDATION_ERROR');
+        if (trimmed.length < 1 || Array.from(trimmed).length > 160) return createError('exercise_name uzunluk hatası.', 422, 'VALIDATION_ERROR');
         finalName = trimmed;
       }
 
@@ -521,7 +536,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (s !== null) {
           if (typeof s !== 'number' || !Number.isInteger(s) || s < 1 || s > 65535) return createError('sets hatalı.', 422, 'VALIDATION_ERROR');
         }
-        finalSets = s as number | null;
+        finalSets = s === null ? null : s;
       }
 
       if ('repetitions' in bodyObj) {
@@ -529,7 +544,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (r !== null) {
           if (typeof r !== 'string' || Array.from(r).length > 40) return createError('repetitions hatalı.', 422, 'VALIDATION_ERROR');
         }
-        finalReps = r as string | null;
+        finalReps = r === null ? null : r;
       }
 
       if ('duration_seconds' in bodyObj) {
@@ -537,7 +552,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (d !== null) {
           if (typeof d !== 'number' || !Number.isInteger(d) || d < 1 || d > 4294967295) return createError('duration_seconds hatalı.', 422, 'VALIDATION_ERROR');
         }
-        finalDuration = d as number | null;
+        finalDuration = d === null ? null : d;
       }
 
       if ('rest_seconds' in bodyObj) {
@@ -545,7 +560,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (rs !== null) {
           if (typeof rs !== 'number' || !Number.isInteger(rs) || rs < 0 || rs > 65535) return createError('rest_seconds hatalı.', 422, 'VALIDATION_ERROR');
         }
-        finalRest = rs as number | null;
+        finalRest = rs === null ? null : rs;
       }
 
       if ('instructions' in bodyObj) {
@@ -553,11 +568,12 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (ins !== null) {
           if (typeof ins !== 'string' || Array.from(ins).length > 1000) return createError('instructions hatalı.', 422, 'VALIDATION_ERROR');
         }
-        finalInst = ins as string | null;
+        finalInst = ins === null ? null : ins;
       }
 
       if ('sort_order' in bodyObj) {
         const so = bodyObj.sort_order;
+        if (so === null) return createError('sort_order null olamaz.', 422, 'VALIDATION_ERROR');
         if (typeof so !== 'number' || !Number.isInteger(so) || so < 0 || so > 2147483647) return createError('sort_order hatalı.', 422, 'VALIDATION_ERROR');
         finalSortOrder = so;
       }
