@@ -8,6 +8,13 @@ import {
   isTrainingProgramStatus
 } from "./types";
 
+class ContractValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContractValidationError";
+  }
+}
+
 export function TrainerTrainingProgramsList() {
   const { memberId } = useParams<{ memberId: string }>();
 
@@ -30,19 +37,23 @@ export function TrainerTrainingProgramsList() {
   }, [memberId, page, statusFilter]);
 
   const getErrorMessage = (err: unknown): string => {
+    if (err instanceof ContractValidationError) {
+      return err.message;
+    }
     if (err instanceof ApiError) {
-      switch (err.code) {
-        case "TRAINER_PROFILE_NOT_LINKED":
-          return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
-        case "NOT_FOUND":
-          return "Üye bulunamadı veya bu üyeye erişim yetkiniz yok.";
-        case "FORBIDDEN":
-          return "Bu alana erişim yetkiniz yok.";
-        case "VALIDATION_ERROR":
-          return err.message || "Doğrulama hatası.";
-        default:
-          return err.message || "Bir hata oluştu.";
+      if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+        return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
       }
+      if (err.status === 404 || err.code === "NOT_FOUND") {
+        return "Üye bulunamadı veya bu üyeye erişim yetkiniz yok.";
+      }
+      if (err.status === 403 || err.code === "FORBIDDEN") {
+        return "Bu alana erişim yetkiniz yok.";
+      }
+      if (err.status === 422 || err.code === "VALIDATION_ERROR") {
+        return err.message || "Doğrulama hatası.";
+      }
+      return "Programlar yüklenirken bir hata oluştu.";
     }
     return "Programlar yüklenirken bir hata oluştu.";
   };
@@ -62,7 +73,7 @@ export function TrainerTrainingProgramsList() {
 
       const rawRes = await apiClient.get(`/api/trainer/members/${memberId}/training-programs?${query.toString()}`);
       if (!isTrainerTrainingProgramsResponse(rawRes)) {
-        throw new Error("Antrenman programı verisi doğrulanamadı.");
+        throw new ContractValidationError("Antrenman programı verisi doğrulanamadı.");
       }
       setItems(rawRes.items);
       setTotal(rawRes.pagination.total);

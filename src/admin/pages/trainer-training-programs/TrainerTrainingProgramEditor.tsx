@@ -9,6 +9,43 @@ import {
   isSuccessResponse
 } from "./types";
 
+class ContractValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContractValidationError";
+  }
+}
+
+function isValidCalendarDate(val: string): boolean {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(val);
+  if (!match) return false;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+interface ProgramFormData {
+  title: string;
+  status: "draft" | "active" | "archived";
+  start_date: string;
+  end_date: string;
+  notes: string;
+}
+
+const INITIAL_DEFAULT_FORM: ProgramFormData = {
+  title: "",
+  status: "draft",
+  start_date: "",
+  end_date: "",
+  notes: ""
+};
+
 export function TrainerTrainingProgramEditor() {
   const { memberId, programId } = useParams<{ memberId: string; programId?: string }>();
   const navigate = useNavigate();
@@ -26,7 +63,9 @@ export function TrainerTrainingProgramEditor() {
   const isSubmitting = useRef(false);
   const isArchiving = useRef(false);
 
-  const [isDirty, setIsDirty] = useState(false);
+  const [formData, setFormData] = useState<ProgramFormData>(INITIAL_DEFAULT_FORM);
+  const [initialSnapshot, setInitialSnapshot] = useState<ProgramFormData>(INITIAL_DEFAULT_FORM);
+
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,13 +74,12 @@ export function TrainerTrainingProgramEditor() {
   const [memberInfo, setMemberInfo] = useState<{ id: number; name: string } | null>(null);
   const [trainerInfo, setTrainerInfo] = useState<{ id: number; name: string } | null>(null);
 
-  const [formData, setFormData] = useState({
-    title: "",
-    status: "draft" as "draft" | "active" | "archived",
-    start_date: "",
-    end_date: "",
-    notes: ""
-  });
+  const isDirty =
+    formData.title !== initialSnapshot.title ||
+    formData.status !== initialSnapshot.status ||
+    formData.start_date !== initialSnapshot.start_date ||
+    formData.end_date !== initialSnapshot.end_date ||
+    formData.notes !== initialSnapshot.notes;
 
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
@@ -76,27 +114,30 @@ export function TrainerTrainingProgramEditor() {
     }
   }, [canonicalMemberId, canonicalProgramId, isNew, isValidParams]);
 
-  const handleFieldChange = <K extends keyof typeof formData>(field: K, value: (typeof formData)[K]) => {
+  const handleFieldChange = <K extends keyof ProgramFormData>(field: K, value: ProgramFormData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    setIsDirty(true);
     bypassBlocker.current = false;
     setSuccessMessage(null);
   };
 
   const getErrorMessage = (err: unknown): string => {
+    if (err instanceof ContractValidationError) {
+      return err.message;
+    }
     if (err instanceof ApiError) {
-      switch (err.code) {
-        case "TRAINER_PROFILE_NOT_LINKED":
-          return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
-        case "NOT_FOUND":
-          return "Program veya üye bulunamadı ya da erişim yetkiniz yok.";
-        case "FORBIDDEN":
-          return "Bu alana erişim yetkiniz yok.";
-        case "VALIDATION_ERROR":
-          return err.message || "Doğrulama hatası. Lütfen girdiğiniz bilgileri kontrol edin.";
-        default:
-          return err.message || "Bir hata oluştu.";
+      if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+        return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
       }
+      if (err.status === 404 || err.code === "NOT_FOUND") {
+        return "Program veya üye bulunamadı ya da erişim yetkiniz yok.";
+      }
+      if (err.status === 403 || err.code === "FORBIDDEN") {
+        return "Bu alana erişim yetkiniz yok.";
+      }
+      if (err.status === 422 || err.code === "VALIDATION_ERROR") {
+        return err.message || "Doğrulama hatası. Lütfen girdiğiniz bilgileri kontrol edin.";
+      }
+      return "Beklenmeyen bir hata oluştu.";
     }
     return "Beklenmeyen bir hata oluştu.";
   };
@@ -109,7 +150,7 @@ export function TrainerTrainingProgramEditor() {
 
       const data = await apiClient.get(`/api/trainer/training-programs/${canonicalProgramId}`);
       if (!isTrainerTrainingProgramDetail(data)) {
-        throw new Error("Antrenman programı verisi doğrulanamadı.");
+        throw new ContractValidationError("Antrenman programı verisi doğrulanamadı.");
       }
 
       // IDOR safety validation: confirm member ID matches URL
@@ -117,13 +158,16 @@ export function TrainerTrainingProgramEditor() {
         throw new ApiError("Program bu üyeye ait değil veya erişim yetkiniz yok.", 404, "NOT_FOUND");
       }
 
-      setFormData({
+      const normalized: ProgramFormData = {
         title: data.title,
         status: data.status,
         start_date: data.start_date || "",
         end_date: data.end_date || "",
         notes: data.notes || ""
-      });
+      };
+
+      setFormData(normalized);
+      setInitialSnapshot(normalized);
 
       setMemberInfo({
         id: data.member.id,
@@ -135,7 +179,6 @@ export function TrainerTrainingProgramEditor() {
         name: data.trainer.name
       });
 
-      setIsDirty(false);
       bypassBlocker.current = false;
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -145,17 +188,18 @@ export function TrainerTrainingProgramEditor() {
   };
 
   const validateForm = () => {
-    const title = formData.title.trim();
-    if (title.length < 1 || title.length > 160) {
+    const trimmedTitle = formData.title.trim();
+    const titleLength = Array.from(trimmedTitle).length;
+    if (titleLength < 1 || titleLength > 160) {
       return "Program başlığı 1 ile 160 karakter arasında olmalıdır.";
     }
     if (!["draft", "active", "archived"].includes(formData.status)) {
       return "Geçersiz durum.";
     }
-    if (formData.start_date && !/^\d{4}-\d{2}-\d{2}$/.test(formData.start_date)) {
+    if (formData.start_date && !isValidCalendarDate(formData.start_date)) {
       return "Geçersiz başlangıç tarihi formatı.";
     }
-    if (formData.end_date && !/^\d{4}-\d{2}-\d{2}$/.test(formData.end_date)) {
+    if (formData.end_date && !isValidCalendarDate(formData.end_date)) {
       return "Geçersiz bitiş tarihi formatı.";
     }
     if (formData.start_date && formData.end_date && formData.end_date < formData.start_date) {
@@ -188,26 +232,52 @@ export function TrainerTrainingProgramEditor() {
         status: formData.status,
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
-        notes: formData.notes ? formData.notes.trim() : null
+        notes: formData.notes === "" ? null : formData.notes
       };
 
       if (isNew) {
         const res = await apiClient.post(`/api/trainer/members/${canonicalMemberId}/training-programs`, payload);
         if (!isTrainerTrainingProgramCreateResponse(res)) {
-          throw new Error("Sunucudan geçersiz yanıt alındı.");
+          throw new ContractValidationError("Antrenman programı yanıtı doğrulanamadı.");
         }
-        setIsDirty(false);
         bypassBlocker.current = true;
         navigate(`/admin/my-members/${canonicalMemberId}/training-programs/${res.id}`, { replace: true });
       } else {
         const res = await apiClient.patch(`/api/trainer/training-programs/${canonicalProgramId}`, payload);
         if (!isSuccessResponse(res) || !res.success) {
-          throw new Error("Sunucudan geçersiz yanıt alındı.");
+          throw new ContractValidationError("Antrenman programı yanıtı doğrulanamadı.");
         }
-        setIsDirty(false);
-        bypassBlocker.current = true;
+
+        // Fetch fresh detail safely and sync state
+        const freshData = await apiClient.get(`/api/trainer/training-programs/${canonicalProgramId}`);
+        if (!isTrainerTrainingProgramDetail(freshData)) {
+          throw new ContractValidationError("Antrenman programı verisi doğrulanamadı.");
+        }
+        if (freshData.member.id !== parseInt(canonicalMemberId, 10)) {
+          throw new ApiError("Program bu üyeye ait değil veya erişim yetkiniz yok.", 404, "NOT_FOUND");
+        }
+
+        const normalized: ProgramFormData = {
+          title: freshData.title,
+          status: freshData.status,
+          start_date: freshData.start_date || "",
+          end_date: freshData.end_date || "",
+          notes: freshData.notes || ""
+        };
+
+        setFormData(normalized);
+        setInitialSnapshot(normalized);
+        setMemberInfo({
+          id: freshData.member.id,
+          name: `${freshData.member.first_name} ${freshData.member.last_name}`
+        });
+        setTrainerInfo({
+          id: freshData.trainer.id,
+          name: freshData.trainer.name
+        });
+
+        bypassBlocker.current = false;
         setSuccessMessage("Program başarıyla güncellendi.");
-        await fetchProgram();
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -228,9 +298,8 @@ export function TrainerTrainingProgramEditor() {
       setError(null);
       const res = await apiClient.delete(`/api/trainer/training-programs/${canonicalProgramId}`);
       if (!isSuccessResponse(res) || !res.success) {
-        throw new Error("Sunucudan geçersiz yanıt alındı.");
+        throw new ContractValidationError("Antrenman programı yanıtı doğrulanamadı.");
       }
-      setIsDirty(false);
       bypassBlocker.current = true;
       navigate(`/admin/my-members/${canonicalMemberId}/training-programs`);
     } catch (err: unknown) {

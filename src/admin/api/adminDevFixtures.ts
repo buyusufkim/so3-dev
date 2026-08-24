@@ -1047,7 +1047,8 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
       if (typeof title !== 'string') return createError('title metin olmalıdır.', 422, 'VALIDATION_ERROR');
       const trimmedTitle = title.trim();
-      if (trimmedTitle.length < 1 || trimmedTitle.length > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+      const titleLen = Array.from(trimmedTitle).length;
+      if (titleLen < 1 || titleLen > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
 
       let parsedStatus: 'draft' | 'active' | 'archived' = 'draft';
       if (status !== undefined) {
@@ -1058,23 +1059,30 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         }
       }
 
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      const isValidDate = (d: unknown): d is string => {
+      const isValidCalendarDate = (d: unknown): d is string => {
         if (typeof d !== 'string') return false;
-        if (!dateRegex.test(d)) return false;
-        const parsed = new Date(d);
-        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+        const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(d);
+        if (!match) return false;
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        return (
+          date.getUTCFullYear() === year &&
+          date.getUTCMonth() === month - 1 &&
+          date.getUTCDate() === day
+        );
       };
 
       if (start_date !== undefined && start_date !== null) {
-        if (!isValidDate(start_date)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
+        if (!isValidCalendarDate(start_date)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
       }
       if (end_date !== undefined && end_date !== null) {
-        if (!isValidDate(end_date)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
+        if (!isValidCalendarDate(end_date)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
       }
 
-      const finalStart = start_date === undefined ? null : (start_date as string);
-      const finalEnd = end_date === undefined ? null : (end_date as string);
+      const finalStart = start_date === undefined ? null : (typeof start_date === 'string' ? start_date : null);
+      const finalEnd = end_date === undefined ? null : (typeof end_date === 'string' ? end_date : null);
 
       if (finalStart && finalEnd && finalEnd < finalStart) {
         return createError('Bitiş tarihi başlangıç tarihinden önce olamaz', 422, 'VALIDATION_ERROR');
@@ -1084,7 +1092,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (typeof notes !== 'string' || Array.from(notes).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
       }
 
-      const finalNotes = notes === undefined ? null : (notes as string);
+      const finalNotes = notes === undefined ? null : (typeof notes === 'string' ? notes : null);
 
       const newProgram: InternalTrainingProgramDetail = {
         id: nextProgramId++,
@@ -1143,7 +1151,8 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         const titleVal = bodyObj.title;
         if (typeof titleVal !== 'string') return createError('title metin olmalıdır', 422, 'VALIDATION_ERROR');
         const trimmed = titleVal.trim();
-        if (trimmed.length < 1 || trimmed.length > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+        const titleLen = Array.from(trimmed).length;
+        if (titleLen < 1 || titleLen > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
         finalTitle = trimmed;
       }
 
@@ -1156,24 +1165,31 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         }
       }
 
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      const isValidDate = (d: unknown): d is string => {
+      const isValidCalendarDate = (d: unknown): d is string => {
         if (typeof d !== 'string') return false;
-        if (!dateRegex.test(d)) return false;
-        const parsed = new Date(d);
-        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+        const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(d);
+        if (!match) return false;
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        return (
+          date.getUTCFullYear() === year &&
+          date.getUTCMonth() === month - 1 &&
+          date.getUTCDate() === day
+        );
       };
 
       if ('start_date' in bodyObj) {
         const sdVal = bodyObj.start_date;
-        if (sdVal !== null && !isValidDate(sdVal)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
-        finalStart = sdVal === null ? null : sdVal;
+        if (sdVal !== null && !isValidCalendarDate(sdVal)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
+        finalStart = sdVal === null ? null : (typeof sdVal === 'string' ? sdVal : null);
       }
 
       if ('end_date' in bodyObj) {
         const edVal = bodyObj.end_date;
-        if (edVal !== null && !isValidDate(edVal)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
-        finalEnd = edVal === null ? null : edVal;
+        if (edVal !== null && !isValidCalendarDate(edVal)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
+        finalEnd = edVal === null ? null : (typeof edVal === 'string' ? edVal : null);
       }
 
       if (finalStart && finalEnd && finalEnd < finalStart) {
@@ -1185,7 +1201,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         if (notesVal !== null) {
           if (typeof notesVal !== 'string' || Array.from(notesVal).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
         }
-        finalNotes = notesVal === null ? null : notesVal;
+        finalNotes = notesVal === null ? null : (typeof notesVal === 'string' ? notesVal : null);
       }
 
       program.title = finalTitle;
