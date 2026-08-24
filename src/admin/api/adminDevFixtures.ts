@@ -968,6 +968,242 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     });
   }
 
+  // --- Trainer Training Programs Endpoints ---
+  const trainerMemberProgramsMatch = path.match(/^\/api\/trainer\/members\/([1-9]\d*)\/training-programs$/);
+  if (trainerMemberProgramsMatch) {
+    const memberId = parseInt(trainerMemberProgramsMatch[1], 10);
+    const myTrainerId = 1;
+    const member = mockMembers.find(m => m.id === memberId && !m.deleted_at && m.trainer && m.trainer.id === myTrainerId);
+    if (!member) return createError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.', 404, 'NOT_FOUND');
+
+    if (method === 'GET') {
+      let filtered = mockPrograms.filter(p => p.member.id === memberId && p.trainer.id === myTrainerId && p.deleted_at === null);
+      
+      const statusFilter = url.searchParams.get('status');
+      if (statusFilter !== null) {
+        if (!['draft', 'active', 'archived'].includes(statusFilter)) {
+          return createError('Geçersiz durum filtresi', 422, 'VALIDATION_ERROR');
+        }
+        filtered = filtered.filter(p => p.status === statusFilter);
+      }
+
+      const total = filtered.length;
+      const pageParam = url.searchParams.get('page');
+      const perPageParam = url.searchParams.get('per_page');
+      
+      let page = 1;
+      let perPage = 20;
+
+      if (pageParam !== null) {
+        if (!/^[1-9]\d*$/.test(pageParam)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+        page = Number(pageParam);
+        if (!Number.isSafeInteger(page)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+      }
+
+      if (perPageParam !== null) {
+        if (!/^[1-9]\d*$/.test(perPageParam)) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+        perPage = Number(perPageParam);
+        if (!Number.isSafeInteger(perPage) || perPage > 100) return createError('Geçersiz sayfalama parametresi', 422, 'VALIDATION_ERROR');
+      }
+
+      filtered.sort((a, b) => b.id - a.id);
+      const start = (page - 1) * perPage;
+      const paginated = filtered.slice(start, start + perPage);
+
+      const items = paginated.map(p => ({
+        id: p.id,
+        uuid: p.uuid,
+        title: p.title,
+        status: p.status,
+        start_date: p.start_date,
+        end_date: p.end_date,
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      }));
+
+      return createResponse({
+        data: {
+          items,
+          pagination: {
+            total,
+            page,
+            per_page: perPage,
+            last_page: Math.ceil(total / perPage) || 1
+          }
+        }
+      });
+    }
+
+    if (method === 'POST') {
+      const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
+      for (const k of Object.keys(reqBody)) {
+        if (!allowedKeys.includes(k)) {
+          return createError(`Bilinmeyen alan: ${k}`, 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const bodyObj = reqBody as Record<string, unknown>;
+      const { title, status, start_date, end_date, notes } = bodyObj;
+
+      if (typeof title !== 'string') return createError('title metin olmalıdır.', 422, 'VALIDATION_ERROR');
+      const trimmedTitle = title.trim();
+      if (trimmedTitle.length < 1 || trimmedTitle.length > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+
+      let parsedStatus: 'draft' | 'active' | 'archived' = 'draft';
+      if (status !== undefined) {
+        if (status === 'draft' || status === 'active' || status === 'archived') {
+          parsedStatus = status;
+        } else {
+          return createError('status geçersiz.', 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const isValidDate = (d: unknown): d is string => {
+        if (typeof d !== 'string') return false;
+        if (!dateRegex.test(d)) return false;
+        const parsed = new Date(d);
+        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+      };
+
+      if (start_date !== undefined && start_date !== null) {
+        if (!isValidDate(start_date)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
+      }
+      if (end_date !== undefined && end_date !== null) {
+        if (!isValidDate(end_date)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
+      }
+
+      const finalStart = start_date === undefined ? null : (start_date as string);
+      const finalEnd = end_date === undefined ? null : (end_date as string);
+
+      if (finalStart && finalEnd && finalEnd < finalStart) {
+        return createError('Bitiş tarihi başlangıç tarihinden önce olamaz', 422, 'VALIDATION_ERROR');
+      }
+
+      if (notes !== undefined && notes !== null) {
+        if (typeof notes !== 'string' || Array.from(notes).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
+      }
+
+      const finalNotes = notes === undefined ? null : (notes as string);
+
+      const newProgram: InternalTrainingProgramDetail = {
+        id: nextProgramId++,
+        uuid: `p${nextProgramId}`,
+        title: trimmedTitle,
+        status: parsedStatus,
+        start_date: finalStart,
+        end_date: finalEnd,
+        notes: finalNotes,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        member: { id: member.id, uuid: member.uuid, first_name: member.first_name, last_name: member.last_name },
+        trainer: { id: myTrainerId, name: 'Ahmet Yılmaz' },
+        deleted_at: null
+      };
+
+      mockPrograms.push(newProgram);
+      return createResponse({ data: { id: newProgram.id, uuid: newProgram.uuid } }, 201);
+    }
+  }
+
+  const trainerProgramMatch = path.match(/^\/api\/trainer\/training-programs\/([1-9]\d*)$/);
+  if (trainerProgramMatch) {
+    const programId = parseInt(trainerProgramMatch[1], 10);
+    const myTrainerId = 1;
+    const program = mockPrograms.find(p => p.id === programId && p.trainer.id === myTrainerId && p.deleted_at === null);
+    if (!program) return createError('Program bulunamadı veya erişim yetkiniz yok.', 404, 'NOT_FOUND');
+
+    const member = mockMembers.find(m => m.id === program.member.id && !m.deleted_at && m.trainer && m.trainer.id === myTrainerId);
+    if (!member) return createError('Program veya üye bulunamadı ya da erişim yetkiniz yok.', 404, 'NOT_FOUND');
+
+    if (method === 'GET') {
+      const { deleted_at, ...detail } = program;
+      return createResponse({ data: detail });
+    }
+
+    if (method === 'PATCH') {
+      const keys = Object.keys(reqBody);
+      if (keys.length === 0) return createError('En az bir alan gönderilmelidir.', 422, 'VALIDATION_ERROR');
+
+      const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
+      for (const k of keys) {
+        if (!allowedKeys.includes(k)) {
+          return createError(`Bilinmeyen alan: ${k}`, 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const bodyObj = reqBody as Record<string, unknown>;
+      let finalTitle = program.title;
+      let finalStatus = program.status;
+      let finalStart = program.start_date;
+      let finalEnd = program.end_date;
+      let finalNotes = program.notes;
+
+      if ('title' in bodyObj) {
+        const titleVal = bodyObj.title;
+        if (typeof titleVal !== 'string') return createError('title metin olmalıdır', 422, 'VALIDATION_ERROR');
+        const trimmed = titleVal.trim();
+        if (trimmed.length < 1 || trimmed.length > 160) return createError('title 1-160 karakter arasında olmalıdır.', 422, 'VALIDATION_ERROR');
+        finalTitle = trimmed;
+      }
+
+      if ('status' in bodyObj) {
+        const statusVal = bodyObj.status;
+        if (statusVal === 'draft' || statusVal === 'active' || statusVal === 'archived') {
+          finalStatus = statusVal;
+        } else {
+          return createError('status geçersiz', 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const isValidDate = (d: unknown): d is string => {
+        if (typeof d !== 'string') return false;
+        if (!dateRegex.test(d)) return false;
+        const parsed = new Date(d);
+        return !isNaN(parsed.getTime()) && parsed.toISOString().startsWith(d);
+      };
+
+      if ('start_date' in bodyObj) {
+        const sdVal = bodyObj.start_date;
+        if (sdVal !== null && !isValidDate(sdVal)) return createError('Geçersiz start_date', 422, 'VALIDATION_ERROR');
+        finalStart = sdVal === null ? null : sdVal;
+      }
+
+      if ('end_date' in bodyObj) {
+        const edVal = bodyObj.end_date;
+        if (edVal !== null && !isValidDate(edVal)) return createError('Geçersiz end_date', 422, 'VALIDATION_ERROR');
+        finalEnd = edVal === null ? null : edVal;
+      }
+
+      if (finalStart && finalEnd && finalEnd < finalStart) {
+        return createError('Bitiş tarihi başlangıç tarihinden önce olamaz', 422, 'VALIDATION_ERROR');
+      }
+
+      if ('notes' in bodyObj) {
+        const notesVal = bodyObj.notes;
+        if (notesVal !== null) {
+          if (typeof notesVal !== 'string' || Array.from(notesVal).length > 3000) return createError('notes geçersiz', 422, 'VALIDATION_ERROR');
+        }
+        finalNotes = notesVal === null ? null : notesVal;
+      }
+
+      program.title = finalTitle;
+      program.status = finalStatus;
+      program.start_date = finalStart;
+      program.end_date = finalEnd;
+      program.notes = finalNotes;
+      program.updated_at = new Date().toISOString();
+
+      return createResponse({ data: { success: true } });
+    }
+
+    if (method === 'DELETE') {
+      program.deleted_at = new Date().toISOString();
+      return createResponse({ data: { success: true } });
+    }
+  }
+
   if (path.startsWith('/api/trainer/members/') && method === 'GET') {
     const parts = path.split('/');
     const id = parseInt(parts[4], 10);

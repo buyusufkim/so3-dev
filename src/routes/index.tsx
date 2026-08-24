@@ -26,6 +26,8 @@ const TrainerAccountsPage = lazy(() => import("../admin/pages/trainer-accounts/T
 const TrainerMembersList = lazy(() => import("../admin/pages/trainer-members/TrainerMembersList").then(m => ({ default: m.TrainerMembersList })));
 const TrainingProgramsList = lazy(() => import("../admin/pages/training-programs/TrainingProgramsList").then(m => ({ default: m.TrainingProgramsList })));
 const TrainingProgramEditor = lazy(() => import("../admin/pages/training-programs/TrainingProgramEditor").then(m => ({ default: m.TrainingProgramEditor })));
+const TrainerTrainingProgramsList = lazy(() => import("../admin/pages/trainer-training-programs/TrainerTrainingProgramsList").then(m => ({ default: m.TrainerTrainingProgramsList })));
+const TrainerTrainingProgramEditor = lazy(() => import("../admin/pages/trainer-training-programs/TrainerTrainingProgramEditor").then(m => ({ default: m.TrainerTrainingProgramEditor })));
 
 const TrainerMemberDetail = lazy(() => import("../admin/pages/trainer-members/TrainerMemberDetail").then(m => ({ default: m.TrainerMemberDetail })));
 const ReceptionPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.ReceptionPlaceholder })));
@@ -179,6 +181,18 @@ const router = createBrowserRouter([
       {
         path: "my-members/:id",
         element: <AdminSuspense><TrainerMemberDetail /></AdminSuspense>,
+      },
+      {
+        path: "my-members/:memberId/training-programs",
+        element: <AdminSuspense><TrainerTrainingProgramsList /></AdminSuspense>,
+      },
+      {
+        path: "my-members/:memberId/training-programs/new",
+        element: <AdminSuspense><TrainerTrainingProgramEditor /></AdminSuspense>,
+      },
+      {
+        path: "my-members/:memberId/training-programs/:programId",
+        element: <AdminSuspense><TrainerTrainingProgramEditor /></AdminSuspense>,
       },
       {
         path: "reception",
