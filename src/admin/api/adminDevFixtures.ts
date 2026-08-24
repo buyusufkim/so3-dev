@@ -5,10 +5,14 @@ import type { AdminTrainerListItem } from '../pages/trainers/types';
 
 import type { TrainingProgramListItem, TrainingProgramDetail } from '../pages/training-programs/types';
 
-let mockPrograms: TrainingProgramDetail[] = [
-  { id: 1, uuid: 'p1', title: 'Full Body Başlangıç', status: 'active', start_date: '2023-11-01', end_date: '2023-12-01', notes: 'Haftada 3 gün.', created_at: '2023-10-15', updated_at: '2023-10-15', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null } as any,
-  { id: 2, uuid: 'p2', title: 'Hipertrofi', status: 'draft', start_date: null, end_date: null, notes: null, created_at: '2023-11-01', updated_at: '2023-11-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null } as any,
-  { id: 3, uuid: 'p3', title: 'Kardiyo Odaklı', status: 'archived', start_date: '2023-01-01', end_date: '2023-02-01', notes: null, created_at: '2023-01-01', updated_at: '2023-02-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: '2023-03-01' } as any,
+interface InternalTrainingProgramDetail extends TrainingProgramDetail {
+  deleted_at: string | null;
+}
+
+let mockPrograms: InternalTrainingProgramDetail[] = [
+  { id: 1, uuid: 'p1', title: 'Full Body Başlangıç', status: 'active', start_date: '2023-11-01', end_date: '2023-12-01', notes: 'Haftada 3 gün.', created_at: '2023-10-15', updated_at: '2023-10-15', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null },
+  { id: 2, uuid: 'p2', title: 'Hipertrofi', status: 'draft', start_date: null, end_date: null, notes: null, created_at: '2023-11-01', updated_at: '2023-11-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: null },
+  { id: 3, uuid: 'p3', title: 'Kardiyo Odaklı', status: 'archived', start_date: '2023-01-01', end_date: '2023-02-01', notes: null, created_at: '2023-01-01', updated_at: '2023-02-01', member: { id: 1, uuid: 'u1', first_name: 'Can', last_name: 'Özkan' }, trainer: { id: 1, name: 'Ahmet Yılmaz' }, deleted_at: '2023-03-01' },
 ];
 let nextProgramId = 4;
 
@@ -354,7 +358,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
 
   // --- Training Programs Endpoints ---
-  if (path.match(/^\/api\/admin\/members\/\d+\/training-programs$/)) {
+  if (path.match(/^\/api\/admin\/members\/[1-9]\d*\/training-programs$/)) {
     const memberId = parseInt(path.split('/')[4], 10);
     const member = mockMembers.find(m => m.id === memberId);
     if (!member) return createError('Üye bulunamadı', 404, 'NOT_FOUND');
@@ -364,22 +368,34 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       
       const statusFilter = url.searchParams.get('status');
       if (statusFilter && statusFilter !== 'all') {
+        if (!['draft', 'active', 'archived'].includes(statusFilter)) {
+          return createError('Geçersiz durum filtresi', 422, 'VALIDATION_ERROR');
+        }
         filtered = filtered.filter(p => p.status === statusFilter);
       }
       
       const deletedFilter = url.searchParams.get('deleted');
       if (deletedFilter === 'deleted') {
-        filtered = filtered.filter(p => (p as any).deleted_at !== null);
+        filtered = filtered.filter(p => p.deleted_at !== null);
       } else if (deletedFilter === 'all') {
         // no filter
       } else {
         // 'active' by default
-        filtered = filtered.filter(p => (p as any).deleted_at === null);
+        filtered = filtered.filter(p => p.deleted_at === null);
       }
 
       const total = filtered.length;
-      const page = parseInt(url.searchParams.get('page') || '1', 10);
-      const perPage = parseInt(url.searchParams.get('per_page') || '20', 10);
+      
+      const pageParam = url.searchParams.get('page');
+      const perPageParam = url.searchParams.get('per_page');
+      
+      const page = pageParam ? parseInt(pageParam, 10) : 1;
+      const perPage = perPageParam ? parseInt(perPageParam, 10) : 20;
+      
+      if (isNaN(page) || page < 1 || isNaN(perPage) || perPage < 1 || perPage > 100) {
+        return createError('Geçersiz sayfalama parametreleri', 422, 'VALIDATION_ERROR');
+      }
+      
       const start = (page - 1) * perPage;
       const paginated = filtered.slice(start, start + perPage);
 
@@ -392,7 +408,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         end_date: p.end_date,
         created_at: p.created_at,
         updated_at: p.updated_at,
-        deleted_at: (p as any).deleted_at || null,
+        deleted_at: p.deleted_at,
         trainer: p.trainer
       }));
 
@@ -411,11 +427,19 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
     if (method === 'POST') {
       if (!member.trainer) {
-        return createError('Üyeye atanmış bir eğitmen bulunmuyor.', 422, 'MEMBER_TRAINER_NOT_ASSIGNED');
+        return createError('Üyeye atanmış bir eğitmen bulunmuyor.', 409, 'MEMBER_TRAINER_NOT_ASSIGNED');
+      }
+      
+      // Ensure only allowed keys
+      const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
+      for (const k of Object.keys(reqBody)) {
+        if (!allowedKeys.includes(k)) {
+          return createError('Bilinmeyen alan', 422, 'VALIDATION_ERROR');
+        }
       }
 
       const { title, status, start_date, end_date, notes } = reqBody;
-      const newProgram: TrainingProgramDetail = {
+      const newProgram: InternalTrainingProgramDetail = {
         id: nextProgramId++,
         uuid: `p${nextProgramId}`,
         title: String(title).trim(),
@@ -427,23 +451,32 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         updated_at: new Date().toISOString(),
         member: { id: member.id, uuid: member.uuid, first_name: member.first_name, last_name: member.last_name },
         trainer: { id: member.trainer.id, name: member.trainer.name },
+        deleted_at: null
       };
-      (newProgram as any).deleted_at = null;
       mockPrograms.push(newProgram);
       return createResponse({ data: { id: newProgram.id, uuid: newProgram.uuid } }, 201);
     }
   }
 
-  if (path.match(/^\/api\/admin\/training-programs\/\d+$/)) {
+  if (path.match(/^\/api\/admin\/training-programs\/[1-9]\d*$/)) {
     const programId = parseInt(path.split('/')[4], 10);
     const program = mockPrograms.find(p => p.id === programId);
     if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
 
     if (method === 'GET') {
-      return createResponse({ data: program });
+      // Strip deleted_at before sending Detail response (as per contract)
+      const { deleted_at, ...detail } = program;
+      return createResponse({ data: detail });
     }
 
     if (method === 'PATCH') {
+      const allowedKeys = ['title', 'status', 'start_date', 'end_date', 'notes'];
+      for (const k of Object.keys(reqBody)) {
+        if (!allowedKeys.includes(k)) {
+          return createError('Bilinmeyen alan', 422, 'VALIDATION_ERROR');
+        }
+      }
+    
       const { title, status, start_date, end_date, notes } = reqBody;
       if ('title' in reqBody) program.title = String(title).trim();
       if ('status' in reqBody) program.status = status as 'draft' | 'active' | 'archived';
@@ -455,16 +488,22 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
 
     if (method === 'DELETE') {
-      (program as any).deleted_at = new Date().toISOString();
+      if (program.deleted_at !== null) {
+        return createError('Program zaten silinmiş', 422, 'VALIDATION_ERROR');
+      }
+      program.deleted_at = new Date().toISOString();
       return createResponse({ data: { success: true } });
     }
   }
 
-  if (path.match(/^\/api\/admin\/training-programs\/\d+\/restore$/) && method === 'POST') {
+  if (path.match(/^\/api\/admin\/training-programs\/[1-9]\d*\/restore$/) && method === 'POST') {
     const programId = parseInt(path.split('/')[4], 10);
     const program = mockPrograms.find(p => p.id === programId);
     if (!program) return createError('Program bulunamadı', 404, 'NOT_FOUND');
-    (program as any).deleted_at = null;
+    if (program.deleted_at === null) {
+      return createError('Program silinmemiş', 422, 'VALIDATION_ERROR');
+    }
+    program.deleted_at = null;
     return createResponse({ data: { success: true } });
   }
 

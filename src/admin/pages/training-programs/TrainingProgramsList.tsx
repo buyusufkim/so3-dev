@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Plus, Edit2, RotateCcw } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
-import { TrainingProgramListItem, TrainingProgramsResponse, SuccessResponse } from "./types";
+import { TrainingProgramListItem, isTrainingProgramsResponse, isSuccessResponse, isTrainingProgramStatus } from "./types";
 
 export function TrainingProgramsList() {
   const { memberId } = useParams<{ memberId: string }>();
@@ -43,10 +43,13 @@ export function TrainingProgramsList() {
       }
       query.set("deleted", deletedFilter);
 
-      const res = await apiClient.get(`/api/admin/members/${memberId}/training-programs?${query.toString()}`) as TrainingProgramsResponse;
-      setItems(res.items);
-      setTotal(res.pagination.total);
-      setLastPage(res.pagination.last_page);
+      const rawRes = await apiClient.get(`/api/admin/members/${memberId}/training-programs?${query.toString()}`);
+      if (!isTrainingProgramsResponse(rawRes)) {
+        throw new Error("Sunucudan geçersiz veri döndü.");
+      }
+      setItems(rawRes.items);
+      setTotal(rawRes.pagination.total);
+      setLastPage(rawRes.pagination.last_page);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.code === "NOT_FOUND") {
@@ -62,14 +65,18 @@ export function TrainingProgramsList() {
     }
   };
 
-  const handleStatusChange = (val: "all" | "draft" | "active" | "archived") => {
-    setStatusFilter(val);
-    setPage(1);
+  const handleStatusChange = (val: string) => {
+    if (val === "all" || isTrainingProgramStatus(val)) {
+      setStatusFilter(val as "all" | "draft" | "active" | "archived");
+      setPage(1);
+    }
   };
 
-  const handleDeletedChange = (val: "active" | "deleted" | "all") => {
-    setDeletedFilter(val);
-    setPage(1);
+  const handleDeletedChange = (val: string) => {
+    if (val === "active" || val === "deleted" || val === "all") {
+      setDeletedFilter(val);
+      setPage(1);
+    }
   };
 
   const handleRestore = async (id: number) => {
@@ -81,10 +88,10 @@ export function TrainingProgramsList() {
 
     isRestoring.current = true;
     try {
-      const res = await apiClient.post(`/api/admin/training-programs/${id}/restore`, {}) as SuccessResponse;
-      if (res && typeof res === 'object' && res.success) {
+      const res = await apiClient.post(`/api/admin/training-programs/${id}/restore`, {});
+      if (isSuccessResponse(res) && res.success) {
         alert("Program başarıyla geri yüklendi.");
-        fetchPrograms();
+        await fetchPrograms();
       } else {
         throw new Error("Beklenmeyen yanıt formatı.");
       }
@@ -144,7 +151,7 @@ export function TrainingProgramsList() {
           <label className="text-xs text-white/50 font-medium uppercase">Durum</label>
           <select
             value={statusFilter}
-            onChange={(e) => handleStatusChange(e.target.value as any)}
+            onChange={(e) => handleStatusChange(e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-white/30"
           >
             <option value="all">Tümü</option>
@@ -157,7 +164,7 @@ export function TrainingProgramsList() {
           <label className="text-xs text-white/50 font-medium uppercase">Silinme Durumu</label>
           <select
             value={deletedFilter}
-            onChange={(e) => handleDeletedChange(e.target.value as any)}
+            onChange={(e) => handleDeletedChange(e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-white/30"
           >
             <option value="active">Sadece Aktif Olanlar</option>

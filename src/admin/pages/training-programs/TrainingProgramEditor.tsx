@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
-import { TrainingProgramDetail, TrainingProgramCreateResponse } from "./types";
+import { TrainingProgramDetail, isTrainingProgramDetail, isTrainingProgramCreateResponse, isTrainingProgramStatus, isSuccessResponse } from "./types";
 
 export function TrainingProgramEditor() {
   const { memberId, programId } = useParams<{ memberId?: string; programId?: string }>();
@@ -17,6 +17,7 @@ export function TrainingProgramEditor() {
 
   const bypassBlocker = useRef(false);
   const isSubmitting = useRef(false);
+  const isArchiving = useRef(false);
   
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(!isNew);
@@ -91,7 +92,10 @@ export function TrainingProgramEditor() {
   const fetchProgram = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get(`/api/admin/training-programs/${canonicalProgramId}`) as TrainingProgramDetail;
+      const data = await apiClient.get(`/api/admin/training-programs/${canonicalProgramId}`);
+      if (!isTrainingProgramDetail(data)) {
+        throw new Error("Sunucudan geçersiz veri döndü.");
+      }
       
       setFormData({
         title: data.title,
@@ -129,7 +133,7 @@ export function TrainingProgramEditor() {
     if (formData.start_date && formData.end_date && formData.end_date < formData.start_date) {
       return "Bitiş tarihi, başlangıç tarihinden önce olamaz.";
     }
-    if (formData.notes && formData.notes.length > 3000) {
+    if (formData.notes && Array.from(formData.notes).length > 3000) {
       return "Notlar en fazla 3000 karakter olabilir.";
     }
     return null;
@@ -159,16 +163,22 @@ export function TrainingProgramEditor() {
       };
 
       if (isNew) {
-        const res = await apiClient.post(`/api/admin/members/${canonicalMemberId}/training-programs`, payload) as TrainingProgramCreateResponse;
+        const res = await apiClient.post(`/api/admin/members/${canonicalMemberId}/training-programs`, payload);
+        if (!isTrainingProgramCreateResponse(res)) {
+          throw new Error("Sunucudan geçersiz yanıt.");
+        }
         setIsDirty(false);
         bypassBlocker.current = true;
         navigate(`/admin/training-programs/${res.id}`, { replace: true });
       } else {
-        await apiClient.patch(`/api/admin/training-programs/${canonicalProgramId}`, payload);
+        const res = await apiClient.patch(`/api/admin/training-programs/${canonicalProgramId}`, payload);
+        if (!isSuccessResponse(res) || !res.success) {
+          throw new Error("Sunucudan geçersiz yanıt.");
+        }
         alert("Program başarıyla güncellendi.");
         setIsDirty(false);
         bypassBlocker.current = true;
-        fetchProgram(); 
+        await fetchProgram(); 
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -179,13 +189,17 @@ export function TrainingProgramEditor() {
   };
 
   const handleArchive = async () => {
-    if (!canonicalProgramId) return;
+    if (!canonicalProgramId || isArchiving.current) return;
     if (!window.confirm("Bu programı arşivlemek istediğinize emin misiniz?")) {
       return;
     }
     
+    isArchiving.current = true;
     try {
-      await apiClient.delete(`/api/admin/training-programs/${canonicalProgramId}`);
+      const res = await apiClient.delete(`/api/admin/training-programs/${canonicalProgramId}`);
+      if (!isSuccessResponse(res) || !res.success) {
+        throw new Error("Sunucudan geçersiz yanıt.");
+      }
       setIsDirty(false);
       bypassBlocker.current = true;
       if (memberInfo) {
@@ -195,6 +209,8 @@ export function TrainingProgramEditor() {
       }
     } catch (err: unknown) {
       alert("Arşivlenemedi: " + getErrorMessage(err));
+    } finally {
+      isArchiving.current = false;
     }
   };
 
@@ -297,7 +313,11 @@ export function TrainingProgramEditor() {
             <label className="text-sm font-medium">Durum *</label>
             <select
               value={formData.status}
-              onChange={(e) => handleFieldChange("status", e.target.value as "draft" | "active" | "archived")}
+              onChange={(e) => {
+                if (isTrainingProgramStatus(e.target.value)) {
+                  handleFieldChange("status", e.target.value);
+                }
+              }}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
             >
               <option value="draft">Taslak</option>
