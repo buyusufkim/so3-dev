@@ -419,6 +419,44 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/progress-notes$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $controller = new \Controllers\MemberProgressNoteController();
+        if ($method === 'GET') {
+            $controller->index($id);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->store($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/member-progress-notes/([1-9]\d*)(/restore)?$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        $id = (int)$matches[1];
+        $isRestore = isset($matches[2]) && $matches[2] === '/restore';
+        $controller = new \Controllers\MemberProgressNoteController();
+        
+        if ($isRestore) {
+            if ($method === 'POST') {
+                $controller->restore($id);
+                $matched = true;
+            }
+        } else {
+            if ($method === 'GET') {
+                $controller->show($id);
+                $matched = true;
+            } elseif ($method === 'PATCH') {
+                $controller->update($id);
+                $matched = true;
+            } elseif ($method === 'DELETE') {
+                $controller->destroy($id);
+                $matched = true;
+            }
+        }
+    }
+
     // Dynamic matching for trainer members endpoints
     if (preg_match('#^/api/trainer/members$#', $requestUri)) {
         AuthMiddleware::hasRole(['trainer']);
