@@ -100,6 +100,22 @@ let mockTrainerAccounts: Array<{ id: number; trainer_id: number; username: strin
 
 let currentDevRole = 'super_admin';
 
+
+function isValidDate(dateStr: string) {
+    const regex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+    if (!regex.test(dateStr)) return false;
+    const [datePart, timePart] = dateStr.split(' ');
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [h, i, s] = timePart.split(':').map(Number);
+    const dateObj = new Date(y, m - 1, d, h, i, s);
+    return dateObj.getFullYear() === y && 
+           dateObj.getMonth() === m - 1 && 
+           dateObj.getDate() === d &&
+           dateObj.getHours() === h &&
+           dateObj.getMinutes() === i &&
+           dateObj.getSeconds() === s;
+}
+
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
   const url = new URL(endpoint, 'http://localhost');
@@ -120,7 +136,11 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   if (['POST', 'PATCH', 'PUT'].includes(method) && options.body) {
     try {
       if (typeof options.body === 'string') {
-        reqBody = JSON.parse(options.body);
+        const parsed = JSON.parse(options.body);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return createError('Invalid JSON body', 400);
+        }
+        reqBody = parsed;
       }
     } catch (e) {
       return createError('Invalid JSON body', 400);
@@ -895,6 +915,283 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     program.deleted_at = null;
     return createResponse({ data: { success: true } });
   }
+  // --- Member Measurements Endpoints ---
+  const measurementListMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/measurements$/);
+  if (measurementListMatch) {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    const memberId = parseInt(measurementListMatch[1], 10);
+    const member = mockMembers.find(m => m.id === memberId);
+    if (!member || member.deleted_at) {
+      return createError('Member not found', 404, 'NOT_FOUND');
+    }
+
+    if (method === 'GET') {
+      const pageStr = url.searchParams.get('page') || '1';
+      const perPageStr = url.searchParams.get('per_page') || '20';
+      if (!/^[1-9]\d*$/.test(pageStr)) return createError('Invalid page parameter', 422, 'VALIDATION_ERROR');
+      if (!/^[1-9]\d*$/.test(perPageStr)) return createError('Invalid per_page parameter', 422, 'VALIDATION_ERROR');
+      
+      const page = Number(pageStr);
+      const perPage = Number(perPageStr);
+      if (!Number.isSafeInteger(page) || !Number.isSafeInteger(perPage)) return createError('Invalid pagination parameter', 422, 'VALIDATION_ERROR');
+      if (perPage < 1 || perPage > 100) return createError('per_page cannot exceed 100', 422, 'VALIDATION_ERROR');
+      const offset = (page - 1) * perPage;
+      if (!Number.isSafeInteger(offset) || offset < 0) return createError('Invalid offset', 422, 'VALIDATION_ERROR');
+
+      const deleted = url.searchParams.get('deleted') || 'active';
+      if (!['active', 'deleted', 'all'].includes(deleted)) return createError('Invalid deleted parameter', 422, 'VALIDATION_ERROR');
+
+      let filtered = mockMeasurements.filter(m => m.member_id === memberId);
+      if (deleted === 'active') filtered = filtered.filter(m => !m.deleted_at);
+      else if (deleted === 'deleted') filtered = filtered.filter(m => m.deleted_at);
+
+      filtered.sort((a, b) => {
+        if (a.measured_at > b.measured_at) return -1;
+        if (a.measured_at < b.measured_at) return 1;
+        return b.id - a.id;
+      });
+
+      const total = filtered.length;
+      const lastPage = total > 0 ? Math.ceil(total / perPage) : 1;
+      const items = filtered.slice(offset, offset + perPage).map(item => {
+        const { notes, ...rest } = item;
+        return rest;
+      });
+
+      return createResponse({
+        data: {
+          items,
+          pagination: { total, page, per_page: perPage, last_page: lastPage }
+        }
+      });
+    }
+
+    if (method === 'POST') {
+      const allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
+      for (const key of Object.keys(reqBody)) {
+        if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
+      }
+      
+      if (!reqBody.measured_at) return createError('measured_at is required', 422, 'VALIDATION_ERROR');
+      if (typeof reqBody.measured_at !== 'string' || !isValidDate(reqBody.measured_at)) {
+        return createError('Invalid measured_at format. Must be Y-m-d H:i:s', 422, 'VALIDATION_ERROR');
+      }
+
+      if (!member.trainer) {
+        return createError('Member has no assigned trainer', 409, 'MEMBER_TRAINER_NOT_ASSIGNED');
+      }
+
+      const trainer = mockTrainers.find(t => t.id === member.trainer?.id);
+      if (!trainer || !trainer.is_active) {
+        return createError('Assigned trainer is invalid or inactive', 409, 'MEMBER_TRAINER_INVALID');
+      }
+
+      const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
+        if (val === undefined || val === null) return null;
+        if (typeof val !== 'number') throw new Error(`${field} must be a number`);
+        if (!Number.isFinite(val)) throw new Error(`${field} must be a finite number`);
+        
+        if (isPercent) {
+           if (val < 0) throw new Error(`${field} must be at least 0`);
+           if (val > 100) throw new Error(`${field} cannot exceed 100`);
+        } else {
+           if (val <= 0) throw new Error(`${field} must be greater than 0`);
+           if (val > max) throw new Error(`${field} cannot exceed ${max}`);
+        }
+
+        const strVal = val.toString();
+        if (strVal.includes('.')) {
+          const decimals = strVal.split('.')[1];
+          if (decimals.length > 2) {
+             throw new Error(`${field} cannot have more than 2 decimal places`);
+          }
+        }
+        return val;
+      };
+
+      let w, bf, c, wa, h, a, t;
+      try {
+        w = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
+        bf = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
+        c = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
+        wa = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
+        h = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
+        a = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
+        t = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
+      } catch(e: any) {
+        return createError(e.message, 422, 'VALIDATION_ERROR');
+      }
+
+      if (w === null && bf === null && c === null && wa === null && h === null && a === null && t === null) {
+        return createError('At least one measurement field must be provided and not null', 422, 'VALIDATION_ERROR');
+      }
+
+      let n = null;
+      if (reqBody.notes !== undefined && reqBody.notes !== null) {
+        if (typeof reqBody.notes !== 'string') return createError('notes must be a string or null', 422, 'VALIDATION_ERROR');
+        if (reqBody.notes.trim() === '') n = null;
+        else {
+           n = reqBody.notes;
+           if (Array.from(n).length > 1000) return createError('notes cannot exceed 1000 characters', 422, 'VALIDATION_ERROR');
+        }
+      }
+
+      const newId = nextMeasurementId++;
+      const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+      const newMeasurement: MockMeasurement = {
+        id: newId,
+        uuid,
+        member_id: memberId,
+        trainer_id: trainer.id,
+        measured_at: reqBody.measured_at,
+        weight_kg: w,
+        body_fat_percent: bf,
+        chest_cm: c,
+        waist_cm: wa,
+        hip_cm: h,
+        arm_cm: a,
+        thigh_cm: t,
+        notes: n,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null
+      };
+
+      mockMeasurements.push(newMeasurement);
+      return createResponse({ data: { id: newId, uuid } }, 201);
+    }
+  }
+
+  const measurementActionMatch = path.match(/^\/api\/admin\/member-measurements\/([1-9]\d*)(?:\/([^/]+))?$/);
+  if (measurementActionMatch) {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    const id = parseInt(measurementActionMatch[1], 10);
+    const action = measurementActionMatch[2];
+    const itemIndex = mockMeasurements.findIndex(m => m.id === id);
+    if (itemIndex === -1) return createError('Measurement not found', 404, 'NOT_FOUND');
+    const item = mockMeasurements[itemIndex];
+
+    if (action === 'restore') {
+      if (method === 'POST') {
+        if (!item.deleted_at) return createError('Measurement is not archived', 409, 'MEASUREMENT_NOT_ARCHIVED');
+        item.deleted_at = null;
+        item.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        return createResponse({ data: { success: true } });
+      }
+    } else if (!action) {
+      if (method === 'GET') {
+        if (item.deleted_at) return createError('Measurement not found', 404, 'NOT_FOUND');
+        return createResponse({ data: item });
+      }
+
+      if (method === 'PATCH') {
+        if (item.deleted_at) return createError('Measurement is deleted', 404, 'NOT_FOUND');
+        if (Object.keys(reqBody).length === 0) return createError('Empty payload', 422, 'VALIDATION_ERROR');
+
+        const allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
+        for (const key of Object.keys(reqBody)) {
+          if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
+        }
+
+        if (reqBody.measured_at !== undefined) {
+          if (reqBody.measured_at === null) return createError('measured_at cannot be null', 422, 'VALIDATION_ERROR');
+          if (typeof reqBody.measured_at !== 'string' || !isValidDate(reqBody.measured_at)) {
+            return createError('Invalid measured_at format', 422, 'VALIDATION_ERROR');
+          }
+        }
+
+        const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
+          if (val === undefined || val === null) return null;
+          if (typeof val !== 'number') throw new Error(`${field} must be a number`);
+          if (!Number.isFinite(val)) throw new Error(`${field} must be a finite number`);
+          
+          if (isPercent) {
+             if (val < 0) throw new Error(`${field} must be at least 0`);
+             if (val > 100) throw new Error(`${field} cannot exceed 100`);
+          } else {
+             if (val <= 0) throw new Error(`${field} must be greater than 0`);
+             if (val > max) throw new Error(`${field} cannot exceed ${max}`);
+          }
+
+          const strVal = val.toString();
+          if (strVal.includes('.')) {
+            const decimals = strVal.split('.')[1];
+            if (decimals.length > 2) {
+                 throw new Error(`${field} cannot have more than 2 decimal places`);
+            }
+          }
+          return val;
+        };
+
+        const merged = { ...item };
+        let hasChanges = false;
+
+        try {
+          if (reqBody.measured_at !== undefined) merged.measured_at = reqBody.measured_at;
+          
+          if (reqBody.weight_kg !== undefined) merged.weight_kg = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
+          if (reqBody.body_fat_percent !== undefined) merged.body_fat_percent = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
+          if (reqBody.chest_cm !== undefined) merged.chest_cm = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
+          if (reqBody.waist_cm !== undefined) merged.waist_cm = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
+          if (reqBody.hip_cm !== undefined) merged.hip_cm = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
+          if (reqBody.arm_cm !== undefined) merged.arm_cm = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
+          if (reqBody.thigh_cm !== undefined) merged.thigh_cm = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
+
+          if (reqBody.notes !== undefined) {
+            let n: string | null = reqBody.notes as any;
+            if (n !== null) {
+              if (typeof n !== 'string') throw new Error('notes must be a string or null');
+              if ((n as string).trim() === '') n = null;
+              else if (Array.from(n as string).length > 1000) throw new Error('notes cannot exceed 1000 characters');
+            }
+            merged.notes = n;
+          }
+        } catch(e: any) {
+          return createError(e.message, 422, 'VALIDATION_ERROR');
+        }
+
+        if (merged.weight_kg === null && merged.body_fat_percent === null && merged.chest_cm === null && merged.waist_cm === null && merged.hip_cm === null && merged.arm_cm === null && merged.thigh_cm === null) {
+          return createError('At least one measurement field must be not null', 422, 'VALIDATION_ERROR');
+        }
+
+        for (const k of allowed) {
+          if ((item as any)[k] !== (merged as any)[k]) {
+            hasChanges = true;
+            break;
+          }
+        }
+
+        if (!hasChanges) {
+          return createResponse({ data: { success: true } });
+        }
+
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        merged.updated_at = now;
+        mockMeasurements[itemIndex] = merged;
+        
+        return createResponse({ data: { success: true } });
+      }
+
+      if (method === 'DELETE') {
+        if (item.deleted_at) return createError('Measurement not found', 404, 'NOT_FOUND');
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        item.deleted_at = now;
+        item.updated_at = now;
+        return createResponse({ data: { success: true } });
+      }
+    }
+  }
+
+
   if (path.startsWith('/api/admin/members/')) {
 
     const parts = path.split('/');
@@ -1492,247 +1789,6 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     });
   }
 
-
-  // --- Member Measurements Endpoints ---
-  const measurementListMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/measurements$/);
-  if (measurementListMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
-      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
-    }
-    const memberId = parseInt(measurementListMatch[1], 10);
-    const member = mockMembers.find(m => m.id === memberId);
-    if (!member || member.deleted_at) {
-      return createError('Member not found', 404, 'NOT_FOUND');
-    }
-
-    if (method === 'GET') {
-      const pageStr = url.searchParams.get('page') || '1';
-      const perPageStr = url.searchParams.get('per_page') || '20';
-      if (!/^[1-9]\d*$/.test(pageStr)) return createError('Invalid page parameter', 422, 'VALIDATION_ERROR');
-      if (!/^[1-9]\d*$/.test(perPageStr)) return createError('Invalid per_page parameter', 422, 'VALIDATION_ERROR');
-      
-      const page = parseInt(pageStr, 10);
-      const perPage = parseInt(perPageStr, 10);
-      if (perPage > 100) return createError('per_page cannot exceed 100', 422, 'VALIDATION_ERROR');
-
-      const deleted = url.searchParams.get('deleted') || 'active';
-      if (!['active', 'deleted', 'all'].includes(deleted)) return createError('Invalid deleted parameter', 422, 'VALIDATION_ERROR');
-
-      let filtered = mockMeasurements.filter(m => m.member_id === memberId);
-      if (deleted === 'active') filtered = filtered.filter(m => !m.deleted_at);
-      else if (deleted === 'deleted') filtered = filtered.filter(m => m.deleted_at);
-
-      filtered.sort((a, b) => {
-        if (a.measured_at > b.measured_at) return -1;
-        if (a.measured_at < b.measured_at) return 1;
-        return b.id - a.id;
-      });
-
-      const total = filtered.length;
-      const lastPage = total > 0 ? Math.ceil(total / perPage) : 1;
-      const offset = (page - 1) * perPage;
-      const items = filtered.slice(offset, offset + perPage).map(item => {
-        const { notes, ...rest } = item;
-        return rest;
-      });
-
-      return createResponse({
-        data: {
-          items,
-          pagination: { total, page, per_page: perPage, last_page: lastPage }
-        }
-      });
-    }
-
-    if (method === 'POST') {
-      const allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
-      for (const key of Object.keys(reqBody)) {
-        if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
-      }
-      
-      if (!reqBody.measured_at) return createError('measured_at is required', 422, 'VALIDATION_ERROR');
-      if (typeof reqBody.measured_at !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(reqBody.measured_at)) {
-        return createError('Invalid measured_at format. Must be Y-m-d H:i:s', 422, 'VALIDATION_ERROR');
-      }
-
-      if (!member.trainer) {
-        return createError('Member has no assigned trainer', 409, 'MEMBER_TRAINER_NOT_ASSIGNED');
-      }
-
-      const trainer = mockTrainers.find(t => t.id === member.trainer?.id);
-      if (!trainer || !trainer.is_active) {
-        return createError('Assigned trainer is invalid or inactive', 409, 'MEMBER_TRAINER_INVALID');
-      }
-
-      const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
-        if (val === undefined || val === null) return null;
-        if (typeof val !== 'number') throw new Error(`${field} must be a number`);
-        if (val <= 0) throw new Error(`${field} must be greater than 0`);
-        if (val > max) throw new Error(`${field} cannot exceed ${max}`);
-        if (isPercent && val > 100) throw new Error(`${field} cannot exceed 100`);
-        return Math.round(val * 100) / 100;
-      };
-
-      let w, bf, c, wa, h, a, t;
-      try {
-        w = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
-        bf = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
-        c = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
-        wa = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
-        h = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
-        a = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
-        t = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
-      } catch(e: any) {
-        return createError(e.message, 422, 'VALIDATION_ERROR');
-      }
-
-      if (w === null && bf === null && c === null && wa === null && h === null && a === null && t === null) {
-        return createError('At least one measurement field must be provided and not null', 422, 'VALIDATION_ERROR');
-      }
-
-      let n = null;
-      if (reqBody.notes !== undefined && reqBody.notes !== null) {
-        if (typeof reqBody.notes !== 'string') return createError('notes must be a string or null', 422, 'VALIDATION_ERROR');
-        n = reqBody.notes.trim();
-        if (n === '') n = null;
-        else if (n.length > 1000) return createError('notes cannot exceed 1000 characters', 422, 'VALIDATION_ERROR');
-      }
-
-      const newId = nextMeasurementId++;
-      const uuid = 'm' + newId;
-      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-
-      const newMeasurement: MockMeasurement = {
-        id: newId,
-        uuid,
-        member_id: memberId,
-        trainer_id: trainer.id,
-        measured_at: reqBody.measured_at,
-        weight_kg: w,
-        body_fat_percent: bf,
-        chest_cm: c,
-        waist_cm: wa,
-        hip_cm: h,
-        arm_cm: a,
-        thigh_cm: t,
-        notes: n,
-        created_at: now,
-        updated_at: now,
-        deleted_at: null
-      };
-
-      mockMeasurements.push(newMeasurement);
-      return createResponse({ data: { id: newId, uuid } }, 201);
-    }
-  }
-
-  const measurementActionMatch = path.match(/^\/api\/admin\/member-measurements\/([1-9]\d*)(?:\/([^/]+))?$/);
-  if (measurementActionMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
-      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
-    }
-    const id = parseInt(measurementActionMatch[1], 10);
-    const action = measurementActionMatch[2];
-    const itemIndex = mockMeasurements.findIndex(m => m.id === id);
-    if (itemIndex === -1) return createError('Measurement not found', 404, 'NOT_FOUND');
-    const item = mockMeasurements[itemIndex];
-
-    if (action === 'restore') {
-      if (method === 'POST') {
-        if (!item.deleted_at) return createError('Measurement is not archived', 409, 'MEASUREMENT_NOT_ARCHIVED');
-        item.deleted_at = null;
-        return createResponse({ data: { success: true } });
-      }
-    } else if (!action) {
-      if (method === 'GET') {
-        if (item.deleted_at) return createError('Measurement not found', 404, 'NOT_FOUND');
-        return createResponse({ data: item });
-      }
-
-      if (method === 'PATCH') {
-        if (item.deleted_at) return createError('Measurement is deleted', 404, 'NOT_FOUND');
-        if (Object.keys(reqBody).length === 0) return createError('Empty payload', 422, 'VALIDATION_ERROR');
-
-        const allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
-        for (const key of Object.keys(reqBody)) {
-          if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
-        }
-
-        if (reqBody.measured_at !== undefined) {
-          if (reqBody.measured_at === null) return createError('measured_at cannot be null', 422, 'VALIDATION_ERROR');
-          if (typeof reqBody.measured_at !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(reqBody.measured_at)) {
-            return createError('Invalid measured_at format', 422, 'VALIDATION_ERROR');
-          }
-        }
-
-        const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
-          if (val === undefined || val === null) return null;
-          if (typeof val !== 'number') throw new Error(`${field} must be a number`);
-          if (val <= 0) throw new Error(`${field} must be greater than 0`);
-          if (val > max) throw new Error(`${field} cannot exceed ${max}`);
-          if (isPercent && val > 100) throw new Error(`${field} cannot exceed 100`);
-          return Math.round(val * 100) / 100;
-        };
-
-        const merged = { ...item };
-        let hasChanges = false;
-
-        try {
-          if (reqBody.measured_at !== undefined) merged.measured_at = reqBody.measured_at;
-          
-          if (reqBody.weight_kg !== undefined) merged.weight_kg = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
-          if (reqBody.body_fat_percent !== undefined) merged.body_fat_percent = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
-          if (reqBody.chest_cm !== undefined) merged.chest_cm = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
-          if (reqBody.waist_cm !== undefined) merged.waist_cm = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
-          if (reqBody.hip_cm !== undefined) merged.hip_cm = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
-          if (reqBody.arm_cm !== undefined) merged.arm_cm = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
-          if (reqBody.thigh_cm !== undefined) merged.thigh_cm = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
-
-          if (reqBody.notes !== undefined) {
-            let n: string | null = reqBody.notes as any;
-            if (n !== null) {
-              if (typeof n !== 'string') throw new Error('notes must be a string or null');
-              n = (n as string).trim();
-              if (n === '') n = null;
-              else if (n.length > 1000) throw new Error('notes cannot exceed 1000 characters');
-            }
-            merged.notes = n;
-          }
-        } catch(e: any) {
-          return createError(e.message, 422, 'VALIDATION_ERROR');
-        }
-
-        if (merged.weight_kg === null && merged.body_fat_percent === null && merged.chest_cm === null && merged.waist_cm === null && merged.hip_cm === null && merged.arm_cm === null && merged.thigh_cm === null) {
-          return createError('At least one measurement field must be not null', 422, 'VALIDATION_ERROR');
-        }
-
-        for (const k of allowed) {
-          if ((item as any)[k] !== (merged as any)[k]) {
-            hasChanges = true;
-            break;
-          }
-        }
-
-        if (!hasChanges) {
-          return createResponse({ data: { success: true } });
-        }
-
-        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-        merged.updated_at = now;
-        mockMeasurements[itemIndex] = merged;
-        
-        return createResponse({ data: { success: true } });
-      }
-
-      if (method === 'DELETE') {
-        if (item.deleted_at) return createError('Measurement not found', 404, 'NOT_FOUND');
-        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-        item.deleted_at = now;
-        item.updated_at = now;
-        return createResponse({ data: { success: true } });
-      }
-    }
-  }
 
   return createError('Not implemented in mock', 404);
 
