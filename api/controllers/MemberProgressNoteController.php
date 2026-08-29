@@ -13,10 +13,10 @@ use Throwable;
 
 
 class MemberProgressNoteController {
-    private $db;
+    private PDO $db;
 
-    public function __construct($db) {
-        $this->db = $db;
+    public function __construct() {
+        $this->db = Database::getInstance()->getConnection();
     }
 
     private function getAdminId(): int {
