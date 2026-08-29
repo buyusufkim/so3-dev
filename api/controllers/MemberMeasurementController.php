@@ -21,6 +21,41 @@ class MemberMeasurementController {
         return (int)($_SESSION['admin_id'] ?? 0);
     }
 
+    private function generateUuid(): string {
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    private function getJsonPayload(): array {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (stripos($contentType, 'application/json') !== 0) {
+            Response::error("Content type must be application/json", 'UNSUPPORTED_MEDIA_TYPE', 415);
+        }
+        
+        $input = file_get_contents('php://input');
+        if (strlen($input) > 16384) {
+            Response::error("Payload too large", 'PAYLOAD_TOO_LARGE', 413);
+        }
+        
+        if (trim($input) === '') {
+            Response::error("Empty payload", 'BAD_REQUEST', 400);
+        }
+        
+        $dataRaw = json_decode($input);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_object($dataRaw)) {
+            Response::error("Invalid JSON payload", 'BAD_REQUEST', 400);
+        }
+        
+        $data = json_decode($input, true);
+        if (empty($data)) {
+            Response::error("Empty payload", 'VALIDATION_ERROR', 422);
+        }
+        
+        return $data;
+    }
+
     private function validateMeasurement($val, string $fieldName, float $maxLimit, bool $allowZero = false) {
         if ($val === null) return null;
         if (!is_int($val) && !is_float($val)) {
@@ -39,25 +74,37 @@ class MemberMeasurementController {
             }
         }
         
-        $strVal = (string)$val;
-        if (strpos($strVal, '.') !== false) {
-            $parts = explode('.', $strVal);
-            if (isset($parts[1]) && strlen($parts[1]) > 2) {
-                Response::error("$fieldName can have at most 2 decimal places", 'VALIDATION_ERROR', 422);
-            }
+        $diff = abs(round((float)$val, 2) - (float)$val);
+        if ($diff > 1.0e-9) {
+            Response::error("$fieldName can have at most 2 decimal places", 'VALIDATION_ERROR', 422);
         }
+        
         return $val;
     }
 
     public function index(int $memberId): void {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
-        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-        if ($page < 1) $page = 1;
+        $pageStr = isset($_GET['page']) ? (string)$_GET['page'] : '1';
+        $perPageStr = isset($_GET['per_page']) ? (string)$_GET['per_page'] : '20';
         
-        $perPage = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
-        if ($perPage < 1) $perPage = 20;
-        if ($perPage > 100) $perPage = 100;
+        if (!preg_match('/^[1-9]\d*$/', $pageStr)) {
+            Response::error("Invalid page parameter", 'VALIDATION_ERROR', 422);
+        }
+        if (!preg_match('/^[1-9]\d*$/', $perPageStr)) {
+            Response::error("Invalid per_page parameter", 'VALIDATION_ERROR', 422);
+        }
+        
+        $page = (int)$pageStr;
+        $perPage = (int)$perPageStr;
+        
+        if ((string)$page !== $pageStr || (string)$perPage !== $perPageStr) {
+            Response::error("Pagination parameter out of range", 'VALIDATION_ERROR', 422);
+        }
+        
+        if ($perPage > 100) {
+            Response::error("per_page cannot exceed 100", 'VALIDATION_ERROR', 422);
+        }
         
         $deleted = isset($_GET['deleted']) ? $_GET['deleted'] : 'active';
         if (!in_array($deleted, ['active', 'deleted', 'all'], true)) {
@@ -88,7 +135,6 @@ class MemberMeasurementController {
         $total = (int)$countStmt->fetchColumn();
         
         $lastPage = $total > 0 ? (int)ceil($total / $perPage) : 1;
-        if ($page > $lastPage) $page = $lastPage;
         
         $offset = ($page - 1) * $perPage;
         
@@ -162,24 +208,7 @@ class MemberMeasurementController {
     public function store(int $memberId): void {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
-        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
-        if ($contentLength > 16384) {
-            Response::error("Payload too large", 'PAYLOAD_TOO_LARGE', 413);
-        }
-        
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (strpos($contentType, 'application/json') === false) {
-            Response::error("Content type must be application/json", 'UNSUPPORTED_MEDIA_TYPE', 415);
-        }
-        
-        $input = file_get_contents('php://input');
-        $dataRaw = json_decode($input);
-        
-        if (json_last_error() !== JSON_ERROR_NONE || !is_object($dataRaw)) {
-            Response::error("Invalid JSON payload", 'BAD_REQUEST', 400);
-        }
-        
-        $data = json_decode($input, true);
+        $data = $this->getJsonPayload();
         
         $allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
         foreach (array_keys($data) as $key) {
@@ -245,23 +274,16 @@ class MemberMeasurementController {
                 Response::error("Member has no assigned trainer", 'MEMBER_TRAINER_NOT_ASSIGNED', 409);
             }
 
-            $tStmt = $this->db->prepare("SELECT id, status, deleted_at FROM trainers WHERE id = ?");
+            $tStmt = $this->db->prepare("SELECT id, is_active, deleted_at FROM trainers WHERE id = ? FOR UPDATE");
             $tStmt->execute([$member['trainer_id']]);
             $trainer = $tStmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$trainer || $trainer['deleted_at'] !== null || $trainer['status'] !== 'active') {
+            if (!$trainer || $trainer['deleted_at'] !== null || $trainer['is_active'] != 1) {
                 $this->db->rollBack();
                 Response::error("Assigned trainer is invalid or inactive", 'MEMBER_TRAINER_INVALID', 409);
             }
             
-            $uuid = sprintf(
-                '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0x0fff) | 0x4000,
-                mt_rand(0, 0x3fff) | 0x8000,
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-            );
+            $uuid = $this->generateUuid();
 
             $adminId = $this->getAdminId();
 
@@ -294,9 +316,10 @@ class MemberMeasurementController {
 
             $this->db->commit();
             
-            http_response_code(201);
-            echo json_encode(['id' => $newId, 'uuid' => $uuid]);
-            exit;
+            Response::json([
+                'id' => $newId,
+                'uuid' => $uuid
+            ], 201);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
@@ -309,33 +332,67 @@ class MemberMeasurementController {
     public function update(int $id): void {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
-        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
-        if ($contentLength > 16384) {
-            Response::error("Payload too large", 'PAYLOAD_TOO_LARGE', 413);
-        }
-        
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (strpos($contentType, 'application/json') === false) {
-            Response::error("Content type must be application/json", 'UNSUPPORTED_MEDIA_TYPE', 415);
-        }
-        
-        $input = file_get_contents('php://input');
-        $dataRaw = json_decode($input);
-        
-        if (json_last_error() !== JSON_ERROR_NONE || !is_object($dataRaw)) {
-            Response::error("Invalid JSON payload", 'BAD_REQUEST', 400);
-        }
-        
-        $data = json_decode($input, true);
-        if (empty($data)) {
-            Response::error("Empty payload", 'VALIDATION_ERROR', 422);
-        }
+        $data = $this->getJsonPayload();
         
         $allowed = ['measured_at', 'weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm', 'notes'];
         foreach (array_keys($data) as $key) {
             if (!in_array($key, $allowed, true)) {
                 Response::error("Invalid field in payload: $key", 'VALIDATION_ERROR', 422);
             }
+        }
+        
+        // Validate fields before transaction
+        $validated = [];
+        
+        if (array_key_exists('measured_at', $data)) {
+            if ($data['measured_at'] === null) {
+                Response::error("measured_at cannot be null", 'VALIDATION_ERROR', 422);
+            }
+            if (!is_string($data['measured_at'])) {
+                Response::error("measured_at must be a string", 'VALIDATION_ERROR', 422);
+            }
+            $d = DateTime::createFromFormat('Y-m-d H:i:s', $data['measured_at']);
+            if (!$d || $d->format('Y-m-d H:i:s') !== $data['measured_at']) {
+                Response::error("Invalid measured_at format. Must be Y-m-d H:i:s", 'VALIDATION_ERROR', 422);
+            }
+            $validated['measured_at'] = $data['measured_at'];
+        }
+        
+        $measureFields = [
+            'weight_kg' => [9999.99, false],
+            'body_fat_percent' => [100, true],
+            'chest_cm' => [9999.99, false],
+            'waist_cm' => [9999.99, false],
+            'hip_cm' => [9999.99, false],
+            'arm_cm' => [9999.99, false],
+            'thigh_cm' => [9999.99, false]
+        ];
+        
+        foreach ($measureFields as $field => $rules) {
+            if (array_key_exists($field, $data)) {
+                $val = $data[$field];
+                if ($val !== null) {
+                    $val = $this->validateMeasurement($val, $field, $rules[0], $rules[1]);
+                }
+                $validated[$field] = $val;
+            }
+        }
+        
+        if (array_key_exists('notes', $data)) {
+            $notes = $data['notes'];
+            if ($notes !== null) {
+                if (!is_string($notes)) {
+                    Response::error("notes must be a string or null", 'VALIDATION_ERROR', 422);
+                }
+                if (trim($notes) === '') {
+                    $notes = null;
+                } else {
+                    if (mb_strlen($notes, 'UTF-8') > 1000) {
+                        Response::error("notes cannot exceed 1000 characters", 'VALIDATION_ERROR', 422);
+                    }
+                }
+            }
+            $validated['notes'] = $notes;
         }
         
         $this->db->beginTransaction();
@@ -355,86 +412,8 @@ class MemberMeasurementController {
             
             $merged = $current;
             
-            if (array_key_exists('measured_at', $data)) {
-                if ($data['measured_at'] === null) {
-                    $this->db->rollBack();
-                    Response::error("measured_at cannot be null", 'VALIDATION_ERROR', 422);
-                }
-                if (!is_string($data['measured_at'])) {
-                    $this->db->rollBack();
-                    Response::error("measured_at must be a string", 'VALIDATION_ERROR', 422);
-                }
-                $d = DateTime::createFromFormat('Y-m-d H:i:s', $data['measured_at']);
-                if (!$d || $d->format('Y-m-d H:i:s') !== $data['measured_at']) {
-                    $this->db->rollBack();
-                    Response::error("Invalid measured_at format. Must be Y-m-d H:i:s", 'VALIDATION_ERROR', 422);
-                }
-                $merged['measured_at'] = $data['measured_at'];
-            }
-            
-            $measureFields = [
-                'weight_kg' => [9999.99, false],
-                'body_fat_percent' => [100, true],
-                'chest_cm' => [9999.99, false],
-                'waist_cm' => [9999.99, false],
-                'hip_cm' => [9999.99, false],
-                'arm_cm' => [9999.99, false],
-                'thigh_cm' => [9999.99, false]
-            ];
-            
-            foreach ($measureFields as $field => $rules) {
-                if (array_key_exists($field, $data)) {
-                    $val = $data[$field];
-                    if ($val !== null) {
-                        if (!is_int($val) && !is_float($val)) {
-                            $this->db->rollBack();
-                            Response::error("$field must be a JSON number or null", 'VALIDATION_ERROR', 422);
-                        }
-                        if (is_nan($val) || is_infinite($val)) {
-                            $this->db->rollBack();
-                            Response::error("$field is invalid", 'VALIDATION_ERROR', 422);
-                        }
-                        if ($rules[1]) {
-                            if ($val < 0 || $val > $rules[0]) {
-                                $this->db->rollBack();
-                                Response::error("$field must be between 0 and {$rules[0]}", 'VALIDATION_ERROR', 422);
-                            }
-                        } else {
-                            if ($val <= 0 || $val > $rules[0]) {
-                                $this->db->rollBack();
-                                Response::error("$field must be greater than 0 and up to {$rules[0]}", 'VALIDATION_ERROR', 422);
-                            }
-                        }
-                        $strVal = (string)$val;
-                        if (strpos($strVal, '.') !== false) {
-                            $parts = explode('.', $strVal);
-                            if (isset($parts[1]) && strlen($parts[1]) > 2) {
-                                $this->db->rollBack();
-                                Response::error("$field can have at most 2 decimal places", 'VALIDATION_ERROR', 422);
-                            }
-                        }
-                    }
-                    $merged[$field] = $val;
-                }
-            }
-            
-            if (array_key_exists('notes', $data)) {
-                $notes = $data['notes'];
-                if ($notes !== null) {
-                    if (!is_string($notes)) {
-                        $this->db->rollBack();
-                        Response::error("notes must be a string or null", 'VALIDATION_ERROR', 422);
-                    }
-                    if (trim($notes) === '') {
-                        $notes = null;
-                    } else {
-                        if (mb_strlen($notes, 'UTF-8') > 1000) {
-                            $this->db->rollBack();
-                            Response::error("notes cannot exceed 1000 characters", 'VALIDATION_ERROR', 422);
-                        }
-                    }
-                }
-                $merged['notes'] = $notes;
+            foreach ($validated as $field => $val) {
+                $merged[$field] = $val;
             }
             
             $hasMeasurement = false;
@@ -477,7 +456,7 @@ class MemberMeasurementController {
             }
             
             if (empty($updateFields)) {
-                $this->db->rollBack();
+                $this->db->commit();
                 Response::json(['success' => true]);
                 return;
             }
@@ -488,7 +467,7 @@ class MemberMeasurementController {
             
             $updateValues[] = $id;
             
-            $sql = "UPDATE member_measurements SET " . implode(", ", $updateFields) . " WHERE id = ?";
+            $sql = "UPDATE member_measurements SET " . implode(", ", $updateFields) . " WHERE id = ? AND deleted_at IS NULL";
             $stmtU = $this->db->prepare($sql);
             $stmtU->execute($updateValues);
             
@@ -534,7 +513,7 @@ class MemberMeasurementController {
             
             $adminId = $this->getAdminId();
             
-            $delStmt = $this->db->prepare("UPDATE member_measurements SET deleted_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?");
+            $delStmt = $this->db->prepare("UPDATE member_measurements SET deleted_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ? AND deleted_at IS NULL");
             $delStmt->execute([$adminId, $id]);
             
             if ($delStmt->rowCount() !== 1) {
@@ -583,7 +562,7 @@ class MemberMeasurementController {
             
             $adminId = $this->getAdminId();
             
-            $resStmt = $this->db->prepare("UPDATE member_measurements SET deleted_at = NULL, updated_by = ? WHERE id = ?");
+            $resStmt = $this->db->prepare("UPDATE member_measurements SET deleted_at = NULL, updated_by = ? WHERE id = ? AND deleted_at IS NOT NULL");
             $resStmt->execute([$adminId, $id]);
             
             if ($resStmt->rowCount() !== 1) {
