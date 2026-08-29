@@ -29,8 +29,10 @@ class MemberMeasurementController {
     }
 
     private function getJsonPayload(): array {
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (stripos($contentType, 'application/json') !== 0) {
+        $contentTypeHeader = $_SERVER['CONTENT_TYPE'] ?? '';
+        $parts = explode(';', $contentTypeHeader);
+        $mediaType = strtolower(trim($parts[0]));
+        if ($mediaType !== 'application/json') {
             Response::error("Content type must be application/json", 'UNSUPPORTED_MEDIA_TYPE', 415);
         }
         
@@ -85,25 +87,34 @@ class MemberMeasurementController {
     public function index(int $memberId): void {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
-        $pageStr = isset($_GET['page']) ? (string)$_GET['page'] : '1';
-        $perPageStr = isset($_GET['per_page']) ? (string)$_GET['per_page'] : '20';
+        $pageRaw = $_GET['page'] ?? '1';
+        $perPageRaw = $_GET['per_page'] ?? '20';
         
-        if (!preg_match('/^[1-9]\d*$/', $pageStr)) {
+        if (!is_string($pageRaw) || !preg_match('/^[1-9]\d*$/', $pageRaw)) {
             Response::error("Invalid page parameter", 'VALIDATION_ERROR', 422);
         }
-        if (!preg_match('/^[1-9]\d*$/', $perPageStr)) {
+        if (!is_string($perPageRaw) || !preg_match('/^[1-9]\d*$/', $perPageRaw)) {
             Response::error("Invalid per_page parameter", 'VALIDATION_ERROR', 422);
         }
         
-        $page = (int)$pageStr;
-        $perPage = (int)$perPageStr;
+        $page = (int)$pageRaw;
+        $perPage = (int)$perPageRaw;
         
-        if ((string)$page !== $pageStr || (string)$perPage !== $perPageStr) {
+        if ((string)$page !== $pageRaw || (string)$perPage !== $perPageRaw) {
             Response::error("Pagination parameter out of range", 'VALIDATION_ERROR', 422);
         }
         
         if ($perPage > 100) {
             Response::error("per_page cannot exceed 100", 'VALIDATION_ERROR', 422);
+        }
+        
+        if (($page - 1) > floor(PHP_INT_MAX / $perPage)) {
+            Response::error("Pagination offset overflow", 'VALIDATION_ERROR', 422);
+        }
+        
+        $offset = ($page - 1) * $perPage;
+        if (!is_int($offset) || $offset < 0) {
+            Response::error("Pagination offset overflow", 'VALIDATION_ERROR', 422);
         }
         
         $deleted = isset($_GET['deleted']) ? $_GET['deleted'] : 'active';
