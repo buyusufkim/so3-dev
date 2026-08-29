@@ -108,7 +108,7 @@ class MemberMeasurementController {
             Response::error("per_page cannot exceed 100", 'VALIDATION_ERROR', 422);
         }
         
-        if (($page - 1) > floor(PHP_INT_MAX / $perPage)) {
+        if (($page - 1) > intdiv(PHP_INT_MAX, $perPage)) {
             Response::error("Pagination offset overflow", 'VALIDATION_ERROR', 422);
         }
         
@@ -146,8 +146,6 @@ class MemberMeasurementController {
         $total = (int)$countStmt->fetchColumn();
         
         $lastPage = $total > 0 ? (int)ceil($total / $perPage) : 1;
-        
-        $offset = ($page - 1) * $perPage;
         
         $sql = "SELECT id, uuid, member_id, trainer_id, measured_at, weight_kg, body_fat_percent, chest_cm, waist_cm, hip_cm, arm_cm, thigh_cm, created_at, updated_at, deleted_at 
                 FROM member_measurements 
