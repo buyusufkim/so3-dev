@@ -16,8 +16,11 @@ class TrainerTrainingProgramController {
     }
 
     private function getTrainerProfileId(): int {
-        $adminId = $_SESSION['admin_id'] ?? null;
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
         if (!$adminId) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
         }
 
@@ -29,55 +32,75 @@ class TrainerTrainingProgramController {
         $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$trainer) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('Bağlı ve aktif bir eğitmen profili bulunamadı.', 'TRAINER_PROFILE_NOT_LINKED', 403);
         }
         return (int)$trainer['id'];
     }
 
-    private function validatePaginationParam($value, $default, $min, $max = null) {
-        if ($value === null) return $default;
-        if (is_array($value) || is_bool($value) || is_object($value)) return false;
-        
-        $val = (string)$value;
-        $filtered = filter_var($val, FILTER_VALIDATE_INT);
-        
-        if ($filtered === false) return false;
-        if ((string)$filtered !== $val) return false;
-        if ($filtered < $min) return false;
-        if ($max !== null && $filtered > $max) return false;
-        
-        return $filtered;
+    private function getTrainerProfileIdForUpdate(): int {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        if (!$adminId) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT id FROM trainers 
+            WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
+            FOR UPDATE
+        ");
+        $stmt->execute([$adminId]);
+        $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$trainer) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Bağlı ve aktif bir eğitmen profili bulunamadı.', 'TRAINER_PROFILE_NOT_LINKED', 403);
+        }
+        return (int)$trainer['id'];
     }
 
-    private function getJsonInput(): array {
-        $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
-        if (strpos(strtolower($contentType), 'application/json') !== 0) {
+    private function getJsonPayload(): array {
+        $contentType = $_SERVER["CONTENT_TYPE"] ?? '';
+        if (strcasecmp(trim(explode(';', $contentType)[0]), 'application/json') !== 0) {
             Response::error('Yalnızca JSON kabul edilmektedir.', 'UNSUPPORTED_MEDIA_TYPE', 415);
         }
 
-        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
-        if ($contentLength > 16384) {
-            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
-        }
-
         $raw = file_get_contents('php://input');
-        if ($raw === false || empty(trim((string)$raw))) {
+        if ($raw === false) {
             Response::error('Boş istek.', 'BAD_REQUEST', 400);
         }
         
         if (strlen($raw) > 16384) {
             Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
         }
-
-        $data = json_decode($raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Response::error('Geçersiz JSON formatı.', 'BAD_REQUEST', 400);
-        }
         
-        if (!is_array($data)) {
+        if (trim($raw) === '') {
+            Response::error('Boş istek.', 'BAD_REQUEST', 400);
+        }
+
+        $isObj = json_decode($raw, false);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_object($isObj)) {
             Response::error('JSON bir obje olmalıdır.', 'BAD_REQUEST', 400);
         }
 
+        $data = json_decode($raw, true);
+        if (empty($data)) {
+            Response::error('Boş JSON nesnesi.', 'BAD_REQUEST', 400);
+        }
+
+        $allowlist = ['title', 'status', 'start_date', 'end_date', 'notes'];
+        foreach (array_keys($data) as $key) {
+            if (!in_array($key, $allowlist, true)) {
+                Response::error("Bilinmeyen alan: $key", 'VALIDATION_ERROR', 422);
+            }
+        }
         return $data;
     }
 
@@ -106,19 +129,31 @@ class TrainerTrainingProgramController {
             Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
         }
 
-        $pageInput = isset($_GET['page']) ? $_GET['page'] : null;
-        $perPageInput = isset($_GET['per_page']) ? $_GET['per_page'] : null;
-        
-        $page = $this->validatePaginationParam($pageInput, 1, 1);
-        $perPage = $this->validatePaginationParam($perPageInput, 20, 1, 100);
+        $pageRaw = $_GET['page'] ?? '1';
+        $perPageRaw = $_GET['per_page'] ?? '20';
 
-        if ($page === false) {
+        if (!is_string($pageRaw) || !preg_match('/^[1-9]\d*$/', $pageRaw)) {
             Response::error('Geçersiz sayfa numarası', 'VALIDATION_ERROR', 422);
         }
-        if ($perPage === false) {
+        if (!is_string($perPageRaw) || !preg_match('/^[1-9]\d*$/', $perPageRaw)) {
             Response::error('Geçersiz per_page değeri', 'VALIDATION_ERROR', 422);
         }
-        
+
+        $page = (int)$pageRaw;
+        $perPage = (int)$perPageRaw;
+
+        if ((string)$page !== $pageRaw || (string)$perPage !== $perPageRaw) {
+            Response::error('Pagination parameter out of range', 'VALIDATION_ERROR', 422);
+        }
+
+        if ($perPage > 100) {
+            Response::error('per_page cannot exceed 100', 'VALIDATION_ERROR', 422);
+        }
+
+        if (($page - 1) > intdiv(PHP_INT_MAX, $perPage)) {
+            Response::error('Pagination offset overflow', 'VALIDATION_ERROR', 422);
+        }
+
         $status = isset($_GET['status']) ? $_GET['status'] : null;
         if ($status !== null) {
             if (is_array($status) || !is_string($status) || !in_array($status, ['draft', 'active', 'archived'])) {
@@ -127,23 +162,39 @@ class TrainerTrainingProgramController {
         }
 
         $conditions = [
-            'member_id = ?', 
-            'trainer_id = ?', 
-            'deleted_at IS NULL'
+            'tp.member_id = ?', 
+            'tp.trainer_id = ?', 
+            'm.trainer_id = ?',
+            'm.deleted_at IS NULL',
+            'tp.deleted_at IS NULL'
         ];
-        $params = [$memberId, $trainerId];
+        $params = [$memberId, $trainerId, $trainerId];
 
         if ($status) {
-            $conditions[] = 'status = ?';
+            $conditions[] = 'tp.status = ?';
             $params[] = $status;
         }
 
         $where = implode(' AND ', $conditions);
         
-        $countSql = "SELECT COUNT(*) FROM training_programs WHERE " . $where;
+        $countSql = "
+            SELECT COUNT(*) 
+            FROM training_programs tp
+            JOIN members m ON tp.member_id = m.id
+            WHERE $where
+        ";
         $countStmt = $this->db->prepare($countSql);
-        $countStmt->execute($params);
-        $total = $countStmt->fetchColumn();
+        
+        $paramIndex = 1;
+        foreach ($params as $param) {
+            if (is_int($param)) {
+                $countStmt->bindValue($paramIndex++, $param, PDO::PARAM_INT);
+            } else {
+                $countStmt->bindValue($paramIndex++, $param, PDO::PARAM_STR);
+            }
+        }
+        $countStmt->execute();
+        $total = (int)$countStmt->fetchColumn();
 
         $lastPage = ceil($total / $perPage);
         if ($lastPage < 1) $lastPage = 1;
@@ -152,11 +203,12 @@ class TrainerTrainingProgramController {
 
         $sql = "
             SELECT 
-                id, uuid, title, status, start_date, end_date, 
-                created_at, updated_at
-            FROM training_programs
+                tp.id, tp.uuid, tp.title, tp.status, tp.start_date, tp.end_date, 
+                tp.created_at, tp.updated_at
+            FROM training_programs tp
+            JOIN members m ON tp.member_id = m.id
             WHERE $where
-            ORDER BY id DESC
+            ORDER BY tp.id DESC
             LIMIT ? OFFSET ?
         ";
 
@@ -164,7 +216,11 @@ class TrainerTrainingProgramController {
         
         $paramIndex = 1;
         foreach ($params as $param) {
-            $stmt->bindValue($paramIndex++, $param);
+            if (is_int($param)) {
+                $stmt->bindValue($paramIndex++, $param, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($paramIndex++, $param, PDO::PARAM_STR);
+            }
         }
         $stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);
         $stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);
@@ -180,7 +236,7 @@ class TrainerTrainingProgramController {
         Response::json([
             'items' => $normalizedItems,
             'pagination' => [
-                'total' => (int)$total,
+                'total' => $total,
                 'page' => $page,
                 'per_page' => $perPage,
                 'last_page' => (int)$lastPage
@@ -241,15 +297,8 @@ class TrainerTrainingProgramController {
 
     public function create($memberId) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         
-        $val = $this->getJsonInput();
-        $allowedFields = ['title', 'status', 'start_date', 'end_date', 'notes'];
-        foreach (array_keys($val) as $key) {
-            if (!in_array($key, $allowedFields)) {
-                Response::error("Bilinmeyen alan: $key", 'VALIDATION_ERROR', 422);
-            }
-        }
+        $val = $this->getJsonPayload();
 
         if (!array_key_exists('title', $val) || !is_string($val['title'])) {
             Response::error("title zorunludur ve metin olmalıdır.", 'VALIDATION_ERROR', 422);
@@ -291,6 +340,8 @@ class TrainerTrainingProgramController {
 
         try {
             $this->db->beginTransaction();
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
 
             $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL FOR UPDATE");
             $stmt->execute([$memberId, $trainerId]);
@@ -345,22 +396,13 @@ class TrainerTrainingProgramController {
 
     public function update($id) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         
-        $val = $this->getJsonInput();
-        if (empty($val)) {
-            Response::error("En az bir alan gönderilmelidir.", 'VALIDATION_ERROR', 422);
-        }
-
-        $allowedFields = ['title', 'status', 'start_date', 'end_date', 'notes'];
-        foreach (array_keys($val) as $key) {
-            if (!in_array($key, $allowedFields)) {
-                Response::error("Bilinmeyen alan: $key", 'VALIDATION_ERROR', 422);
-            }
-        }
+        $val = $this->getJsonPayload();
 
         try {
             $this->db->beginTransaction();
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
 
             $stmt = $this->db->prepare("
                 SELECT tp.* 
@@ -516,10 +558,11 @@ class TrainerTrainingProgramController {
 
     public function delete($id) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         
         try {
             $this->db->beginTransaction();
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
 
             $stmt = $this->db->prepare("
                 SELECT tp.* 
