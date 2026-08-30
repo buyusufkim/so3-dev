@@ -171,3 +171,22 @@ export function isMemberProgressSuccessResponse(val: unknown): val is MemberProg
   if (!isRecord(val)) return false;
   return val.success === true;
 }
+
+export interface MemberProgressNotePayload {
+  recorded_at: string;
+  note: string;
+}
+
+export interface MemberProgressNoteCreateResponse {
+  id: number;
+  uuid: string;
+}
+
+export function isMemberProgressNoteCreateResponse(val: unknown): val is MemberProgressNoteCreateResponse {
+  if (!isRecord(val)) return false;
+  return (
+    typeof val.id === 'number' && Number.isInteger(val.id) && val.id > 0 &&
+    typeof val.uuid === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.uuid)
+  );
+}

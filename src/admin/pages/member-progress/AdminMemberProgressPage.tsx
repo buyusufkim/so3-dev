@@ -14,6 +14,7 @@ import {
   isMemberProgressSuccessResponse
 } from "./types";
 import { MemberMeasurementFormModal } from "./MemberMeasurementFormModal";
+import { MemberProgressNoteFormModal } from "./MemberProgressNoteFormModal";
 
 function formatDateTime(dateStr: unknown): string {
   if (typeof dateStr !== 'string') return "—";
@@ -80,6 +81,8 @@ export function AdminMemberProgressPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [noteModalMode, setNoteModalMode] = useState<'create' | 'edit'>('create');
   const isMutating = useRef(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const isMounted = useRef(true);
@@ -152,6 +155,75 @@ export function AdminMemberProgressPage() {
     }
   };
 
+  const handleNoteArchive = async (id: number) => {
+    if (isMutating.current) return;
+    if (!window.confirm('Bu gelişim notunu arşivlemek istediğinize emin misiniz?')) return;
+    isMutating.current = true;
+    setMutationError(null);
+    setActiveMutation({ id, action: 'archive' });
+    try {
+      const res: unknown = await apiClient.delete(`/api/admin/member-progress-notes/${id}`);
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error('Sunucudan geçersiz yanıt döndü.');
+      }
+      if (!isMounted.current) return;
+      clearDetailSelection();
+      setPage(1);
+      setRefreshKey(prev => prev + 1);
+    } catch (err: unknown) {
+      if (!isMounted.current) return;
+      if (err instanceof ApiError) {
+        if (err.status === 403) setMutationError("Bu işlem için yetkiniz yok.");
+        else if (err.status === 404) setMutationError("Gelişim notu bulunamadı.");
+        else if (err.code === 'PROGRESS_NOTE_NOT_ARCHIVED') setMutationError("Gelişim notu arşivlenmiş durumda değil.");
+        else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
+        else setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
+      } else {
+        setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      isMutating.current = false;
+      if (isMounted.current) {
+        setActiveMutation(null);
+      }
+    }
+  };
+
+  const handleNoteRestore = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isMutating.current) return;
+    if (!window.confirm('Bu gelişim notunu geri yüklemek istediğinize emin misiniz?')) return;
+    isMutating.current = true;
+    setMutationError(null);
+    setActiveMutation({ id, action: 'restore' });
+    try {
+      const res: unknown = await apiClient.post(`/api/admin/member-progress-notes/${id}/restore`, {});
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error('Sunucudan geçersiz yanıt döndü.');
+      }
+      if (!isMounted.current) return;
+      clearDetailSelection();
+      setPage(1);
+      setRefreshKey(prev => prev + 1);
+    } catch (err: unknown) {
+      if (!isMounted.current) return;
+      if (err instanceof ApiError) {
+        if (err.status === 403) setMutationError("Bu işlem için yetkiniz yok.");
+        else if (err.status === 404) setMutationError("Gelişim notu bulunamadı.");
+        else if (err.code === 'PROGRESS_NOTE_NOT_ARCHIVED') setMutationError("Gelişim notu arşivlenmiş durumda değil.");
+        else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
+        else setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
+      } else {
+        setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      isMutating.current = false;
+      if (isMounted.current) {
+        setActiveMutation(null);
+      }
+    }
+  };
+
   const handleRestore = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (isMutating.current) return;
@@ -185,6 +257,19 @@ export function AdminMemberProgressPage() {
         setActiveMutation(null);
       }
     }
+  };
+
+  const handleNoteModalSuccess = () => {
+    setIsNoteModalOpen(false);
+    if (noteModalMode === 'create') {
+      setActiveTab('notes');
+      setDeletedFilter('active');
+      setPage(1);
+      clearDetailSelection();
+    } else {
+      clearDetailSelection();
+    }
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleModalSuccess = () => {
@@ -389,6 +474,18 @@ export function AdminMemberProgressPage() {
                   Yeni Ölçüm
                 </button>
               )}
+              {activeTab === 'notes' && (
+                <button
+                  onClick={() => {
+                    setNoteModalMode('create');
+                    setIsNoteModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition text-sm font-medium flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Yeni Gelişim Notu</span>
+                </button>
+              )}
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col min-h-[400px]">
@@ -457,8 +554,20 @@ export function AdminMemberProgressPage() {
                           <div className="text-sm font-medium text-white">{formatDateTime(n.recorded_at)}</div>
                           {n.deleted_at && <span className="text-xs text-red-500 bg-red-500/10 px-2 py-0.5 rounded mt-1 inline-block">Arşivlenmiş</span>}
                         </div>
-                        <div className="text-xs text-gray-500">
-                          Güncellenme: {formatDateTime(n.updated_at)}
+                        <div className="flex items-center gap-4 flex-wrap text-sm text-gray-400">
+                          {n.deleted_at && (
+                            <button
+                              disabled={activeMutation !== null}
+                              onClick={(e) => handleNoteRestore(n.id, e)}
+                              className="p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Geri Yükle"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          )}
+                          <div className="text-xs text-gray-500">
+                            Güncellenme: {formatDateTime(n.updated_at)}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -578,9 +687,31 @@ export function AdminMemberProgressPage() {
                   )}
                   {activeTab === 'notes' && selectedNote && (
                     <>
-                      <div>
-                        <h3 className="text-lg font-bold text-white mb-1">Gelişim Notu Detayı</h3>
-                        <div className="text-sm text-gray-400">{formatDateTime(selectedNote.recorded_at)}</div>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-bold text-white mb-1">Gelişim Notu Detayı</h3>
+                          <div className="text-sm text-gray-400">{formatDateTime(selectedNote.recorded_at)}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setNoteModalMode('edit');
+                              setIsNoteModalOpen(true);
+                            }}
+                            className="p-2 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition flex items-center gap-2 text-sm"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Düzenle</span>
+                          </button>
+                          <button
+                            disabled={activeMutation !== null}
+                            onClick={() => handleNoteArchive(selectedNote.id)}
+                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Arşivle</span>
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-300 bg-gray-800/30 p-4 rounded-lg whitespace-pre-wrap">
@@ -602,6 +733,14 @@ export function AdminMemberProgressPage() {
           initialData={modalMode === 'edit' ? (selectedMeasurement || undefined) : undefined}
           onClose={() => setIsModalOpen(false)}
           onSuccess={handleModalSuccess}
+        />
+      )}
+      {isNoteModalOpen && (
+        <MemberProgressNoteFormModal
+          memberId={parseInt(memberId!, 10)}
+          initialData={noteModalMode === 'edit' ? (selectedNote || undefined) : undefined}
+          onClose={() => setIsNoteModalOpen(false)}
+          onSuccess={handleNoteModalSuccess}
         />
       )}
     </div>
