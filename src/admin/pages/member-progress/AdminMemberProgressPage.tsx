@@ -97,7 +97,6 @@ export function AdminMemberProgressPage() {
     setDetailError(null);
     setDetailLoading(false);
     setMutationError(null);
-    setActiveMutation(null);
   };
 
   const handleTabChange = (newTab: 'measurements' | 'notes') => {
@@ -141,7 +140,7 @@ export function AdminMemberProgressPage() {
         else if (err.status === 404) setMutationError("Ölçüm kaydı bulunamadı.");
         else if (err.code === 'MEASUREMENT_NOT_ARCHIVED') setMutationError("Ölçüm kaydı arşivlenmiş durumda değil.");
         else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
-        else setMutationError(err.message);
+        else setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       } else {
         setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       }
@@ -176,7 +175,7 @@ export function AdminMemberProgressPage() {
         else if (err.status === 404) setMutationError("Ölçüm kaydı bulunamadı.");
         else if (err.code === 'MEASUREMENT_NOT_ARCHIVED') setMutationError("Ölçüm kaydı arşivlenmiş durumda değil.");
         else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
-        else setMutationError(err.message);
+        else setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       } else {
         setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       }
@@ -335,7 +334,13 @@ export function AdminMemberProgressPage() {
           {error}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <>
+          {mutationError && (
+            <div role="alert" className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+              {mutationError}
+            </div>
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 flex flex-col gap-4">
             <div className="bg-gray-800/50 p-4 rounded-xl flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
               <div className="flex items-center gap-2 bg-gray-900 p-1 rounded-lg">
@@ -414,7 +419,7 @@ export function AdminMemberProgressPage() {
                         <div className="flex items-center gap-4 flex-wrap text-sm text-gray-400">
                           {m.deleted_at && (
                             <button
-                              disabled={activeMutation?.id === m.id && activeMutation?.action === 'restore'}
+                              disabled={activeMutation !== null}
                               onClick={(e) => handleRestore(m.id, e)}
                               className="p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Geri Yükle"
@@ -520,7 +525,7 @@ export function AdminMemberProgressPage() {
                             <span className="hidden sm:inline">Düzenle</span>
                           </button>
                           <button
-                            disabled={activeMutation?.id === selectedMeasurement.id && activeMutation?.action === 'archive'}
+                            disabled={activeMutation !== null}
                             onClick={() => handleArchive(selectedMeasurement.id)}
                             className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -589,6 +594,7 @@ export function AdminMemberProgressPage() {
             </div>
           </div>
         </div>
+        </>
       )}
       {isModalOpen && (
         <MemberMeasurementFormModal
