@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save } from 'lucide-react';
 import { apiClient, ApiError } from '../../api/client';
-import { 
-  MemberProgressNoteDetail, 
+import {
+  MemberProgressNoteDetail,
   MemberProgressNotePayload,
   isMemberProgressNoteCreateResponse,
   isMemberProgressSuccessResponse
@@ -25,7 +25,7 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
   const isMounted = useRef(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [recordedAt, setRecordedAt] = useState('');
   const [note, setNote] = useState('');
 
@@ -50,12 +50,12 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
 
   const validateAndGetPayload = (): MemberProgressNotePayload | null => {
     setError(null);
-    
+
     if (!recordedAt) {
       setError("Tarih zorunludur.");
       return null;
     }
-    
+
     const sqlDate = recordedAt.length === 16 ? recordedAt.replace('T', ' ') + ':00' : recordedAt.replace('T', ' ');
     const regex = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
     const match = sqlDate.match(regex);
@@ -102,9 +102,9 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
   const handleApiError = (err: unknown) => {
     if (!isMounted.current) return;
     if (err instanceof ApiError) {
-      if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
+      if (err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
         setError("Üyeye eğitmen atanmamış.");
-      } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
+      } else if (err.code === 'MEMBER_TRAINER_INVALID') {
         setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
       } else if (err.status === 403) {
         setError("Bu işlem için yetkiniz yok.");
@@ -115,10 +115,8 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
       } else if (err.status === 422) {
         setError("Girdiğiniz bilgileri kontrol edin.");
       } else {
-        setError(err.message);
+        setError("İşlem tamamlanamadı. Lütfen tekrar deneyin.");
       }
-    } else if (err instanceof Error) {
-      setError(err.message);
     } else {
       setError("İşlem tamamlanamadı. Lütfen tekrar deneyin.");
     }
@@ -126,14 +124,14 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
 
   const handleSave = async () => {
     if (isSubmitting.current) return;
-    
+
     const payload = validateAndGetPayload();
     if (!payload) return;
 
     if (initialData) {
       const patchPayload: Partial<MemberProgressNotePayload> = {};
       let hasChanges = false;
-      
+
       if (payload.recorded_at !== initialData.recorded_at) { patchPayload.recorded_at = payload.recorded_at; hasChanges = true; }
       if (payload.note !== initialData.note) { patchPayload.note = payload.note; hasChanges = true; }
 
@@ -141,7 +139,7 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
         onClose();
         return;
       }
-      
+
       isSubmitting.current = true;
       setSaving(true);
       setError(null);
@@ -199,7 +197,7 @@ export function MemberProgressNoteFormModal({ memberId, initialData, onClose, on
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
