@@ -14,7 +14,8 @@
     "verify:trainer-progress-notes": "node scripts/verify-trainer-progress-notes.mjs",
     "verify:trainer-program-exercises": "node scripts/verify-trainer-program-exercises.mjs",
     "verify:trainer-training-programs": "node scripts/verify-trainer-training-programs.mjs",
-    "verify:trainer-members": "node scripts/verify-trainer-members.mjs"
+    "verify:trainer-members": "node scripts/verify-trainer-members.mjs",
+    "verify:trainer-measurements": "node scripts/verify-trainer-measurements.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
