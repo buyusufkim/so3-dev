@@ -16,8 +16,11 @@ class TrainerProgramExerciseController {
     }
 
     private function getTrainerProfileId(): int {
-        $adminId = $_SESSION['admin_id'] ?? null;
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
         if (!$adminId) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
         }
 
@@ -26,45 +29,79 @@ class TrainerProgramExerciseController {
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
         ");
         $stmt->execute([$adminId]);
-        $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
+        $trainer = $stmt->fetch(\PDO::FETCH_ASSOC);
 
         if (!$trainer) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('Bağlı ve aktif bir eğitmen profili bulunamadı.', 'TRAINER_PROFILE_NOT_LINKED', 403);
         }
         return (int)$trainer['id'];
     }
 
-    private function getJsonInput(): array {
-        $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
-        if (strpos(strtolower($contentType), 'application/json') !== 0) {
+    private function getTrainerProfileIdForUpdate(): int {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        if (!$adminId) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT id FROM trainers 
+            WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
+            FOR UPDATE
+        ");
+        $stmt->execute([$adminId]);
+        $trainer = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$trainer) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::error('Bağlı ve aktif bir eğitmen profili bulunamadı.', 'TRAINER_PROFILE_NOT_LINKED', 403);
+        }
+        return (int)$trainer['id'];
+    }
+
+    private function getJsonPayload(): array {
+        $contentType = $_SERVER["CONTENT_TYPE"] ?? '';
+        if (strcasecmp(trim(explode(';', $contentType)[0]), 'application/json') !== 0) {
             Response::error('Yalnızca JSON kabul edilmektedir.', 'UNSUPPORTED_MEDIA_TYPE', 415);
         }
 
-        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
-        if ($contentLength > 16384) {
-            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
-        }
-
         $raw = file_get_contents('php://input');
-        if ($raw === false || empty(trim((string)$raw))) {
+        if ($raw === false) {
             Response::error('Boş istek.', 'BAD_REQUEST', 400);
         }
         
         if (strlen($raw) > 16384) {
             Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
         }
-
-        $data = json_decode($raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Response::error('Geçersiz JSON formatı.', 'BAD_REQUEST', 400);
-        }
         
-        if (!is_array($data)) {
+        if (trim($raw) === '') {
+            Response::error('Boş istek.', 'BAD_REQUEST', 400);
+        }
+
+        $isObj = json_decode($raw, false);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_object($isObj)) {
             Response::error('JSON bir obje olmalıdır.', 'BAD_REQUEST', 400);
         }
 
+        $data = json_decode($raw, true);
+
+        $allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
+        foreach (array_keys($data) as $key) {
+            if (!in_array($key, $allowlist, true)) {
+                Response::error("Geçersiz alan: $key", 'VALIDATION_ERROR', 422);
+            }
+        }
         return $data;
     }
+
+    
 
     public function index($programId) {
         AuthMiddleware::hasRole(['trainer']);
@@ -89,13 +126,26 @@ class TrainerProgramExerciseController {
             }
 
             $stmt = $this->db->prepare("
-                SELECT id, program_id, exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order, created_at, updated_at
-                FROM program_exercises 
-                WHERE program_id = ?
-                ORDER BY sort_order ASC, id ASC
+                SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, 
+                       pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order, 
+                       pe.created_at, pe.updated_at
+                FROM program_exercises pe
+                JOIN training_programs tp ON pe.program_id = tp.id
+                JOIN members m ON tp.member_id = m.id
+                WHERE pe.program_id = ?
+                  AND tp.trainer_id = ?
+                  AND tp.deleted_at IS NULL
+                  AND m.trainer_id = ?
+                  AND m.deleted_at IS NULL
+                ORDER BY pe.sort_order ASC, pe.id ASC
             ");
-            $stmt->execute([$programId]);
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $stmt->bindValue(1, $programId, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $trainerId, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $trainerId, \PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             $items = [];
             foreach ($results as $row) {
@@ -113,6 +163,7 @@ class TrainerProgramExerciseController {
                     'updated_at' => $row['updated_at']
                 ];
             }
+
             Response::json($items);
         } catch (\Throwable $e) {
             error_log('TrainerProgramExerciseController@index Exception: ' . $e->getMessage());
@@ -122,16 +173,8 @@ class TrainerProgramExerciseController {
 
     public function create($programId) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         $programId = (int)$programId;
-        $val = $this->getJsonInput();
-
-        $allowedFields = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
-        foreach (array_keys($val) as $key) {
-            if (!in_array($key, $allowedFields, true)) {
-                Response::error("Geçersiz alan: $key", 'VALIDATION_ERROR', 422);
-            }
-        }
+        $val = $this->getJsonPayload();
 
         if (!array_key_exists('exercise_name', $val) || !is_string($val['exercise_name'])) {
             Response::error("exercise_name zorunludur ve metin olmalıdır.", 'VALIDATION_ERROR', 422);
@@ -190,7 +233,9 @@ class TrainerProgramExerciseController {
 
         try {
             $this->db->beginTransaction();
-
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
+            
             $stmt = $this->db->prepare("
                 SELECT tp.id 
                 FROM training_programs tp
@@ -229,7 +274,7 @@ class TrainerProgramExerciseController {
             $id = (int)$this->db->lastInsertId();
             $this->db->commit();
             
-            $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+            $currentAdminId = (int)($_SESSION['admin_id'] ?? 0);
             try {
                 AuditLogger::log(
                     'trainer_program_exercise.create',
@@ -256,23 +301,17 @@ class TrainerProgramExerciseController {
 
     public function update($id) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         $id = (int)$id;
-        $val = $this->getJsonInput();
-
+        $val = $this->getJsonPayload();
+        
         if (empty($val)) {
             Response::error("Güncellenecek alan bulunamadı.", 'VALIDATION_ERROR', 422);
         }
 
-        $allowedFields = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
-        foreach (array_keys($val) as $key) {
-            if (!in_array($key, $allowedFields, true)) {
-                Response::error("Geçersiz alan: $key", 'VALIDATION_ERROR', 422);
-            }
-        }
-
         try {
             $this->db->beginTransaction();
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
             
             $stmt = $this->db->prepare("
                 SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, 
@@ -435,7 +474,7 @@ class TrainerProgramExerciseController {
 
             $this->db->commit();
 
-            $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+            $currentAdminId = (int)($_SESSION['admin_id'] ?? 0);
             try {
                 AuditLogger::log(
                     'trainer_program_exercise.update',
@@ -463,12 +502,13 @@ class TrainerProgramExerciseController {
 
     public function delete($id) {
         AuthMiddleware::hasRole(['trainer']);
-        $trainerId = $this->getTrainerProfileId();
         $id = (int)$id;
 
         try {
             $this->db->beginTransaction();
-
+            
+            $trainerId = $this->getTrainerProfileIdForUpdate();
+            
             $stmt = $this->db->prepare("
                 SELECT pe.id, pe.program_id 
                 FROM program_exercises pe
@@ -501,7 +541,7 @@ class TrainerProgramExerciseController {
 
             $this->db->commit();
 
-            $currentAdminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
+            $currentAdminId = (int)($_SESSION['admin_id'] ?? 0);
             try {
                 AuditLogger::log(
                     'trainer_program_exercise.delete',
