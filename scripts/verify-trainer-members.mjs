@@ -18,17 +18,6 @@ function assert(condition, message) {
 console.log("Starting Trainer Member Read API verification...");
 
 // 1. Route wiring
-const hasIndexRoute = indexContent.includes("preg_match('#^/api/trainer/members$#', $requestUri)") &&
-                      indexContent.includes("AuthMiddleware::hasRole(['trainer']);") &&
-                      indexContent.includes("(new \\Controllers\\TrainerMemberController())->index();");
-assert(hasIndexRoute, "Invariant 1: Missing correct route wiring for /api/trainer/members GET");
-
-const hasDetailRoute = indexContent.includes("preg_match('#^/api/trainer/members/(\\d+)$#', $requestUri, $matches)") &&
-                       indexContent.includes("AuthMiddleware::hasRole(['trainer']);") &&
-                       indexContent.includes("(new \\Controllers\\TrainerMemberController())->show($id);");
-assert(hasDetailRoute, "Invariant 1: Missing correct route wiring for /api/trainer/members/:id GET");
-
-// Ensure no POST/PATCH/DELETE for trainer member index/detail itself.
 const membersIndexBlock = indexContent.substring(
     indexContent.indexOf("preg_match('#^/api/trainer/members$#', $requestUri)"),
     indexContent.indexOf("preg_match('#^/api/trainer/members/(\\d+)$#', $requestUri")
@@ -37,12 +26,24 @@ const membersDetailBlock = indexContent.substring(
     indexContent.indexOf("preg_match('#^/api/trainer/members/(\\d+)$#', $requestUri"),
     indexContent.indexOf("// Dynamic matching for trainer member progress notes")
 );
+
+const hasIndexRoute = membersIndexBlock.includes("AuthMiddleware::hasRole(['trainer']);") &&
+                      membersIndexBlock.includes("if ($method === 'GET')") &&
+                      membersIndexBlock.includes("(new \\Controllers\\TrainerMemberController())->index();");
+assert(hasIndexRoute, "Invariant 1: Missing strictly block-scoped route wiring for /api/trainer/members GET");
+
+const hasDetailRoute = membersDetailBlock.includes("AuthMiddleware::hasRole(['trainer']);") &&
+                       membersDetailBlock.includes("if ($method === 'GET')") &&
+                       membersDetailBlock.includes("(new \\Controllers\\TrainerMemberController())->show($id);");
+assert(hasDetailRoute, "Invariant 1: Missing strictly block-scoped route wiring for /api/trainer/members/:id GET");
+
+// Ensure no POST/PATCH/DELETE for trainer member index/detail itself.
 const noMutations = !membersIndexBlock.match(/if \(\$method === '(?:POST|PATCH|DELETE)'\)/) &&
                     !membersDetailBlock.match(/if \(\$method === '(?:POST|PATCH|DELETE)'\)/);
 assert(noMutations, "Invariant 1: POST/PATCH/DELETE routes must not be added for trainer members");
 
 if (hasIndexRoute && hasDetailRoute && noMutations) {
-    console.log("✅ PASS: Invariant 1: Routes are defined and protected with trainer role firewall");
+    console.log("✅ PASS: Invariant 1: Routes are defined and protected with block-scoped trainer role firewall");
 }
 
 // 2. Trainer profile contract
@@ -101,34 +102,48 @@ if (indexMethod.includes("['active', 'inactive']") && indexMethod.includes("trim
     console.log("✅ PASS: Invariant 5: Filter contract restricts status and q types and handles boundaries properly");
 }
 
-// 6. List ownership
-assert(indexMethod.includes("$conditions = ['m.trainer_id = ?', 'm.deleted_at IS NULL'];"), "Invariant 6: List ownership lacks trainer_id or deleted_at condition");
-assert(!indexMethod.includes("$countStmt->execute($params);") && indexMethod.includes("$countStmt->execute();"), "Invariant 6: execute($params) must not be used");
+// Scopes for COUNT and SELECT
+const countScope = indexMethod.substring(
+    indexMethod.indexOf('// Count'),
+    indexMethod.indexOf('$total = $countStmt->fetchColumn();')
+);
 
-if (indexMethod.includes("m.trainer_id = ?")) {
-    console.log("✅ PASS: Invariant 6: List ownership restricts selection precisely via m.trainer_id and active state");
+const selectScope = indexMethod.substring(
+    indexMethod.indexOf('$sql = "'),
+    indexMethod.indexOf('$items = $stmt->fetchAll(PDO::FETCH_ASSOC);')
+);
+
+// 6. List ownership
+assert(countScope.includes("FROM members m WHERE \" . $where"), "Invariant 6: COUNT query must strictly use FROM members m WHERE \" . $where");
+assert(selectScope.includes("FROM members m") && selectScope.includes("WHERE $where") && selectScope.includes("LIMIT ? OFFSET ?"), "Invariant 6: SELECT query must use FROM members m WHERE $where LIMIT ? OFFSET ?");
+assert(indexMethod.includes("$conditions = ['m.trainer_id = ?', 'm.deleted_at IS NULL'];"), "Invariant 6: Base condition must restrict by trainer_id and deleted_at");
+assert(!countScope.includes("$countStmt->execute($params);"), "Invariant 6: execute($params) must not be used");
+
+if (countScope.includes("FROM members m") && selectScope.includes("FROM members m")) {
+    console.log("✅ PASS: Invariant 6: List ownership securely scoped separately for COUNT and SELECT queries");
 }
 
 // 7. COUNT typed binding
-assert(indexMethod.includes("$countStmt->bindValue(1, $trainerId, PDO::PARAM_INT);"), "Invariant 7: COUNT trainer_id missing PARAM_INT");
-assert(indexMethod.includes("$countStmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);"), "Invariant 7: COUNT status missing PARAM_STR");
-assert(indexMethod.includes("$countStmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);"), "Invariant 7: COUNT search missing PARAM_STR");
-assert(!indexMethod.match(/\$countStmt->execute\(\$params\)/), "Invariant 7: COUNT implicit execute($params) must not be used");
+const countSearchBindings = (countScope.match(/\$countStmt->bindValue\(\$paramIndex\+\+, \$search, PDO::PARAM_STR\);/g) || []).length;
+assert(countSearchBindings === 4, `Invariant 7: COUNT requires exactly 4 search bindings, found ${countSearchBindings}`);
+assert(countScope.includes("$countStmt->bindValue(1, $trainerId, PDO::PARAM_INT);"), "Invariant 7: COUNT trainer_id missing PARAM_INT");
+assert(countScope.includes("$countStmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);"), "Invariant 7: COUNT status missing PARAM_STR");
+assert(!countScope.match(/\$countStmt->execute\(\$params\)/), "Invariant 7: COUNT implicit execute($params) must not be used");
 
-if (indexMethod.includes("$countStmt->bindValue(1, $trainerId, PDO::PARAM_INT)")) {
-    console.log("✅ PASS: Invariant 7: COUNT query securely binds parameters with explicit PDO types");
+if (countSearchBindings === 4 && countScope.includes("PDO::PARAM_INT")) {
+    console.log("✅ PASS: Invariant 7: COUNT query securely maps all variables with explicit PDO types and exact parameter counts");
 }
 
 // 8. SELECT typed binding
-assert(indexMethod.includes("$stmt->bindValue(1, $trainerId, PDO::PARAM_INT);"), "Invariant 8: SELECT trainer_id missing PARAM_INT");
-assert(indexMethod.includes("$stmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);"), "Invariant 8: SELECT status missing PARAM_STR");
-assert(indexMethod.includes("$stmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);"), "Invariant 8: SELECT search missing PARAM_STR");
-assert(indexMethod.includes("$stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);"), "Invariant 8: SELECT LIMIT missing PARAM_INT");
-assert(indexMethod.includes("$stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);"), "Invariant 8: SELECT OFFSET missing PARAM_INT");
-assert(indexMethod.includes("LIMIT ? OFFSET ?"), "Invariant 8: SELECT missing explicit LIMIT ? OFFSET ? clause");
+const selectSearchBindings = (selectScope.match(/\$stmt->bindValue\(\$paramIndex\+\+, \$search, PDO::PARAM_STR\);/g) || []).length;
+assert(selectSearchBindings === 4, `Invariant 8: SELECT requires exactly 4 search bindings, found ${selectSearchBindings}`);
+assert(selectScope.includes("$stmt->bindValue(1, $trainerId, PDO::PARAM_INT);"), "Invariant 8: SELECT trainer_id missing PARAM_INT");
+assert(selectScope.includes("$stmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);"), "Invariant 8: SELECT status missing PARAM_STR");
+assert(selectScope.includes("$stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);"), "Invariant 8: SELECT LIMIT missing PARAM_INT");
+assert(selectScope.includes("$stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);"), "Invariant 8: SELECT OFFSET missing PARAM_INT");
 
-if (indexMethod.includes("LIMIT ? OFFSET ?") && indexMethod.includes("$stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT)")) {
-    console.log("✅ PASS: Invariant 8: SELECT query securely binds filters, LIMIT and OFFSET with explicit PDO types");
+if (selectSearchBindings === 4 && selectScope.includes("PDO::PARAM_INT")) {
+    console.log("✅ PASS: Invariant 8: SELECT query securely maps all variables with explicit PDO types and exact parameter counts");
 }
 
 // 9. List response contract
