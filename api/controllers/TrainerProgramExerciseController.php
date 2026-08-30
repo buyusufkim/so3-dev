@@ -28,7 +28,8 @@ class TrainerProgramExerciseController {
             SELECT id FROM trainers 
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
         ");
-        $stmt->execute([$adminId]);
+        $stmt->bindValue(1, $adminId, \PDO::PARAM_INT);
+        $stmt->execute();
         $trainer = $stmt->fetch(\PDO::FETCH_ASSOC);
 
         if (!$trainer) {
@@ -54,7 +55,8 @@ class TrainerProgramExerciseController {
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
             FOR UPDATE
         ");
-        $stmt->execute([$adminId]);
+        $stmt->bindValue(1, $adminId, \PDO::PARAM_INT);
+        $stmt->execute();
         $trainer = $stmt->fetch(\PDO::FETCH_ASSOC);
 
         if (!$trainer) {
@@ -120,7 +122,10 @@ class TrainerProgramExerciseController {
                   AND m.trainer_id = ? 
                   AND m.deleted_at IS NULL
             ");
-            $stmt->execute([$programId, $trainerId, $trainerId]);
+            $stmt->bindValue(1, $programId, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $trainerId, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $trainerId, \PDO::PARAM_INT);
+            $stmt->execute();
             if (!$stmt->fetch()) {
                 Response::error('Program bulunamadı.', 'NOT_FOUND', 404);
             }
@@ -247,7 +252,10 @@ class TrainerProgramExerciseController {
                   AND m.deleted_at IS NULL
                 FOR UPDATE
             ");
-            $stmt->execute([$programId, $trainerId, $trainerId]);
+            $stmt->bindValue(1, $programId, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $trainerId, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $trainerId, \PDO::PARAM_INT);
+            $stmt->execute();
             $program = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$program) {
@@ -326,7 +334,10 @@ class TrainerProgramExerciseController {
                   AND m.deleted_at IS NULL
                 FOR UPDATE
             ");
-            $stmt->execute([$id, $trainerId, $trainerId]);
+            $stmt->bindValue(1, $id, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $trainerId, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $trainerId, \PDO::PARAM_INT);
+            $stmt->execute();
             $currentExercise = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$currentExercise) {
@@ -521,7 +532,10 @@ class TrainerProgramExerciseController {
                   AND m.deleted_at IS NULL
                 FOR UPDATE
             ");
-            $stmt->execute([$id, $trainerId, $trainerId]);
+            $stmt->bindValue(1, $id, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $trainerId, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $trainerId, \PDO::PARAM_INT);
+            $stmt->execute();
             $currentExercise = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$currentExercise) {
@@ -532,7 +546,9 @@ class TrainerProgramExerciseController {
             $programId = (int)$currentExercise['program_id'];
 
             $stmt = $this->db->prepare("DELETE FROM program_exercises WHERE id = ? AND program_id = ?");
-            $stmt->execute([$id, $programId]);
+            $stmt->bindValue(1, $id, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $programId, \PDO::PARAM_INT);
+            $stmt->execute();
 
             if ($stmt->rowCount() !== 1) {
                 if ($this->db->inTransaction()) { $this->db->rollBack(); }
