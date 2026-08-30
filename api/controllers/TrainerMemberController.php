@@ -15,7 +15,7 @@ class TrainerMemberController {
     }
 
     private function getTrainerProfileId(): int {
-        $adminId = $_SESSION['admin_id'] ?? null;
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
         if (!$adminId) {
             Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
         }
@@ -24,7 +24,8 @@ class TrainerMemberController {
             SELECT id FROM trainers 
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
         ");
-        $stmt->execute([$adminId]);
+        $stmt->bindValue(1, $adminId, PDO::PARAM_INT);
+        $stmt->execute();
         $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$trainer) {
@@ -87,17 +88,13 @@ class TrainerMemberController {
         }
 
         $conditions = ['m.trainer_id = ?', 'm.deleted_at IS NULL'];
-        $params = [$trainerId];
 
         if ($status) {
             $conditions[] = 'm.status = ?';
-            $params[] = $status;
         }
 
         if ($q !== null && $q !== '') {
             $conditions[] = '(m.first_name LIKE ? OR m.last_name LIKE ? OR m.phone LIKE ? OR m.email LIKE ?)';
-            $search = '%' . $q . '%';
-            $params = array_merge($params, [$search, $search, $search, $search]);
         }
 
         $where = implode(' AND ', $conditions);
@@ -105,12 +102,23 @@ class TrainerMemberController {
         // Count
         $countSql = "SELECT COUNT(*) FROM members m WHERE " . $where;
         $countStmt = $this->db->prepare($countSql);
-        $countStmt->execute($params);
+        $countStmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $paramIndex = 2;
+        if ($status) {
+            $countStmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);
+        }
+        if ($q !== null && $q !== '') {
+            $search = '%' . $q . '%';
+            $countStmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $countStmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $countStmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $countStmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+        }
+        $countStmt->execute();
         $total = $countStmt->fetchColumn();
 
         $lastPage = ceil($total / $perPage);
         if ($lastPage < 1) $lastPage = 1;
-
         $offset = ($page - 1) * $perPage;
 
         $sql = "
@@ -123,14 +131,21 @@ class TrainerMemberController {
             ORDER BY m.id DESC
             LIMIT ? OFFSET ?
         ";
-
         $stmt = $this->db->prepare($sql);
         
-        $paramIndex = 1;
-        foreach ($params as $param) {
-            // All where-clause parameters here happen to be strings or can be bound as default strings
-            $stmt->bindValue($paramIndex++, $param);
+        $stmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $paramIndex = 2;
+        if ($status) {
+            $stmt->bindValue($paramIndex++, $status, PDO::PARAM_STR);
         }
+        if ($q !== null && $q !== '') {
+            $search = '%' . $q . '%';
+            $stmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $stmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $stmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+            $stmt->bindValue($paramIndex++, $search, PDO::PARAM_STR);
+        }
+
         $stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);
         $stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);
         $stmt->execute();
