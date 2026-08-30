@@ -92,6 +92,26 @@ let mockMeasurements: MockMeasurement[] = [
 ];
 let nextMeasurementId = 4;
 
+export interface MockProgressNote {
+  id: number;
+  uuid: string;
+  member_id: number;
+  trainer_id: number;
+  recorded_at: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+let mockProgressNotes: MockProgressNote[] = [
+  { id: 1, uuid: '00000000-0000-4000-8000-000000000101', member_id: 1, trainer_id: 1, recorded_at: '2023-11-01 10:00:00', note: 'Gelişim iyi.', created_at: '2023-11-01 10:00:00', updated_at: '2023-11-01 10:00:00', deleted_at: null },
+  { id: 2, uuid: '00000000-0000-4000-8000-000000000102', member_id: 1, trainer_id: 1, recorded_at: '2023-11-15 10:00:00', note: 'Daha iyi.', created_at: '2023-11-15 10:00:00', updated_at: '2023-11-15 10:00:00', deleted_at: null },
+  { id: 3, uuid: '00000000-0000-4000-8000-000000000103', member_id: 1, trainer_id: 1, recorded_at: '2023-10-01 10:00:00', note: 'Eski not.', created_at: '2023-10-01 10:00:00', updated_at: '2023-10-01 10:00:00', deleted_at: '2023-10-15 10:00:00' }
+];
+let nextProgressNoteId = 4;
+
+
 let nextAccountId = 3;
 
 let mockTrainerAccounts: Array<{ id: number; trainer_id: number; username: string; email: string; display_name: string; role: 'trainer'; status: 'active'|'inactive'; last_login_at: string | null; password_changed_at: string | null }> = [
@@ -1178,6 +1198,188 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
+
+
+  // --- Member Progress Notes Endpoints ---
+  const pnListMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/progress-notes$/);
+  if (pnListMatch) {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    const memberId = parseInt(pnListMatch[1], 10);
+    const member = mockMembers.find(m => m.id === memberId);
+    if (!member || member.deleted_at) {
+      return createError('Member not found', 404, 'NOT_FOUND');
+    }
+
+    if (method === 'GET') {
+      const pageStr = url.searchParams.get('page') || '1';
+      const perPageStr = url.searchParams.get('per_page') || '20';
+      if (!/^[1-9]\d*$/.test(pageStr)) return createError('Invalid page parameter', 422, 'VALIDATION_ERROR');
+      if (!/^[1-9]\d*$/.test(perPageStr)) return createError('Invalid per_page parameter', 422, 'VALIDATION_ERROR');
+      
+      const page = Number(pageStr);
+      const perPage = Number(perPageStr);
+      if (!Number.isSafeInteger(page) || !Number.isSafeInteger(perPage)) return createError('Invalid pagination parameter', 422, 'VALIDATION_ERROR');
+      if (perPage < 1 || perPage > 100) return createError('per_page cannot exceed 100', 422, 'VALIDATION_ERROR');
+      const pageOffset = (page - 1) * perPage;
+      if (!Number.isSafeInteger(pageOffset) || pageOffset < 0) return createError('Invalid offset', 422, 'VALIDATION_ERROR');
+
+      const deleted = url.searchParams.get('deleted') || 'active';
+      if (!['active', 'deleted', 'all'].includes(deleted)) return createError('Invalid deleted parameter', 422, 'VALIDATION_ERROR');
+
+      let filtered = mockProgressNotes.filter(m => m.member_id === memberId);
+      if (deleted === 'active') filtered = filtered.filter(m => !m.deleted_at);
+      else if (deleted === 'deleted') filtered = filtered.filter(m => m.deleted_at);
+
+      filtered.sort((a, b) => {
+        if (a.recorded_at > b.recorded_at) return -1;
+        if (a.recorded_at < b.recorded_at) return 1;
+        return b.id - a.id;
+      });
+
+      const total = filtered.length;
+      const lastPage = total > 0 ? Math.ceil(total / perPage) : 1;
+      const items = filtered.slice(pageOffset, pageOffset + perPage).map(item => {
+        const { note, ...rest } = item;
+        return rest;
+      });
+
+      return createResponse({
+        data: {
+          items,
+          pagination: { total, page, per_page: perPage, last_page: lastPage }
+        }
+      });
+    }
+
+    if (method === 'POST') {
+      const allowed = ['recorded_at', 'note'];
+      for (const key of Object.keys(reqBody)) {
+        if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
+      }
+      
+      if (!reqBody.recorded_at) return createError('recorded_at is required', 422, 'VALIDATION_ERROR');
+      if (typeof reqBody.recorded_at !== 'string' || !isValidDate(reqBody.recorded_at)) {
+        return createError('Invalid recorded_at format. Must be Y-m-d H:i:s', 422, 'VALIDATION_ERROR');
+      }
+
+      if (!member.trainer) {
+        return createError('Member has no assigned trainer', 409, 'MEMBER_TRAINER_NOT_ASSIGNED');
+      }
+
+      const trainer = mockTrainers.find(t => t.id === member.trainer?.id);
+      if (!trainer || !trainer.is_active) {
+        return createError('Assigned trainer is invalid or inactive', 409, 'MEMBER_TRAINER_INVALID');
+      }
+
+      if (reqBody.note === undefined || reqBody.note === null) return createError('note is required', 422, 'VALIDATION_ERROR');
+      if (typeof reqBody.note !== 'string') return createError('note must be a string', 422, 'VALIDATION_ERROR');
+      if (reqBody.note.trim() === '') return createError('note cannot be empty', 422, 'VALIDATION_ERROR');
+      if (Array.from(reqBody.note).length > 5000) return createError('note cannot exceed 5000 characters', 422, 'VALIDATION_ERROR');
+
+      const newId = nextProgressNoteId++;
+      const uuid = generateSyntheticUuid(newId);
+      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+      const newNote: MockProgressNote = {
+        id: newId,
+        uuid,
+        member_id: memberId,
+        trainer_id: trainer.id,
+        recorded_at: reqBody.recorded_at,
+        note: reqBody.note,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null
+      };
+
+      mockProgressNotes.push(newNote);
+      return createResponse({ data: { id: newId, uuid } }, 201);
+    }
+  }
+
+  const pnActionMatch = path.match(/^\/api\/admin\/member-progress-notes\/([1-9]\d*)(?:\/([^/]+))?$/);
+  if (pnActionMatch) {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    const id = parseInt(pnActionMatch[1], 10);
+    const action = pnActionMatch[2];
+    const itemIndex = mockProgressNotes.findIndex(m => m.id === id);
+    if (itemIndex === -1) return createError('Progress note not found', 404, 'NOT_FOUND');
+    const item = mockProgressNotes[itemIndex];
+
+    if (action === 'restore') {
+      if (method === 'POST') {
+        if (!item.deleted_at) return createError('Progress note is not archived', 409, 'PROGRESS_NOTE_NOT_ARCHIVED');
+        item.deleted_at = null;
+        item.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        return createResponse({ data: { success: true } });
+      }
+    } else if (!action) {
+      if (method === 'GET') {
+        if (item.deleted_at) return createError('Progress note not found', 404, 'NOT_FOUND');
+        return createResponse({ data: item });
+      }
+
+      if (method === 'PATCH') {
+        if (item.deleted_at) return createError('Progress note is deleted', 404, 'NOT_FOUND');
+        if (Object.keys(reqBody).length === 0) return createError('Empty payload', 422, 'VALIDATION_ERROR');
+
+        const allowed = ['recorded_at', 'note'];
+        for (const key of Object.keys(reqBody)) {
+          if (!allowed.includes(key)) return createError(`Invalid field in payload: ${key}`, 422, 'VALIDATION_ERROR');
+        }
+
+        if (reqBody.recorded_at !== undefined) {
+          if (reqBody.recorded_at === null) return createError('recorded_at cannot be null', 422, 'VALIDATION_ERROR');
+          if (typeof reqBody.recorded_at !== 'string' || !isValidDate(reqBody.recorded_at as string)) {
+            return createError('Invalid recorded_at format', 422, 'VALIDATION_ERROR');
+          }
+        }
+        
+        if (reqBody.note !== undefined) {
+          if (reqBody.note === null) return createError('note cannot be null', 422, 'VALIDATION_ERROR');
+          if (typeof reqBody.note !== 'string') return createError('note must be a string', 422, 'VALIDATION_ERROR');
+          if ((reqBody.note as string).trim() === '') return createError('note cannot be empty', 422, 'VALIDATION_ERROR');
+          if (Array.from(reqBody.note as string).length > 5000) return createError('note cannot exceed 5000 characters', 422, 'VALIDATION_ERROR');
+        }
+
+        const merged = { ...item };
+        let hasChanges = false;
+
+        if (reqBody.recorded_at !== undefined) merged.recorded_at = reqBody.recorded_at as string;
+        if (reqBody.note !== undefined) merged.note = reqBody.note as string;
+
+        for (const k of allowed) {
+          const key = k as keyof typeof item;
+          if (item[key] !== merged[key]) {
+            hasChanges = true;
+            break;
+          }
+        }
+
+        if (!hasChanges) {
+          return createResponse({ data: { success: true } });
+        }
+
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        merged.updated_at = now;
+        mockProgressNotes[itemIndex] = merged;
+        
+        return createResponse({ data: { success: true } });
+      }
+
+      if (method === 'DELETE') {
+        if (item.deleted_at) return createError('Progress note not found', 404, 'NOT_FOUND');
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        item.deleted_at = now;
+        item.updated_at = now;
+        return createResponse({ data: { success: true } });
+      }
+    }
+  }
 
   if (path.startsWith('/api/admin/members/')) {
 
