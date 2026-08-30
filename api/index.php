@@ -473,6 +473,44 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
+// Dynamic matching for trainer member progress notes endpoints
+    if (preg_match('#^/api/trainer/members/([1-9]\d*)/progress-notes$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $memberId = (int)$matches[1];
+        $controller = new \Controllers\TrainerMemberProgressNoteController();
+        if ($method === 'GET') {
+            $controller->index($memberId);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->store($memberId);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/member-progress-notes/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $id = (int)$matches[1];
+        $controller = new \Controllers\TrainerMemberProgressNoteController();
+        if ($method === 'GET') {
+            $controller->show($id);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($id);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->destroy($id);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/member-progress-notes/([1-9]\d*)/restore$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'POST') {
+            (new \Controllers\TrainerMemberProgressNoteController())->restore((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for trainer member measurements endpoints
     if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::hasRole(['trainer']);
