@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Activity, FileText } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Activity, FileText, Plus, Edit2, Trash2, RotateCcw } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
   MemberMeasurementListItem,
@@ -10,8 +10,10 @@ import {
   isMemberMeasurementListResponse,
   isMemberMeasurementDetail,
   isMemberProgressNoteListResponse,
-  isMemberProgressNoteDetail
+  isMemberProgressNoteDetail,
+  isMemberProgressSuccessResponse
 } from "./types";
+import { MemberMeasurementFormModal } from "./MemberMeasurementFormModal";
 
 function formatDateTime(dateStr: unknown): string {
   if (typeof dateStr !== 'string') return "—";
@@ -74,6 +76,10 @@ export function AdminMemberProgressPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedMeasurement, setSelectedMeasurement] = useState<MemberMeasurementDetail | null>(null);
   const [selectedNote, setSelectedNote] = useState<MemberProgressNoteDetail | null>(null);
+  
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const clearDetailSelection = () => {
     setSelectedId(null);
     setSelectedMeasurement(null);
@@ -101,6 +107,55 @@ export function AdminMemberProgressPage() {
     setPage(newPage);
     clearDetailSelection();
   };
+  const handleArchive = async (id: number) => {
+    if (!window.confirm('Bu ölçümü arşivlemek istediğinize emin misiniz?')) return;
+    try {
+      const res: unknown = await apiClient.delete(`/api/admin/member-measurements/${id}`);
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error('Sunucudan geçersiz yanıt döndü.');
+      }
+      clearDetailSelection();
+      setRefreshKey(prev => prev + 1);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        alert(err.message);
+      } else {
+        alert('Arşivleme işlemi başarısız oldu.');
+      }
+    }
+  };
+
+  const handleRestore = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Bu ölçümü geri yüklemek istediğinize emin misiniz?')) return;
+    try {
+      const res: unknown = await apiClient.post(`/api/admin/member-measurements/${id}/restore`, {});
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error('Sunucudan geçersiz yanıt döndü.');
+      }
+      setRefreshKey(prev => prev + 1);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        alert(err.message);
+      } else {
+        alert('Geri yükleme işlemi başarısız oldu.');
+      }
+    }
+  };
+
+  const handleModalSuccess = () => {
+    setIsModalOpen(false);
+    if (modalMode === 'create') {
+      setActiveTab('measurements');
+      setDeletedFilter('active');
+      setPage(1);
+      clearDetailSelection();
+    } else {
+      clearDetailSelection();
+    }
+    setRefreshKey(prev => prev + 1);
+  };
+
 
 
   useEffect(() => {
@@ -154,7 +209,7 @@ export function AdminMemberProgressPage() {
 
     fetchList();
     return () => { isSubscribed = false; };
-  }, [memberId, activeTab, deletedFilter, page]);
+  }, [memberId, activeTab, deletedFilter, page, refreshKey]);
 
 
 
@@ -266,12 +321,24 @@ export function AdminMemberProgressPage() {
                     handleFilterChange(val);
                   }
                 }}
-                className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-blue-500"
+                className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition"
               >
-                <option value="active">Aktif</option>
-                <option value="deleted">Arşivlenmiş</option>
+                <option value="active">Aktif Kayıtlar</option>
+                <option value="deleted">Arşivlenmiş Kayıtlar</option>
                 <option value="all">Tümü</option>
               </select>
+              {activeTab === 'measurements' && (
+                <button
+                  onClick={() => {
+                    setModalMode('create');
+                    setIsModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition shadow-lg shadow-blue-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  Yeni Ölçüm
+                </button>
+              )}
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col min-h-[400px]">
@@ -300,6 +367,15 @@ export function AdminMemberProgressPage() {
                           {m.deleted_at && <span className="text-xs text-red-500 bg-red-500/10 px-2 py-0.5 rounded mt-1 inline-block">Arşivlenmiş</span>}
                         </div>
                         <div className="flex items-center gap-4 flex-wrap text-sm text-gray-400">
+                          {m.deleted_at && (
+                            <button
+                              onClick={(e) => handleRestore(m.id, e)}
+                              className="p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded transition"
+                              title="Geri Yükle"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          )}
                           <div>Kilo: <span className="text-white">{m.weight_kg !== null ? `${m.weight_kg} kg` : '—'}</span></div>
                           <div>Yağ: <span className="text-white">{m.body_fat_percent !== null ? `${m.body_fat_percent}%` : '—'}</span></div>
                           <div>Göğüs: <span className="text-white">{m.chest_cm !== null ? `${m.chest_cm} cm` : '—'}</span></div>
@@ -381,9 +457,30 @@ export function AdminMemberProgressPage() {
                 <div className="flex flex-col gap-6">
                   {activeTab === 'measurements' && selectedMeasurement && (
                     <>
-                      <div>
-                        <h3 className="text-lg font-bold text-white mb-1">Ölçüm Detayı</h3>
-                        <div className="text-sm text-gray-400">{formatDateTime(selectedMeasurement.measured_at)}</div>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-bold text-white mb-1">Ölçüm Detayı</h3>
+                          <div className="text-sm text-gray-400">{formatDateTime(selectedMeasurement.measured_at)}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setModalMode('edit');
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition flex items-center gap-2 text-sm"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Düzenle</span>
+                          </button>
+                          <button
+                            onClick={() => handleArchive(selectedMeasurement.id)}
+                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition flex items-center gap-2 text-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Arşivle</span>
+                          </button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-gray-800/50 p-3 rounded-lg">
@@ -445,6 +542,14 @@ export function AdminMemberProgressPage() {
             </div>
           </div>
         </div>
+      )}
+      {isModalOpen && (
+        <MemberMeasurementFormModal
+          memberId={parseInt(memberId!, 10)}
+          initialData={modalMode === 'edit' ? (selectedMeasurement || undefined) : undefined}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={handleModalSuccess}
+        />
       )}
     </div>
   );

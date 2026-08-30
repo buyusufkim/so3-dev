@@ -52,6 +52,28 @@ export interface MemberProgressNoteListResponse {
   pagination: ProgressPagination;
 }
 
+
+export interface MemberMeasurementCreateResponse {
+  id: number;
+  uuid: string;
+}
+
+export interface MemberProgressSuccessResponse {
+  success: boolean;
+}
+
+export interface MemberMeasurementPayload {
+  measured_at: string;
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+  notes: string | null;
+}
+
 function isRecord(val: unknown): val is Record<string, unknown> {
   return val !== null && typeof val === 'object' && !Array.isArray(val);
 }
@@ -133,4 +155,18 @@ export function isMemberProgressNoteListResponse(val: unknown): val is MemberPro
   if (!isPagination(val.pagination)) return false;
 
   return true;
+}
+
+
+export function isMemberMeasurementCreateResponse(val: unknown): val is MemberMeasurementCreateResponse {
+  if (!isRecord(val)) return false;
+  return (
+    typeof val.id === 'number' && Number.isInteger(val.id) && val.id > 0 &&
+    typeof val.uuid === 'string'
+  );
+}
+
+export function isMemberProgressSuccessResponse(val: unknown): val is MemberProgressSuccessResponse {
+  if (!isRecord(val)) return false;
+  return typeof val.success === 'boolean' && val.success === true;
 }
