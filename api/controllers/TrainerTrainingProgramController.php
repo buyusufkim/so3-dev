@@ -91,9 +91,6 @@ class TrainerTrainingProgramController {
         }
 
         $data = json_decode($raw, true);
-        if (empty($data)) {
-            Response::error('Boş JSON nesnesi.', 'BAD_REQUEST', 400);
-        }
 
         $allowlist = ['title', 'status', 'start_date', 'end_date', 'notes'];
         foreach (array_keys($data) as $key) {
@@ -398,6 +395,10 @@ class TrainerTrainingProgramController {
         AuthMiddleware::hasRole(['trainer']);
         
         $val = $this->getJsonPayload();
+        
+        if (empty($val)) {
+            Response::error("En az bir alan gönderilmelidir.", 'VALIDATION_ERROR', 422);
+        }
 
         try {
             $this->db->beginTransaction();
