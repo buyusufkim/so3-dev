@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Activity, FileText, Plus, Edit2, Trash2, RotateCcw } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
@@ -80,12 +80,15 @@ export function AdminMemberProgressPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const isMutating = useRef(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const clearDetailSelection = () => {
     setSelectedId(null);
     setSelectedMeasurement(null);
     setSelectedNote(null);
     setDetailError(null);
     setDetailLoading(false);
+    setMutationError(null);
   };
 
   const handleTabChange = (newTab: 'measurements' | 'notes') => {
@@ -108,38 +111,51 @@ export function AdminMemberProgressPage() {
     clearDetailSelection();
   };
   const handleArchive = async (id: number) => {
+    if (isMutating.current) return;
     if (!window.confirm('Bu ölçümü arşivlemek istediğinize emin misiniz?')) return;
+    isMutating.current = true;
+    setMutationError(null);
     try {
       const res: unknown = await apiClient.delete(`/api/admin/member-measurements/${id}`);
       if (!isMemberProgressSuccessResponse(res)) {
         throw new Error('Sunucudan geçersiz yanıt döndü.');
       }
       clearDetailSelection();
+      setPage(1);
       setRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        alert(err.message);
+        setMutationError(err.message);
       } else {
-        alert('Arşivleme işlemi başarısız oldu.');
+        setMutationError('Arşivleme işlemi başarısız oldu.');
       }
+    } finally {
+      isMutating.current = false;
     }
   };
 
   const handleRestore = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isMutating.current) return;
     if (!window.confirm('Bu ölçümü geri yüklemek istediğinize emin misiniz?')) return;
+    isMutating.current = true;
+    setMutationError(null);
     try {
       const res: unknown = await apiClient.post(`/api/admin/member-measurements/${id}/restore`, {});
       if (!isMemberProgressSuccessResponse(res)) {
         throw new Error('Sunucudan geçersiz yanıt döndü.');
       }
+      clearDetailSelection();
+      setPage(1);
       setRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        alert(err.message);
+        setMutationError(err.message);
       } else {
-        alert('Geri yükleme işlemi başarısız oldu.');
+        setMutationError('Geri yükleme işlemi başarısız oldu.');
       }
+    } finally {
+      isMutating.current = false;
     }
   };
 

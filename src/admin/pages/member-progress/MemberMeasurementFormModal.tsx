@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Save } from 'lucide-react';
 import { apiClient, ApiError } from '../../api/client';
 import { 
@@ -15,27 +15,29 @@ interface MemberMeasurementFormModalProps {
   onSuccess: () => void;
 }
 
-const parseNumeric = (val: string): number | null => {
-  const trimmed = val.trim();
-  if (trimmed === '') return null;
-  const num = Number(trimmed);
-  if (isNaN(num) || !Number.isFinite(num)) return null;
-  return num;
-};
+type NumericValidationResult = { value?: number | null, error?: string };
 
-const validateNumeric = (val: string, max: number = 9999.99): string | null => {
+const parseAndValidateNumeric = (val: string, max: number = 9999.99, allowZero: boolean = false): NumericValidationResult => {
   const trimmed = val.trim();
-  if (trimmed === '') return null; // ok
+  if (trimmed === '') return { value: null };
+  const normalized = trimmed.replace(',', '.');
   
-  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
-    return 'Geçerli bir sayı giriniz (en fazla 2 ondalık).';
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return { error: 'Geçerli bir sayı giriniz (en fazla 2 ondalık).' };
   }
   
-  const num = Number(trimmed);
-  if (num < 0 || num > max) {
-    return `0 ile \${max} arasında bir değer giriniz.`;
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) {
+    return { error: 'Geçersiz sayı.' };
   }
-  return null;
+  
+  if (allowZero) {
+    if (num < 0 || num > max) return { error: `0 ile ${max} arasında bir değer giriniz.` };
+  } else {
+    if (num <= 0 || num > max) return { error: `0'dan büyük ve en fazla ${max} olan bir değer giriniz.` };
+  }
+  
+  return { value: num };
 };
 
 const formatForInput = (val: number | null): string => {
@@ -44,21 +46,16 @@ const formatForInput = (val: number | null): string => {
 };
 
 const formatDateForInput = (sqlDate: string): string => {
-  // Convert "Y-m-d H:i:s" to "Y-m-dTHH:mm:ss"
   if (!sqlDate) return '';
   return sqlDate.replace(' ', 'T');
 };
 
-const formatForSql = (inputDate: string): string => {
-  if (!inputDate) return '';
-  return inputDate.replace('T', ' ') + ':00'; // datetime-local might not have seconds depending on step, but assuming we format it well
-};
-
 export function MemberMeasurementFormModal({ memberId, initialData, onClose, onSuccess }: MemberMeasurementFormModalProps) {
+  const isSubmitting = useRef(false);
+  const isMounted = useRef(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State holds strings to avoid silent float conversion / rounding
   const [measuredAt, setMeasuredAt] = useState('');
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
@@ -72,6 +69,11 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  useEffect(() => {
     if (initialData) {
       setMeasuredAt(formatDateForInput(initialData.measured_at));
       setWeight(formatForInput(initialData.weight_kg));
@@ -83,14 +85,13 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
       setThigh(formatForInput(initialData.thigh_cm));
       setNotes(initialData.notes || '');
     } else {
-      // Create - set default to now
       const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      setMeasuredAt(now.toISOString().slice(0, 16));
+      const localStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      setMeasuredAt(localStr);
     }
   }, [initialData]);
 
-  const validate = (): MemberMeasurementPayload | null => {
+  const validateAndGetPayload = (): MemberMeasurementPayload | null => {
     setError(null);
     
     if (!measuredAt) {
@@ -98,7 +99,6 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
       return null;
     }
     
-    // Check real date roundtrip
     const sqlDate = measuredAt.length === 16 ? measuredAt.replace('T', ' ') + ':00' : measuredAt.replace('T', ' ');
     const regex = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
     const match = sqlDate.match(regex);
@@ -126,34 +126,39 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
       return null;
     }
 
-    const errWeight = validateNumeric(weight);
-    const errFat = validateNumeric(bodyFat, 100);
-    const errChest = validateNumeric(chest);
-    const errWaist = validateNumeric(waist);
-    const errHip = validateNumeric(hip);
-    const errArm = validateNumeric(arm);
-    const errThigh = validateNumeric(thigh);
+    const wRes = parseAndValidateNumeric(weight, 9999.99, false);
+    const fRes = parseAndValidateNumeric(bodyFat, 100, true);
+    const cRes = parseAndValidateNumeric(chest, 9999.99, false);
+    const waRes = parseAndValidateNumeric(waist, 9999.99, false);
+    const hRes = parseAndValidateNumeric(hip, 9999.99, false);
+    const aRes = parseAndValidateNumeric(arm, 9999.99, false);
+    const tRes = parseAndValidateNumeric(thigh, 9999.99, false);
 
-    if (errWeight || errFat || errChest || errWaist || errHip || errArm || errThigh) {
-      setError("Lütfen sayısal alanları doğru formatta (örn. 70.12) doldurunuz.");
-      return null;
-    }
+    if (wRes.error) { setError(wRes.error); return null; }
+    if (fRes.error) { setError(fRes.error); return null; }
+    if (cRes.error) { setError(cRes.error); return null; }
+    if (waRes.error) { setError(waRes.error); return null; }
+    if (hRes.error) { setError(hRes.error); return null; }
+    if (aRes.error) { setError(aRes.error); return null; }
+    if (tRes.error) { setError(tRes.error); return null; }
 
-    const w = parseNumeric(weight);
-    const bf = parseNumeric(bodyFat);
-    const c = parseNumeric(chest);
-    const wa = parseNumeric(waist);
-    const h = parseNumeric(hip);
-    const a = parseNumeric(arm);
-    const t = parseNumeric(thigh);
+    const w = wRes.value ?? null;
+    const bf = fRes.value ?? null;
+    const c = cRes.value ?? null;
+    const wa = waRes.value ?? null;
+    const h = hRes.value ?? null;
+    const a = aRes.value ?? null;
+    const t = tRes.value ?? null;
 
     if (w === null && bf === null && c === null && wa === null && h === null && a === null && t === null) {
       setError("En az bir ölçüm değeri girmelisiniz.");
       return null;
     }
 
-    let parsedNotes = notes.trim();
-    if (parsedNotes.length > 1000) {
+    const isWhitespaceOnly = notes.trim() === '';
+    const finalNotes = isWhitespaceOnly ? null : notes;
+
+    if (finalNotes && Array.from(finalNotes).length > 1000) {
       setError("Notlar en fazla 1000 karakter olabilir.");
       return null;
     }
@@ -167,41 +172,94 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
       hip_cm: h,
       arm_cm: a,
       thigh_cm: t,
-      notes: parsedNotes === '' ? null : parsedNotes
+      notes: finalNotes
     };
   };
 
   const handleSave = async () => {
-    const payload = validate();
+    if (isSubmitting.current) return;
+    
+    const payload = validateAndGetPayload();
     if (!payload) return;
 
-    setSaving(true);
-    setError(null);
+    if (initialData) {
+      const patchPayload: Partial<MemberMeasurementPayload> = {};
+      let hasChanges = false;
+      
+      if (payload.measured_at !== initialData.measured_at) { patchPayload.measured_at = payload.measured_at; hasChanges = true; }
+      if (payload.weight_kg !== initialData.weight_kg) { patchPayload.weight_kg = payload.weight_kg; hasChanges = true; }
+      if (payload.body_fat_percent !== initialData.body_fat_percent) { patchPayload.body_fat_percent = payload.body_fat_percent; hasChanges = true; }
+      if (payload.chest_cm !== initialData.chest_cm) { patchPayload.chest_cm = payload.chest_cm; hasChanges = true; }
+      if (payload.waist_cm !== initialData.waist_cm) { patchPayload.waist_cm = payload.waist_cm; hasChanges = true; }
+      if (payload.hip_cm !== initialData.hip_cm) { patchPayload.hip_cm = payload.hip_cm; hasChanges = true; }
+      if (payload.arm_cm !== initialData.arm_cm) { patchPayload.arm_cm = payload.arm_cm; hasChanges = true; }
+      if (payload.thigh_cm !== initialData.thigh_cm) { patchPayload.thigh_cm = payload.thigh_cm; hasChanges = true; }
+      if (payload.notes !== initialData.notes) { patchPayload.notes = payload.notes; hasChanges = true; }
 
-    try {
-      if (initialData) {
-        const res: unknown = await apiClient.patch(`/api/admin/member-measurements/\${initialData.id}`, payload);
+      if (!hasChanges) {
+        onClose();
+        return;
+      }
+      
+      isSubmitting.current = true;
+      setSaving(true);
+      setError(null);
+
+      try {
+        const res: unknown = await apiClient.patch(`/api/admin/member-measurements/${initialData.id}`, patchPayload);
         if (!isMemberProgressSuccessResponse(res)) {
           throw new Error("Sunucudan geçersiz yanıt döndü.");
         }
-      } else {
-        const res: unknown = await apiClient.post(`/api/admin/members/\${memberId}/measurements`, payload);
+        setIsDirty(false);
+        onSuccess();
+      } catch (err: unknown) {
+        if (err instanceof ApiError) {
+          if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
+            setError("Üyeye eğitmen atanmamış.");
+          } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
+            setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
+          } else {
+            setError(err.message);
+          }
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Kayıt sırasında bir hata oluştu.");
+        }
+      } finally {
+        isSubmitting.current = false;
+        if (isMounted.current) setSaving(false);
+      }
+    } else {
+      isSubmitting.current = true;
+      setSaving(true);
+      setError(null);
+
+      try {
+        const res: unknown = await apiClient.post(`/api/admin/members/${memberId}/measurements`, payload);
         if (!isMemberMeasurementCreateResponse(res)) {
           throw new Error("Sunucudan geçersiz yanıt döndü.");
         }
+        setIsDirty(false);
+        onSuccess();
+      } catch (err: unknown) {
+        if (err instanceof ApiError) {
+          if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
+            setError("Üyeye eğitmen atanmamış.");
+          } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
+            setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
+          } else {
+            setError(err.message);
+          }
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Kayıt sırasında bir hata oluştu.");
+        }
+      } finally {
+        isSubmitting.current = false;
+        if (isMounted.current) setSaving(false);
       }
-      setIsDirty(false);
-      onSuccess();
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Kayıt sırasında bir hata oluştu.");
-      }
-    } finally {
-      if (saving) setSaving(false); // only needed if unmounted, but we handle that
     }
   };
 

@@ -59,7 +59,7 @@ export interface MemberMeasurementCreateResponse {
 }
 
 export interface MemberProgressSuccessResponse {
-  success: boolean;
+  success: true;
 }
 
 export interface MemberMeasurementPayload {
@@ -162,11 +162,12 @@ export function isMemberMeasurementCreateResponse(val: unknown): val is MemberMe
   if (!isRecord(val)) return false;
   return (
     typeof val.id === 'number' && Number.isInteger(val.id) && val.id > 0 &&
-    typeof val.uuid === 'string'
+    typeof val.uuid === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.uuid)
   );
 }
 
 export function isMemberProgressSuccessResponse(val: unknown): val is MemberProgressSuccessResponse {
   if (!isRecord(val)) return false;
-  return typeof val.success === 'boolean' && val.success === true;
+  return val.success === true;
 }
