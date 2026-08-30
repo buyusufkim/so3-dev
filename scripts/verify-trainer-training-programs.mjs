@@ -383,39 +383,44 @@ function verify() {
     const cTrainer = createBody.indexOf('$this->getTrainerProfileIdForUpdate();');
     const cMemberLock = createBody.indexOf('FOR UPDATE');
     const cInsert = createBody.indexOf('INSERT INTO training_programs');
-    const cCommit = createBody.indexOf('$this->db->commit();');
-    const cAudit = createBody.indexOf('AuditLogger::log');
+    const cCommit = createBody.indexOf('$this->db->commit();', cInsert);
+    const cAudit = createBody.indexOf('AuditLogger::log', cCommit);
 
     if (cBegin === -1 || cTrainer === -1 || cMemberLock === -1 || cInsert === -1 || cCommit === -1 || cAudit === -1 ||
         cBegin > cTrainer || cTrainer > cMemberLock || cMemberLock > cInsert || cInsert > cCommit || cCommit > cAudit) {
+        console.error('❌ Mutation ordering invalid in create()');
         mutationOrderValid = false;
     }
 
-    // Update ordering: beginTransaction -> getTrainerProfileIdForUpdate -> resource FOR UPDATE -> no-op check -> UPDATE -> commit -> audit
+    // Update ordering: beginTransaction -> getTrainerProfileIdForUpdate -> resource FOR UPDATE -> no-op check -> final UPDATE -> final mutation commit -> audit
     const uBegin = updateBody.indexOf('$this->db->beginTransaction();');
     const uTrainer = updateBody.indexOf('$this->getTrainerProfileIdForUpdate();');
     const uLock = updateBody.indexOf('FOR UPDATE');
     const uNoOp = updateBody.indexOf('if (!$changed) {');
-    const uUpdate = updateBody.indexOf('UPDATE training_programs');
+    const uNoOpCommit = updateBody.indexOf('$this->db->commit();', uNoOp);
+    const uUpdate = updateBody.indexOf('UPDATE training_programs', uNoOpCommit);
     const uMutationCommit = updateBody.indexOf('$this->db->commit();', uUpdate);
-    const uAudit = updateBody.indexOf('AuditLogger::log');
+    const uAudit = updateBody.indexOf('AuditLogger::log', uMutationCommit);
 
-    if (uBegin === -1 || uTrainer === -1 || uLock === -1 || uNoOp === -1 || uUpdate === -1 || uMutationCommit === -1 || uAudit === -1 ||
-        uBegin > uTrainer || uTrainer > uLock || uLock > uNoOp || uNoOp > uUpdate || uUpdate > uMutationCommit || uMutationCommit > uAudit) {
+    if (uBegin === -1 || uTrainer === -1 || uLock === -1 || uNoOp === -1 || uNoOpCommit === -1 || uUpdate === -1 || uMutationCommit === -1 || uAudit === -1 ||
+        uBegin > uTrainer || uTrainer > uLock || uLock > uNoOp || uNoOp > uNoOpCommit || uNoOpCommit > uUpdate || uUpdate > uMutationCommit || uMutationCommit > uAudit) {
+        console.error('❌ Mutation ordering invalid in update()');
         mutationOrderValid = false;
     }
 
-    // Delete ordering: beginTransaction -> getTrainerProfileIdForUpdate -> resource FOR UPDATE -> UPDATE (archive) -> commit -> audit
+    // Delete ordering: beginTransaction -> getTrainerProfileIdForUpdate -> resource FOR UPDATE -> UPDATE (archive) -> rowCount check -> commit -> audit
     const deleteBody = methods.delete;
     const dBegin = deleteBody.indexOf('$this->db->beginTransaction();');
     const dTrainer = deleteBody.indexOf('$this->getTrainerProfileIdForUpdate();');
     const dLock = deleteBody.indexOf('FOR UPDATE');
     const dUpdate = deleteBody.indexOf('UPDATE training_programs');
-    const dCommit = deleteBody.indexOf('$this->db->commit();');
-    const dAudit = deleteBody.indexOf('AuditLogger::log');
+    const dRowCount = deleteBody.indexOf('$stmt->rowCount() !== 1', dUpdate);
+    const dCommit = deleteBody.indexOf('$this->db->commit();', dRowCount);
+    const dAudit = deleteBody.indexOf('AuditLogger::log', dCommit);
 
-    if (dBegin === -1 || dTrainer === -1 || dLock === -1 || dUpdate === -1 || dCommit === -1 || dAudit === -1 ||
-        dBegin > dTrainer || dTrainer > dLock || dLock > dUpdate || dUpdate > dCommit || dCommit > dAudit) {
+    if (dBegin === -1 || dTrainer === -1 || dLock === -1 || dUpdate === -1 || dRowCount === -1 || dCommit === -1 || dAudit === -1 ||
+        dBegin > dTrainer || dTrainer > dLock || dLock > dUpdate || dUpdate > dRowCount || dRowCount > dCommit || dCommit > dAudit) {
+        console.error('❌ Mutation ordering invalid in delete()');
         mutationOrderValid = false;
     }
 
@@ -471,11 +476,15 @@ function verify() {
         'Invariant 13: Idempotent PATCH safely commits and returns 200 early without updating DB or firing AuditLogger'
     );
 
-    // 14. Invariant 14: Balanced audit parser & 5-arg contract & privacy
-    const mutationMethodNames = ['create', 'update', 'delete'];
+    // 14. Invariant 14: Balanced audit parser & 5-arg contract & privacy & dedicated inner try/catch isolation
+    const mutationMethodNames = [
+        { name: 'create', commitAnchor: 'INSERT INTO training_programs' },
+        { name: 'update', commitAnchor: 'UPDATE training_programs' },
+        { name: 'delete', commitAnchor: '$stmt->rowCount() !== 1' }
+    ];
     let auditAllValid = true;
 
-    for (const mName of mutationMethodNames) {
+    for (const { name: mName, commitAnchor } of mutationMethodNames) {
         const mBody = methods[mName];
         const auditCall = extractBalancedCall(mBody, 'AuditLogger::log(');
         if (!auditCall) {
@@ -512,17 +521,62 @@ function verify() {
             }
         }
 
-        // Audit error boundary: must be inside try/catch(Throwable $e) and post-commit
-        const commitIdx = mBody.indexOf('$this->db->commit();');
-        const auditIdx = mBody.indexOf(auditCall);
-        if (commitIdx === -1 || auditIdx < commitIdx) {
-            console.error(`❌ Invariant 14: Audit call in ${mName} is not post-commit`);
+        // Mutation commit must be after the mutation statement (preventing no-op commit confusion in update)
+        const anchorIdx = mBody.indexOf(commitAnchor);
+        if (anchorIdx === -1) {
+            console.error(`❌ Invariant 14: Missing mutation anchor '${commitAnchor}' in ${mName}`);
             auditAllValid = false;
+            continue;
         }
 
-        if (!mBody.includes('catch (\\Throwable $e)') && !mBody.includes('catch (Throwable $e)')) {
-            console.error(`❌ Invariant 14: Audit call in ${mName} is missing Throwable catch error boundary`);
+        const mutationCommitIdx = mBody.indexOf('$this->db->commit();', anchorIdx);
+        const auditIdx = mBody.indexOf(auditCall);
+        if (mutationCommitIdx === -1 || auditIdx < mutationCommitIdx) {
+            console.error(`❌ Invariant 14: Audit call in ${mName} is not post-mutation-commit`);
             auditAllValid = false;
+            continue;
+        }
+
+        // Dedicated inner try/catch block enclosing AuditLogger::log
+        const innerTryIdx = mBody.lastIndexOf('try', auditIdx);
+        if (innerTryIdx === -1 || innerTryIdx < mutationCommitIdx) {
+            console.error(`❌ Invariant 14: Audit call in ${mName} is not enclosed in a dedicated inner try block after commit`);
+            auditAllValid = false;
+            continue;
+        }
+
+        const tryOpenBrace = mBody.indexOf('{', innerTryIdx);
+        if (tryOpenBrace === -1 || tryOpenBrace > auditIdx) {
+            console.error(`❌ Invariant 14: Invalid try block syntax before audit in ${mName}`);
+            auditAllValid = false;
+            continue;
+        }
+
+        let depth = 0;
+        let tryCloseBrace = -1;
+        for (let i = tryOpenBrace; i < mBody.length; i++) {
+            if (mBody[i] === '{') depth++;
+            else if (mBody[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    tryCloseBrace = i;
+                    break;
+                }
+            }
+        }
+
+        if (tryCloseBrace === -1 || auditIdx >= tryCloseBrace) {
+            console.error(`❌ Invariant 14: Audit call in ${mName} is outside its inner try block`);
+            auditAllValid = false;
+            continue;
+        }
+
+        const afterTry = mBody.slice(tryCloseBrace + 1).trimStart();
+        const catchMatch = afterTry.match(/^catch\s*\(\s*\\?Throwable\s+\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*\s*\)\s*\{/);
+        if (!catchMatch) {
+            console.error(`❌ Invariant 14: Dedicated inner catch (Throwable) block missing after audit try in ${mName}`);
+            auditAllValid = false;
+            continue;
         }
     }
 
@@ -533,7 +587,7 @@ function verify() {
 
     // 15. Invariant 15: Method-scoped transaction rollback in catch blocks
     let rollbackAllValid = true;
-    for (const mName of mutationMethodNames) {
+    for (const { name: mName } of mutationMethodNames) {
         const mBody = methods[mName];
         const catchBlock = mBody.slice(mBody.lastIndexOf('catch'));
         if (!catchBlock.includes('if ($this->db->inTransaction()) {') || !catchBlock.includes('$this->db->rollBack();')) {
