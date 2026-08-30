@@ -61,7 +61,7 @@ function isPagination(val: unknown): val is ProgressPagination {
   return (
     typeof val.total === 'number' && Number.isInteger(val.total) && val.total >= 0 &&
     typeof val.page === 'number' && Number.isInteger(val.page) && val.page > 0 &&
-    typeof val.per_page === 'number' && Number.isInteger(val.per_page) && val.per_page > 0 &&
+    typeof val.per_page === 'number' && Number.isInteger(val.per_page) && val.per_page > 0 && val.per_page <= 100 &&
     typeof val.last_page === 'number' && Number.isInteger(val.last_page) && val.last_page > 0
   );
 }

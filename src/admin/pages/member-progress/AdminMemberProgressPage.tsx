@@ -74,6 +74,34 @@ export function AdminMemberProgressPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedMeasurement, setSelectedMeasurement] = useState<MemberMeasurementDetail | null>(null);
   const [selectedNote, setSelectedNote] = useState<MemberProgressNoteDetail | null>(null);
+  const clearDetailSelection = () => {
+    setSelectedId(null);
+    setSelectedMeasurement(null);
+    setSelectedNote(null);
+    setDetailError(null);
+    setDetailLoading(false);
+  };
+
+  const handleTabChange = (newTab: 'measurements' | 'notes') => {
+    if (activeTab === newTab) return;
+    setActiveTab(newTab);
+    setPage(1);
+    clearDetailSelection();
+  };
+
+  const handleFilterChange = (newFilter: 'active' | 'deleted' | 'all') => {
+    if (deletedFilter === newFilter) return;
+    setDeletedFilter(newFilter);
+    setPage(1);
+    clearDetailSelection();
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (page === newPage) return;
+    setPage(newPage);
+    clearDetailSelection();
+  };
+
 
   useEffect(() => {
     if (!memberId || !/^[1-9]\d*$/.test(memberId)) {
@@ -128,19 +156,11 @@ export function AdminMemberProgressPage() {
     return () => { isSubscribed = false; };
   }, [memberId, activeTab, deletedFilter, page]);
 
-  // Reset page and selections on tab/filter change
-  useEffect(() => {
-    setPage(1);
-    setSelectedId(null);
-    setSelectedMeasurement(null);
-    setSelectedNote(null);
-  }, [activeTab, deletedFilter]);
+
 
   const handleItemClick = (id: number, isDeleted: boolean) => {
     if (isDeleted) {
-      setSelectedId(null);
-      setSelectedMeasurement(null);
-      setSelectedNote(null);
+      clearDetailSelection();
       return;
     }
     if (selectedId === id) return;
@@ -220,7 +240,7 @@ export function AdminMemberProgressPage() {
             <div className="bg-gray-800/50 p-4 rounded-xl flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
               <div className="flex items-center gap-2 bg-gray-900 p-1 rounded-lg">
                 <button
-                  onClick={() => setActiveTab('measurements')}
+                  onClick={() => handleTabChange('measurements')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
                     activeTab === 'measurements' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'
                   }`}
@@ -229,7 +249,7 @@ export function AdminMemberProgressPage() {
                   Ölçümler
                 </button>
                 <button
-                  onClick={() => setActiveTab('notes')}
+                  onClick={() => handleTabChange('notes')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
                     activeTab === 'notes' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'
                   }`}
@@ -243,7 +263,7 @@ export function AdminMemberProgressPage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === 'active' || val === 'deleted' || val === 'all') {
-                    setDeletedFilter(val);
+                    handleFilterChange(val);
                   }
                 }}
                 className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-blue-500"
@@ -325,14 +345,14 @@ export function AdminMemberProgressPage() {
                   <div className="flex gap-2">
                     <button
                       disabled={page <= 1}
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      onClick={() => handlePageChange(Math.max(1, page - 1))}
                       className="p-1.5 bg-gray-800 text-gray-300 rounded hover:text-white disabled:opacity-50 transition"
                     >
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                     <button
                       disabled={page >= lastPage}
-                      onClick={() => setPage(p => Math.min(lastPage, p + 1))}
+                      onClick={() => handlePageChange(Math.min(lastPage, page + 1))}
                       className="p-1.5 bg-gray-800 text-gray-300 rounded hover:text-white disabled:opacity-50 transition"
                     >
                       <ChevronRight className="w-5 h-5" />
