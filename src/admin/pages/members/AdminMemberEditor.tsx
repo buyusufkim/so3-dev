@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useBlocker } from "react-router-dom";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Trash2, TrendingUp } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { Member } from "./types";
 import { AdminTrainerListItem } from "../trainers/types";
