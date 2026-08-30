@@ -116,6 +116,36 @@ function isValidDate(dateStr: string) {
            dateObj.getSeconds() === s;
 }
 
+function validateMeasurementMetric(val: unknown, field: string, max: number, isPercent = false): number | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== 'number') throw new Error(`${field} must be a number`);
+  if (!Number.isFinite(val)) throw new Error(`${field} must be a finite number`);
+
+  if (isPercent) {
+    if (val < 0) throw new Error(`${field} must be at least 0`);
+    if (val > 100) throw new Error(`${field} cannot exceed 100`);
+  } else {
+    if (val <= 0) throw new Error(`${field} must be greater than 0`);
+    if (val > max) throw new Error(`${field} cannot exceed ${max}`);
+  }
+
+  const scaled = val * 100;
+  if (
+    !Number.isFinite(scaled) ||
+    Math.abs(scaled - Math.round(scaled)) > 1e-9
+  ) {
+    throw new Error(`${field} cannot have more than 2 decimal places`);
+  }
+
+  return val;
+}
+
+function generateSyntheticUuid(id: number): string {
+  const hex = id.toString(16).padStart(12, '0');
+  return `00000000-0000-4000-8000-${hex}`;
+}
+
+
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
   const url = new URL(endpoint, 'http://localhost');
@@ -988,41 +1018,20 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         return createError('Assigned trainer is invalid or inactive', 409, 'MEMBER_TRAINER_INVALID');
       }
 
-      const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
-        if (val === undefined || val === null) return null;
-        if (typeof val !== 'number') throw new Error(`${field} must be a number`);
-        if (!Number.isFinite(val)) throw new Error(`${field} must be a finite number`);
-        
-        if (isPercent) {
-           if (val < 0) throw new Error(`${field} must be at least 0`);
-           if (val > 100) throw new Error(`${field} cannot exceed 100`);
-        } else {
-           if (val <= 0) throw new Error(`${field} must be greater than 0`);
-           if (val > max) throw new Error(`${field} cannot exceed ${max}`);
-        }
-
-        const strVal = val.toString();
-        if (strVal.includes('.')) {
-          const decimals = strVal.split('.')[1];
-          if (decimals.length > 2) {
-             throw new Error(`${field} cannot have more than 2 decimal places`);
-          }
-        }
-        return val;
-      };
 
       let w, bf, c, wa, h, a, t;
       try {
-        w = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
-        bf = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
-        c = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
-        wa = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
-        h = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
-        a = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
-        t = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
-      } catch(e: any) {
-        return createError(e.message, 422, 'VALIDATION_ERROR');
-      }
+        w = validateMeasurementMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
+        bf = validateMeasurementMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
+        c = validateMeasurementMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
+        wa = validateMeasurementMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
+        h = validateMeasurementMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
+        a = validateMeasurementMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
+        t = validateMeasurementMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
+      } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'Validation error';
+          return createError(msg, 422, 'VALIDATION_ERROR');
+        }
 
       if (w === null && bf === null && c === null && wa === null && h === null && a === null && t === null) {
         return createError('At least one measurement field must be provided and not null', 422, 'VALIDATION_ERROR');
@@ -1039,10 +1048,8 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       }
 
       const newId = nextMeasurementId++;
-      const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+      const uuid = generateSyntheticUuid(newId);
+
       const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
       const newMeasurement: MockMeasurement = {
@@ -1050,7 +1057,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         uuid,
         member_id: memberId,
         trainer_id: trainer.id,
-        measured_at: reqBody.measured_at,
+        measured_at: reqBody.measured_at as string,
         weight_kg: w,
         body_fat_percent: bf,
         chest_cm: c,
@@ -1109,28 +1116,6 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
           }
         }
 
-        const validateMetric = (val: any, field: string, max: number, isPercent = false) => {
-          if (val === undefined || val === null) return null;
-          if (typeof val !== 'number') throw new Error(`${field} must be a number`);
-          if (!Number.isFinite(val)) throw new Error(`${field} must be a finite number`);
-          
-          if (isPercent) {
-             if (val < 0) throw new Error(`${field} must be at least 0`);
-             if (val > 100) throw new Error(`${field} cannot exceed 100`);
-          } else {
-             if (val <= 0) throw new Error(`${field} must be greater than 0`);
-             if (val > max) throw new Error(`${field} cannot exceed ${max}`);
-          }
-
-          const strVal = val.toString();
-          if (strVal.includes('.')) {
-            const decimals = strVal.split('.')[1];
-            if (decimals.length > 2) {
-                 throw new Error(`${field} cannot have more than 2 decimal places`);
-            }
-          }
-          return val;
-        };
 
         const merged = { ...item };
         let hasChanges = false;
@@ -1138,25 +1123,26 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         try {
           if (reqBody.measured_at !== undefined) merged.measured_at = reqBody.measured_at;
           
-          if (reqBody.weight_kg !== undefined) merged.weight_kg = validateMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
-          if (reqBody.body_fat_percent !== undefined) merged.body_fat_percent = validateMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
-          if (reqBody.chest_cm !== undefined) merged.chest_cm = validateMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
-          if (reqBody.waist_cm !== undefined) merged.waist_cm = validateMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
-          if (reqBody.hip_cm !== undefined) merged.hip_cm = validateMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
-          if (reqBody.arm_cm !== undefined) merged.arm_cm = validateMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
-          if (reqBody.thigh_cm !== undefined) merged.thigh_cm = validateMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
+          if (reqBody.weight_kg !== undefined) merged.weight_kg = validateMeasurementMetric(reqBody.weight_kg, 'weight_kg', 9999.99);
+          if (reqBody.body_fat_percent !== undefined) merged.body_fat_percent = validateMeasurementMetric(reqBody.body_fat_percent, 'body_fat_percent', 100, true);
+          if (reqBody.chest_cm !== undefined) merged.chest_cm = validateMeasurementMetric(reqBody.chest_cm, 'chest_cm', 9999.99);
+          if (reqBody.waist_cm !== undefined) merged.waist_cm = validateMeasurementMetric(reqBody.waist_cm, 'waist_cm', 9999.99);
+          if (reqBody.hip_cm !== undefined) merged.hip_cm = validateMeasurementMetric(reqBody.hip_cm, 'hip_cm', 9999.99);
+          if (reqBody.arm_cm !== undefined) merged.arm_cm = validateMeasurementMetric(reqBody.arm_cm, 'arm_cm', 9999.99);
+          if (reqBody.thigh_cm !== undefined) merged.thigh_cm = validateMeasurementMetric(reqBody.thigh_cm, 'thigh_cm', 9999.99);
 
           if (reqBody.notes !== undefined) {
-            let n: string | null = reqBody.notes as any;
+            let n: unknown = reqBody.notes;
             if (n !== null) {
               if (typeof n !== 'string') throw new Error('notes must be a string or null');
-              if ((n as string).trim() === '') n = null;
-              else if (Array.from(n as string).length > 1000) throw new Error('notes cannot exceed 1000 characters');
+              if (n.trim() === '') n = null;
+              else if (Array.from(n).length > 1000) throw new Error('notes cannot exceed 1000 characters');
             }
-            merged.notes = n;
+            merged.notes = (n as string | null);
           }
-        } catch(e: any) {
-          return createError(e.message, 422, 'VALIDATION_ERROR');
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'Validation error';
+          return createError(msg, 422, 'VALIDATION_ERROR');
         }
 
         if (merged.weight_kg === null && merged.body_fat_percent === null && merged.chest_cm === null && merged.waist_cm === null && merged.hip_cm === null && merged.arm_cm === null && merged.thigh_cm === null) {
@@ -1164,7 +1150,8 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         }
 
         for (const k of allowed) {
-          if ((item as any)[k] !== (merged as any)[k]) {
+          const key = k as keyof typeof item;
+          if (item[key] !== merged[key]) {
             hasChanges = true;
             break;
           }
