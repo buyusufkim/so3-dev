@@ -262,8 +262,9 @@ class MemberProgressNoteController {
             
             $newId = (int)$this->db->lastInsertId();
 
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_progress_note.create', 'member_progress_notes', $newId, [
+                AuditLogger::log('member_progress_note.create', $adminId, 'member_progress_notes', $newId, [
                     'progress_note_id' => $newId,
                     'member_id' => $memberId,
                     'trainer_id' => $trainer['id']
@@ -271,8 +272,6 @@ class MemberProgressNoteController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-
-            $this->db->commit();
             
             Response::json([
                 'id' => $newId,
@@ -392,8 +391,9 @@ class MemberProgressNoteController {
                 throw new Exception("Failed to update progress note");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_progress_note.update', 'member_progress_notes', $id, [
+                AuditLogger::log('member_progress_note.update', $adminId, 'member_progress_notes', $id, [
                     'progress_note_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id'],
@@ -402,8 +402,6 @@ class MemberProgressNoteController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -437,8 +435,9 @@ class MemberProgressNoteController {
                 throw new Exception("Failed to delete progress note");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_progress_note.delete', 'member_progress_notes', $id, [
+                AuditLogger::log('member_progress_note.delete', $adminId, 'member_progress_notes', $id, [
                     'progress_note_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id']
@@ -446,8 +445,6 @@ class MemberProgressNoteController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -486,8 +483,9 @@ class MemberProgressNoteController {
                 throw new Exception("Failed to restore progress note");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_progress_note.restore', 'member_progress_notes', $id, [
+                AuditLogger::log('member_progress_note.restore', $adminId, 'member_progress_notes', $id, [
                     'progress_note_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id']
@@ -495,8 +493,6 @@ class MemberProgressNoteController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {

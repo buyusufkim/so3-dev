@@ -313,8 +313,9 @@ class MemberMeasurementController {
             }
             $newId = (int)$this->db->lastInsertId();
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_measurement.create', 'member_measurements', $newId, [
+                AuditLogger::log('member_measurement.create', $adminId, 'member_measurements', $newId, [
                     'measurement_id' => $newId,
                     'member_id' => $memberId,
                     'trainer_id' => $member['trainer_id']
@@ -322,8 +323,6 @@ class MemberMeasurementController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-
-            $this->db->commit();
             
             Response::json([
                 'id' => $newId,
@@ -484,8 +483,9 @@ class MemberMeasurementController {
                 throw new Exception("Failed to update measurement");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_measurement.update', 'member_measurements', $id, [
+                AuditLogger::log('member_measurement.update', $adminId, 'member_measurements', $id, [
                     'measurement_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id'],
@@ -494,8 +494,6 @@ class MemberMeasurementController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -529,8 +527,9 @@ class MemberMeasurementController {
                 throw new Exception("Failed to delete measurement");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_measurement.delete', 'member_measurements', $id, [
+                AuditLogger::log('member_measurement.delete', $adminId, 'member_measurements', $id, [
                     'measurement_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id']
@@ -538,8 +537,6 @@ class MemberMeasurementController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -578,8 +575,9 @@ class MemberMeasurementController {
                 throw new Exception("Failed to restore measurement");
             }
             
+            $this->db->commit();
             try {
-                AuditLogger::log($this->db, $adminId, 'member_measurement.restore', 'member_measurements', $id, [
+                AuditLogger::log('member_measurement.restore', $adminId, 'member_measurements', $id, [
                     'measurement_id' => $id,
                     'member_id' => $current['member_id'],
                     'trainer_id' => $current['trainer_id']
@@ -587,8 +585,6 @@ class MemberMeasurementController {
             } catch (Throwable $e) {
                 error_log("Audit log failed: " . $e->getMessage());
             }
-            
-            $this->db->commit();
             Response::json(['success' => true]);
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
