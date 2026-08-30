@@ -41,6 +41,29 @@ function extractMethod(source, name) {
     return null;
 }
 
+// Helper: Extract statement block starting from prepare() containing a given SQL anchor until execute()
+function extractStatementBlock(methodSource, sqlAnchor) {
+    const anchorIdx = methodSource.indexOf(sqlAnchor);
+    if (anchorIdx === -1) return null;
+    const prepareIdx = methodSource.lastIndexOf('$this->db->prepare', anchorIdx);
+    if (prepareIdx === -1) return null;
+    const nextPrepare = methodSource.indexOf('$this->db->prepare', anchorIdx);
+    const execIdx = methodSource.indexOf('->execute(', anchorIdx);
+    const execNoArgsIdx = methodSource.indexOf('->execute();', anchorIdx);
+    
+    let endIdx = -1;
+    if (execNoArgsIdx !== -1 && (nextPrepare === -1 || execNoArgsIdx < nextPrepare)) {
+        endIdx = execNoArgsIdx + '->execute();'.length;
+    } else if (execIdx !== -1 && (nextPrepare === -1 || execIdx < nextPrepare)) {
+        const semicolonIdx = methodSource.indexOf(';', execIdx);
+        if (semicolonIdx !== -1) {
+            endIdx = semicolonIdx + 1;
+        }
+    }
+    if (endIdx === -1) return null;
+    return methodSource.slice(prepareIdx, endIdx);
+}
+
 // Helper: Extract route if-block from index.php using balanced brace scanning
 function extractRouteBlock(source, pattern) {
     const idx = source.indexOf(pattern);
@@ -297,29 +320,46 @@ function verify() {
         'Invariant 5: Empty-object contract correctly rejects create with required exercise_name 422 and update with pre-transaction 422'
     );
 
-    // 6. Invariant 6: INDEX endpoint ownership precheck & final SELECT race protection (Index scope)
+    // 6. Invariant 6: INDEX endpoint statement-isolated precheck binding & final SELECT race protection
     const indexBody = methods.index;
-    const indexPrecheckValid = indexBody.includes("SELECT tp.id") &&
-        indexBody.includes("FROM training_programs tp") &&
-        indexBody.includes("JOIN members m ON tp.member_id = m.id") &&
-        indexBody.includes("tp.id = ?") &&
-        indexBody.includes("tp.trainer_id = ?") &&
-        indexBody.includes("tp.deleted_at IS NULL") &&
-        indexBody.includes("m.trainer_id = ?") &&
-        indexBody.includes("m.deleted_at IS NULL") &&
-        indexBody.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
-        indexBody.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
-        indexBody.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+    const indexPrecheckStmt = extractStatementBlock(indexBody, 'SELECT tp.id');
+    const indexFinalSelectStmt = extractStatementBlock(indexBody, 'FROM program_exercises pe');
+
+    const indexPrecheckValid = Boolean(indexPrecheckStmt) &&
+        indexPrecheckStmt.includes("SELECT tp.id") &&
+        indexPrecheckStmt.includes("FROM training_programs tp") &&
+        indexPrecheckStmt.includes("JOIN members m ON tp.member_id = m.id") &&
+        indexPrecheckStmt.includes("tp.id = ?") &&
+        indexPrecheckStmt.includes("tp.trainer_id = ?") &&
+        indexPrecheckStmt.includes("tp.deleted_at IS NULL") &&
+        indexPrecheckStmt.includes("m.trainer_id = ?") &&
+        indexPrecheckStmt.includes("m.deleted_at IS NULL") &&
+        indexPrecheckStmt.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
+        indexPrecheckStmt.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
+        indexPrecheckStmt.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+        indexPrecheckStmt.includes("$stmt->execute();") &&
+        !indexPrecheckStmt.includes("FOR UPDATE") &&
         indexBody.includes("Response::error('Program bulunamadı.', 'NOT_FOUND', 404);");
 
-    const indexFinalSelectValid = indexBody.includes("SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, \n                       pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order, \n                       pe.created_at, pe.updated_at\n                FROM program_exercises pe\n                JOIN training_programs tp ON pe.program_id = tp.id\n                JOIN members m ON tp.member_id = m.id\n                WHERE pe.program_id = ?\n                  AND tp.trainer_id = ?\n                  AND tp.deleted_at IS NULL\n                  AND m.trainer_id = ?\n                  AND m.deleted_at IS NULL\n                ORDER BY pe.sort_order ASC, pe.id ASC") &&
-        indexBody.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
-        indexBody.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
-        indexBody.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);");
+    const indexFinalSelectValid = Boolean(indexFinalSelectStmt) &&
+        indexFinalSelectStmt.includes("SELECT pe.id, pe.program_id, pe.exercise_name") &&
+        indexFinalSelectStmt.includes("FROM program_exercises pe") &&
+        indexFinalSelectStmt.includes("JOIN training_programs tp ON pe.program_id = tp.id") &&
+        indexFinalSelectStmt.includes("JOIN members m ON tp.member_id = m.id") &&
+        indexFinalSelectStmt.includes("pe.program_id = ?") &&
+        indexFinalSelectStmt.includes("tp.trainer_id = ?") &&
+        indexFinalSelectStmt.includes("tp.deleted_at IS NULL") &&
+        indexFinalSelectStmt.includes("m.trainer_id = ?") &&
+        indexFinalSelectStmt.includes("m.deleted_at IS NULL") &&
+        indexFinalSelectStmt.includes("ORDER BY pe.sort_order ASC, pe.id ASC") &&
+        indexFinalSelectStmt.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
+        indexFinalSelectStmt.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
+        indexFinalSelectStmt.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+        indexFinalSelectStmt.includes("$stmt->execute();");
 
     assert(
         Boolean(indexPrecheckValid && indexFinalSelectValid),
-        'Invariant 6: Index endpoint enforces separate ownership precheck and final race-safe SELECT with explicit 3-parameter integer bindings'
+        'Invariant 6: Index endpoint enforces statement-isolated ownership precheck and statement-isolated race-safe final SELECT with explicit 3-parameter integer bindings'
     );
 
     // 7. Invariant 7: Mutation ordering in create, update, delete
@@ -378,11 +418,22 @@ function verify() {
         'Invariant 7: Mutation methods strictly order beginTransaction -> trainer lock -> resource/parent lock -> mutation -> rowCount check -> commit -> audit'
     );
 
-    // 8. Invariant 8: CREATE ownership lock & semantics
-    const createSemanticsValid = createBody.includes("SELECT tp.id \n                FROM training_programs tp\n                JOIN members m ON tp.member_id = m.id\n                WHERE tp.id = ? \n                  AND tp.trainer_id = ? \n                  AND tp.deleted_at IS NULL\n                  AND m.trainer_id = ? \n                  AND m.deleted_at IS NULL\n                FOR UPDATE") &&
-        createBody.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
-        createBody.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
-        createBody.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+    // 8. Invariant 8: CREATE statement-isolated parent lock & semantics
+    const createLockStmt = extractStatementBlock(createBody, 'SELECT tp.id');
+    const createSemanticsValid = Boolean(createLockStmt) &&
+        createLockStmt.includes("SELECT tp.id") &&
+        createLockStmt.includes("FROM training_programs tp") &&
+        createLockStmt.includes("JOIN members m ON tp.member_id = m.id") &&
+        createLockStmt.includes("tp.id = ?") &&
+        createLockStmt.includes("tp.trainer_id = ?") &&
+        createLockStmt.includes("tp.deleted_at IS NULL") &&
+        createLockStmt.includes("m.trainer_id = ?") &&
+        createLockStmt.includes("m.deleted_at IS NULL") &&
+        createLockStmt.includes("FOR UPDATE") &&
+        createLockStmt.includes("$stmt->bindValue(1, $programId, \\PDO::PARAM_INT);") &&
+        createLockStmt.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
+        createLockStmt.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+        createLockStmt.includes("$stmt->execute();") &&
         createBody.includes("INSERT INTO program_exercises") &&
         createBody.includes("$id = (int)$this->db->lastInsertId();") &&
         createBody.includes("$this->db->commit();") &&
@@ -390,14 +441,26 @@ function verify() {
 
     assert(
         Boolean(createSemanticsValid),
-        'Invariant 8: CREATE enforces 3-parameter parent program lock FOR UPDATE, lastInsertId extraction, and 201 response'
+        'Invariant 8: CREATE enforces statement-isolated 3-parameter parent program lock FOR UPDATE, lastInsertId extraction, and 201 response'
     );
 
-    // 9. Invariant 9: UPDATE ownership lock & final mutation boundary
-    const updateLockMatch = updateBody.includes("SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, \n                       pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order\n                FROM program_exercises pe\n                JOIN training_programs tp ON pe.program_id = tp.id\n                JOIN members m ON tp.member_id = m.id\n                WHERE pe.id = ? \n                  AND tp.trainer_id = ? \n                  AND tp.deleted_at IS NULL\n                  AND m.trainer_id = ? \n                  AND m.deleted_at IS NULL\n                FOR UPDATE") &&
-        updateBody.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
-        updateBody.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
-        updateBody.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);");
+    // 9. Invariant 9: UPDATE statement-isolated ownership lock & final mutation boundary
+    const updateLockStmt = extractStatementBlock(updateBody, 'FROM program_exercises pe');
+    const updateLockMatch = Boolean(updateLockStmt) &&
+        updateLockStmt.includes("SELECT pe.id, pe.program_id, pe.exercise_name") &&
+        updateLockStmt.includes("FROM program_exercises pe") &&
+        updateLockStmt.includes("JOIN training_programs tp ON pe.program_id = tp.id") &&
+        updateLockStmt.includes("JOIN members m ON tp.member_id = m.id") &&
+        updateLockStmt.includes("pe.id = ?") &&
+        updateLockStmt.includes("tp.trainer_id = ?") &&
+        updateLockStmt.includes("tp.deleted_at IS NULL") &&
+        updateLockStmt.includes("m.trainer_id = ?") &&
+        updateLockStmt.includes("m.deleted_at IS NULL") &&
+        updateLockStmt.includes("FOR UPDATE") &&
+        updateLockStmt.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
+        updateLockStmt.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
+        updateLockStmt.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+        updateLockStmt.includes("$stmt->execute();");
 
     const updateFinalMutationMatch = updateBody.includes("$sql = \"UPDATE program_exercises SET \" . implode(\", \", $updates) . \" WHERE id = ? AND program_id = ?\";") &&
         updateBody.includes("$params[] = $id;") &&
@@ -406,7 +469,7 @@ function verify() {
 
     assert(
         Boolean(updateLockMatch && updateFinalMutationMatch),
-        'Invariant 9: UPDATE ownership lock validates 3-parameter FOR UPDATE join query and enforces final update id/program_id boundary with rowCount check'
+        'Invariant 9: UPDATE ownership lock validates statement-isolated 3-parameter FOR UPDATE join query and enforces final update id/program_id boundary with rowCount check'
     );
 
     // 10. Invariant 10: PATCH idempotency early commit / no-op return
@@ -417,21 +480,37 @@ function verify() {
         'Invariant 10: Idempotent PATCH safely commits and returns 200 early without updating DB or firing AuditLogger'
     );
 
-    // 11. Invariant 11: DELETE ownership lock & hard delete semantics
-    const deleteLockMatch = deleteBody.includes("SELECT pe.id, pe.program_id \n                FROM program_exercises pe\n                JOIN training_programs tp ON pe.program_id = tp.id\n                JOIN members m ON tp.member_id = m.id\n                WHERE pe.id = ? \n                  AND tp.trainer_id = ? \n                  AND tp.deleted_at IS NULL\n                  AND m.trainer_id = ? \n                  AND m.deleted_at IS NULL\n                FOR UPDATE") &&
-        deleteBody.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
-        deleteBody.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
-        deleteBody.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);");
+    // 11. Invariant 11: DELETE statement-isolated ownership lock & statement-isolated hard delete semantics
+    const deleteLockStmt = extractStatementBlock(deleteBody, 'SELECT pe.id, pe.program_id');
+    const deleteHardStmt = extractStatementBlock(deleteBody, 'DELETE FROM program_exercises');
 
-    const deleteHardMutationMatch = deleteBody.includes("$stmt = $this->db->prepare(\"DELETE FROM program_exercises WHERE id = ? AND program_id = ?\");") &&
-        deleteBody.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
-        deleteBody.includes("$stmt->bindValue(2, $programId, \\PDO::PARAM_INT);") &&
-        deleteBody.includes("$stmt->rowCount() !== 1") &&
-        !deleteBody.includes("deleted_at =");
+    const deleteLockMatch = Boolean(deleteLockStmt) &&
+        deleteLockStmt.includes("SELECT pe.id, pe.program_id") &&
+        deleteLockStmt.includes("FROM program_exercises pe") &&
+        deleteLockStmt.includes("JOIN training_programs tp ON pe.program_id = tp.id") &&
+        deleteLockStmt.includes("JOIN members m ON tp.member_id = m.id") &&
+        deleteLockStmt.includes("pe.id = ?") &&
+        deleteLockStmt.includes("tp.trainer_id = ?") &&
+        deleteLockStmt.includes("tp.deleted_at IS NULL") &&
+        deleteLockStmt.includes("m.trainer_id = ?") &&
+        deleteLockStmt.includes("m.deleted_at IS NULL") &&
+        deleteLockStmt.includes("FOR UPDATE") &&
+        deleteLockStmt.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
+        deleteLockStmt.includes("$stmt->bindValue(2, $trainerId, \\PDO::PARAM_INT);") &&
+        deleteLockStmt.includes("$stmt->bindValue(3, $trainerId, \\PDO::PARAM_INT);") &&
+        deleteLockStmt.includes("$stmt->execute();");
+
+    const deleteHardMutationMatch = Boolean(deleteHardStmt) &&
+        deleteHardStmt.includes("DELETE FROM program_exercises WHERE id = ? AND program_id = ?") &&
+        deleteHardStmt.includes("$stmt->bindValue(1, $id, \\PDO::PARAM_INT);") &&
+        deleteHardStmt.includes("$stmt->bindValue(2, $programId, \\PDO::PARAM_INT);") &&
+        deleteHardStmt.includes("$stmt->execute();") &&
+        !deleteHardStmt.includes("deleted_at =") &&
+        deleteBody.includes("$stmt->rowCount() !== 1");
 
     assert(
         Boolean(deleteLockMatch && deleteHardMutationMatch),
-        'Invariant 11: DELETE enforces 3-parameter FOR UPDATE lock, explicit hard DELETE with id/program_id PARAM_INT bindings and rowCount check'
+        'Invariant 11: DELETE enforces statement-isolated 3-parameter FOR UPDATE lock, statement-isolated hard DELETE with id/program_id PARAM_INT bindings and rowCount check'
     );
 
     // 12. Invariant 12: Balanced audit parser & 5-arg contract & privacy & dedicated inner try/catch isolation
