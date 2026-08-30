@@ -15,16 +15,39 @@ import {
 
 function formatDateTime(dateStr: unknown): string {
   if (typeof dateStr !== 'string') return "—";
+  const regex = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+  const match = dateStr.match(regex);
+  if (!match) return dateStr;
+  
+  const [, yStr, mStr, dStr, hStr, iStr, sStr] = match;
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const day = parseInt(dStr, 10);
+  const hour = parseInt(hStr, 10);
+  const minute = parseInt(iStr, 10);
+  const second = parseInt(sStr, 10);
+  
+  const dateObj = new Date(year, month - 1, day, hour, minute, second);
+  
+  if (
+    dateObj.getFullYear() !== year ||
+    dateObj.getMonth() !== month - 1 ||
+    dateObj.getDate() !== day ||
+    dateObj.getHours() !== hour ||
+    dateObj.getMinutes() !== minute ||
+    dateObj.getSeconds() !== second
+  ) {
+    return dateStr;
+  }
+  
   try {
-    const d = new Date(dateStr.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return dateStr;
     return new Intl.DateTimeFormat('tr-TR', {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(d);
+    }).format(dateObj);
   } catch (e) {
     return dateStr;
   }
@@ -67,22 +90,22 @@ export function AdminMemberProgressPage() {
     const fetchList = async () => {
       try {
         if (activeTab === 'measurements') {
-          const res = await apiClient.get(`/api/admin/members/${memberId}/measurements?page=${page}&per_page=20&deleted=${deletedFilter}`);
+          const res: unknown = await apiClient.get(`/api/admin/members/${memberId}/measurements?page=${page}&per_page=20&deleted=${deletedFilter}`);
           if (!isSubscribed) return;
           if (isMemberMeasurementListResponse(res)) {
-            setMeasurements(res.data.items);
-            setLastPage(res.data.pagination.last_page);
-            setTotal(res.data.pagination.total);
+            setMeasurements(res.items);
+            setLastPage(res.pagination.last_page);
+            setTotal(res.pagination.total);
           } else {
             setError("Sunucudan geçersiz veri döndü.");
           }
         } else {
-          const res = await apiClient.get(`/api/admin/members/${memberId}/progress-notes?page=${page}&per_page=20&deleted=${deletedFilter}`);
+          const res: unknown = await apiClient.get(`/api/admin/members/${memberId}/progress-notes?page=${page}&per_page=20&deleted=${deletedFilter}`);
           if (!isSubscribed) return;
           if (isMemberProgressNoteListResponse(res)) {
-            setNotesList(res.data.items);
-            setLastPage(res.data.pagination.last_page);
-            setTotal(res.data.pagination.total);
+            setNotesList(res.items);
+            setLastPage(res.pagination.last_page);
+            setTotal(res.pagination.total);
           } else {
             setError("Sunucudan geçersiz veri döndü.");
           }
@@ -120,32 +143,37 @@ export function AdminMemberProgressPage() {
       setSelectedNote(null);
       return;
     }
+    if (selectedId === id) return;
     setSelectedId(id);
     setSelectedMeasurement(null);
     setSelectedNote(null);
     setDetailError(null);
-    setDetailLoading(true);
   };
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      setDetailLoading(false);
+      return;
+    }
+    
     let isSubscribed = true;
+    setDetailLoading(true);
 
     const fetchDetail = async () => {
       try {
         if (activeTab === 'measurements') {
-          const res = await apiClient.get(`/api/admin/member-measurements/${selectedId}`);
+          const res: unknown = await apiClient.get(`/api/admin/member-measurements/${selectedId}`);
           if (!isSubscribed) return;
-          if (isMemberMeasurementDetail(res.data)) {
-            setSelectedMeasurement(res.data);
+          if (isMemberMeasurementDetail(res)) {
+            setSelectedMeasurement(res);
           } else {
             setDetailError("Sunucudan geçersiz veri döndü.");
           }
         } else {
-          const res = await apiClient.get(`/api/admin/member-progress-notes/${selectedId}`);
+          const res: unknown = await apiClient.get(`/api/admin/member-progress-notes/${selectedId}`);
           if (!isSubscribed) return;
-          if (isMemberProgressNoteDetail(res.data)) {
-            setSelectedNote(res.data);
+          if (isMemberProgressNoteDetail(res)) {
+            setSelectedNote(res);
           } else {
             setDetailError("Sunucudan geçersiz veri döndü.");
           }
@@ -212,7 +240,12 @@ export function AdminMemberProgressPage() {
               </div>
               <select
                 value={deletedFilter}
-                onChange={(e) => setDeletedFilter(e.target.value as any)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'active' || val === 'deleted' || val === 'all') {
+                    setDeletedFilter(val);
+                  }
+                }}
                 className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-blue-500"
               >
                 <option value="active">Aktif</option>
@@ -249,6 +282,9 @@ export function AdminMemberProgressPage() {
                         <div className="flex items-center gap-4 flex-wrap text-sm text-gray-400">
                           <div>Kilo: <span className="text-white">{m.weight_kg !== null ? `${m.weight_kg} kg` : '—'}</span></div>
                           <div>Yağ: <span className="text-white">{m.body_fat_percent !== null ? `${m.body_fat_percent}%` : '—'}</span></div>
+                          <div>Göğüs: <span className="text-white">{m.chest_cm !== null ? `${m.chest_cm} cm` : '—'}</span></div>
+                          <div>Bel: <span className="text-white">{m.waist_cm !== null ? `${m.waist_cm} cm` : '—'}</span></div>
+                          <div>Kol: <span className="text-white">{m.arm_cm !== null ? `${m.arm_cm} cm` : '—'}</span></div>
                         </div>
                       </div>
                     ))}
@@ -285,7 +321,7 @@ export function AdminMemberProgressPage() {
 
               {!loading && (activeTab === 'measurements' ? measurements.length > 0 : notesList.length > 0) && (
                 <div className="p-4 border-t border-gray-800 bg-gray-900 flex items-center justify-between text-sm">
-                  <div className="text-gray-500">Sayfa {page} / {lastPage}</div>
+                  <div className="text-gray-500">Toplam {total} kayıt &bull; Sayfa {page} / {lastPage}</div>
                   <div className="flex gap-2">
                     <button
                       disabled={page <= 1}

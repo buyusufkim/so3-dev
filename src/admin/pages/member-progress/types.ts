@@ -28,10 +28,8 @@ export interface MemberMeasurementDetail extends MemberMeasurementListItem {
 }
 
 export interface MemberMeasurementListResponse {
-  data: {
-    items: MemberMeasurementListItem[];
-    pagination: ProgressPagination;
-  };
+  items: MemberMeasurementListItem[];
+  pagination: ProgressPagination;
 }
 
 export interface MemberProgressNoteListItem {
@@ -50,10 +48,8 @@ export interface MemberProgressNoteDetail extends MemberProgressNoteListItem {
 }
 
 export interface MemberProgressNoteListResponse {
-  data: {
-    items: MemberProgressNoteListItem[];
-    pagination: ProgressPagination;
-  };
+  items: MemberProgressNoteListItem[];
+  pagination: ProgressPagination;
 }
 
 function isRecord(val: unknown): val is Record<string, unknown> {
@@ -63,20 +59,20 @@ function isRecord(val: unknown): val is Record<string, unknown> {
 function isPagination(val: unknown): val is ProgressPagination {
   if (!isRecord(val)) return false;
   return (
-    typeof val.total === 'number' && val.total >= 0 &&
-    typeof val.page === 'number' && val.page > 0 &&
-    typeof val.per_page === 'number' && val.per_page > 0 &&
-    typeof val.last_page === 'number' && val.last_page > 0
+    typeof val.total === 'number' && Number.isInteger(val.total) && val.total >= 0 &&
+    typeof val.page === 'number' && Number.isInteger(val.page) && val.page > 0 &&
+    typeof val.per_page === 'number' && Number.isInteger(val.per_page) && val.per_page > 0 &&
+    typeof val.last_page === 'number' && Number.isInteger(val.last_page) && val.last_page > 0
   );
 }
 
 export function isMemberMeasurementListItem(val: unknown): val is MemberMeasurementListItem {
   if (!isRecord(val)) return false;
   return (
-    typeof val.id === 'number' && val.id > 0 &&
+    typeof val.id === 'number' && Number.isInteger(val.id) && val.id > 0 &&
     typeof val.uuid === 'string' &&
-    typeof val.member_id === 'number' && val.member_id > 0 &&
-    typeof val.trainer_id === 'number' && val.trainer_id > 0 &&
+    typeof val.member_id === 'number' && Number.isInteger(val.member_id) && val.member_id > 0 &&
+    typeof val.trainer_id === 'number' && Number.isInteger(val.trainer_id) && val.trainer_id > 0 &&
     typeof val.measured_at === 'string' &&
     (val.weight_kg === null || (typeof val.weight_kg === 'number' && Number.isFinite(val.weight_kg))) &&
     (val.body_fat_percent === null || (typeof val.body_fat_percent === 'number' && Number.isFinite(val.body_fat_percent))) &&
@@ -93,19 +89,17 @@ export function isMemberMeasurementListItem(val: unknown): val is MemberMeasurem
 
 export function isMemberMeasurementDetail(val: unknown): val is MemberMeasurementDetail {
   if (!isMemberMeasurementListItem(val)) return false;
-  const asRecord = val as unknown as Record<string, unknown>;
-  return asRecord.notes === null || typeof asRecord.notes === 'string';
+  if (!isRecord(val)) return false; // Already narrowed actually, but for typescript:
+  return val.notes === null || typeof val.notes === 'string';
 }
 
 export function isMemberMeasurementListResponse(val: unknown): val is MemberMeasurementListResponse {
   if (!isRecord(val)) return false;
-  const data = val.data;
-  if (!isRecord(data)) return false;
   
-  if (!Array.isArray(data.items)) return false;
-  if (!data.items.every(isMemberMeasurementListItem)) return false;
+  if (!Array.isArray(val.items)) return false;
+  if (!val.items.every(isMemberMeasurementListItem)) return false;
   
-  if (!isPagination(data.pagination)) return false;
+  if (!isPagination(val.pagination)) return false;
   
   return true;
 }
@@ -113,10 +107,10 @@ export function isMemberMeasurementListResponse(val: unknown): val is MemberMeas
 export function isMemberProgressNoteListItem(val: unknown): val is MemberProgressNoteListItem {
   if (!isRecord(val)) return false;
   return (
-    typeof val.id === 'number' && val.id > 0 &&
+    typeof val.id === 'number' && Number.isInteger(val.id) && val.id > 0 &&
     typeof val.uuid === 'string' &&
-    typeof val.member_id === 'number' && val.member_id > 0 &&
-    typeof val.trainer_id === 'number' && val.trainer_id > 0 &&
+    typeof val.member_id === 'number' && Number.isInteger(val.member_id) && val.member_id > 0 &&
+    typeof val.trainer_id === 'number' && Number.isInteger(val.trainer_id) && val.trainer_id > 0 &&
     typeof val.recorded_at === 'string' &&
     typeof val.created_at === 'string' &&
     typeof val.updated_at === 'string' &&
@@ -126,19 +120,17 @@ export function isMemberProgressNoteListItem(val: unknown): val is MemberProgres
 
 export function isMemberProgressNoteDetail(val: unknown): val is MemberProgressNoteDetail {
   if (!isMemberProgressNoteListItem(val)) return false;
-  const asRecord = val as unknown as Record<string, unknown>;
-  return typeof asRecord.note === 'string';
+  if (!isRecord(val)) return false;
+  return typeof val.note === 'string';
 }
 
 export function isMemberProgressNoteListResponse(val: unknown): val is MemberProgressNoteListResponse {
   if (!isRecord(val)) return false;
-  const data = val.data;
-  if (!isRecord(data)) return false;
 
-  if (!Array.isArray(data.items)) return false;
-  if (!data.items.every(isMemberProgressNoteListItem)) return false;
+  if (!Array.isArray(val.items)) return false;
+  if (!val.items.every(isMemberProgressNoteListItem)) return false;
 
-  if (!isPagination(data.pagination)) return false;
+  if (!isPagination(val.pagination)) return false;
 
   return true;
 }
