@@ -67,6 +67,10 @@ class TrainerMemberController {
             Response::error('Geçersiz per_page değeri', 'VALIDATION_ERROR', 422);
         }
         
+        if (($page - 1) > intdiv(PHP_INT_MAX, $perPage)) {
+            Response::error('Geçersiz sayfa numarası', 'VALIDATION_ERROR', 422);
+        }
+        
         $status = isset($_GET['status']) ? $_GET['status'] : null;
         if ($status !== null) {
             if (is_array($status) || !is_string($status) || !in_array($status, ['active', 'inactive'])) {
