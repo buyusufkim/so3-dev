@@ -85,7 +85,7 @@ class TrainerMemberProgressNoteController {
         }
 
         $raw = file_get_contents('php://input');
-        if ($raw === false) { 
+        if ($raw === false) {
             Response::error('Empty JSON payload', 'BAD_REQUEST', 400);
         }
         if (strlen($raw) > 16384) {
@@ -101,11 +101,11 @@ class TrainerMemberProgressNoteController {
         }
 
         $data = json_decode($raw, true);
-        
-        $forbidden = ['id', 'uuid', 'member_id', 'trainer_id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by'];
-        foreach ($forbidden as $f) {
-            if (array_key_exists($f, $data)) {
-                Response::error("Field '$f' is not allowed", 'VALIDATION_ERROR', 422);
+
+        $allowlist = ['recorded_at', 'note'];
+        foreach (array_keys($data) as $key) {
+            if (!in_array($key, $allowlist, true)) {
+                Response::error("Field '$key' is not allowed", 'VALIDATION_ERROR', 422);
             }
         }
 
@@ -145,8 +145,16 @@ class TrainerMemberProgressNoteController {
             Response::error("Invalid deleted parameter", 'VALIDATION_ERROR', 422);
         }
 
+        $memberCheckSql = "SELECT id FROM members WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL";
+        $memberCheckStmt = $this->db->prepare($memberCheckSql);
+        $memberCheckStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $memberCheckStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $memberCheckStmt->execute();
+        if (!$memberCheckStmt->fetch()) {
+            Response::error('Member not found', 'NOT_FOUND', 404);
+        }
+
         $where = ["pn.member_id = ?", "m.trainer_id = ?", "pn.trainer_id = ?", "m.deleted_at IS NULL"];
-        $params = [$memberId, $trainerId, $trainerId];
 
         if ($deleted === 'active') {
             $where[] = "pn.deleted_at IS NULL";
@@ -158,7 +166,10 @@ class TrainerMemberProgressNoteController {
 
         $countSql = "SELECT COUNT(*) FROM member_progress_notes pn JOIN members m ON pn.member_id = m.id WHERE $whereClause";
         $countStmt = $this->db->prepare($countSql);
-        $countStmt->execute($params);
+        $countStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $countStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $countStmt->bindValue(3, $trainerId, PDO::PARAM_INT);
+        $countStmt->execute();
         $total = (int)$countStmt->fetchColumn();
 
         $lastPage = $total > 0 ? (int)ceil($total / $perPage) : 1;
@@ -166,17 +177,19 @@ class TrainerMemberProgressNoteController {
         if ($page > $lastPage) {
             Response::json([
                 'items' => [],
-                'total' => $total,
-                'page' => $page,
-                'per_page' => $perPage,
-                'last_page' => $lastPage
+                'pagination' => [
+                    'total' => $total,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'last_page' => $lastPage
+                ]
             ]);
             return;
         }
 
         $sql = "
-            SELECT 
-                pn.id, pn.uuid, pn.member_id, pn.trainer_id, pn.recorded_at, 
+            SELECT
+                pn.id, pn.uuid, pn.member_id, pn.trainer_id, pn.recorded_at,
                 pn.created_at, pn.updated_at, pn.deleted_at
             FROM member_progress_notes pn
             JOIN members m ON pn.member_id = m.id
@@ -185,11 +198,13 @@ class TrainerMemberProgressNoteController {
             LIMIT ? OFFSET ?
         ";
 
-        $params[] = $perPage;
-        $params[] = $offset;
-
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        $stmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $stmt->bindValue(3, $trainerId, PDO::PARAM_INT);
+        $stmt->bindValue(4, $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(5, $offset, PDO::PARAM_INT);
+        $stmt->execute();
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($items as &$item) {
@@ -200,10 +215,12 @@ class TrainerMemberProgressNoteController {
 
         Response::json([
             'items' => $items,
-            'total' => $total,
-            'page' => $page,
-            'per_page' => $perPage,
-            'last_page' => $lastPage
+            'pagination' => [
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => $lastPage
+            ]
         ]);
     }
 
@@ -212,18 +229,18 @@ class TrainerMemberProgressNoteController {
         $trainerId = $this->getTrainerProfileId();
 
         $sql = "
-            SELECT 
-                pn.id, pn.uuid, pn.member_id, pn.trainer_id, pn.recorded_at, 
+            SELECT
+                pn.id, pn.uuid, pn.member_id, pn.trainer_id, pn.recorded_at,
                 pn.note, pn.created_at, pn.updated_at, pn.deleted_at
             FROM member_progress_notes pn
             JOIN members m ON pn.member_id = m.id
-            WHERE pn.id = ? 
-              AND pn.deleted_at IS NULL 
-              AND m.trainer_id = ? 
-              AND pn.trainer_id = ? 
+            WHERE pn.id = ?
+              AND pn.deleted_at IS NULL
+              AND m.trainer_id = ?
+              AND pn.trainer_id = ?
               AND m.deleted_at IS NULL
         ";
-        
+
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$id, $trainerId, $trainerId]);
         $note = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -241,9 +258,9 @@ class TrainerMemberProgressNoteController {
 
     public function store(int $memberId): void {
         AuthMiddleware::hasRole(['trainer']);
-        
+
         $payload = $this->getJsonPayload();
-        
+
         if (!array_key_exists('recorded_at', $payload) || $payload['recorded_at'] === null) {
             Response::error('recorded_at is required', 'VALIDATION_ERROR', 422);
         }
@@ -272,7 +289,7 @@ class TrainerMemberProgressNoteController {
         $this->db->beginTransaction();
         try {
             $trainerId = $this->getTrainerProfileIdForUpdate();
-            
+
             $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL FOR UPDATE");
             $stmt->execute([$memberId, $trainerId]);
             if (!$stmt->fetch()) {
@@ -300,7 +317,7 @@ class TrainerMemberProgressNoteController {
             }
 
             $newId = (int)$this->db->lastInsertId();
-            
+
             $this->db->commit();
 
             try {
@@ -332,7 +349,7 @@ class TrainerMemberProgressNoteController {
     public function update(int $id): void {
         AuthMiddleware::hasRole(['trainer']);
         $payload = $this->getJsonPayload();
-        
+
         if (empty($payload)) {
             Response::error('Empty payload', 'VALIDATION_ERROR', 422);
         }
@@ -381,13 +398,21 @@ class TrainerMemberProgressNoteController {
                 SELECT pn.*, m.trainer_id as current_member_trainer, m.deleted_at as member_deleted_at
                 FROM member_progress_notes pn
                 JOIN members m ON pn.member_id = m.id
-                WHERE pn.id = ? FOR UPDATE
+                WHERE pn.id = :id
+                  AND pn.trainer_id = :pn_trainer_id
+                  AND m.trainer_id = :m_trainer_id
+                  AND m.deleted_at IS NULL
+                  AND pn.deleted_at IS NULL
+                FOR UPDATE
             ";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$id]);
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':pn_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->bindValue(':m_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->execute();
             $current = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$current || $current['deleted_at'] !== null || $current['member_deleted_at'] !== null || (int)$current['trainer_id'] !== $trainerId || (int)$current['current_member_trainer'] !== $trainerId) {
+            if (!$current) {
                 $this->db->rollBack();
                 Response::error('Progress note not found', 'NOT_FOUND', 404);
             }
@@ -421,14 +446,14 @@ class TrainerMemberProgressNoteController {
             $updateValues[] = $trainerId;
 
             $updateSql = "
-                UPDATE member_progress_notes 
+                UPDATE member_progress_notes
                 SET " . implode(", ", $updateFields) . "
-                WHERE id = ? 
-                  AND trainer_id = ? 
-                  AND deleted_at IS NULL 
+                WHERE id = ?
+                  AND trainer_id = ?
+                  AND deleted_at IS NULL
                   AND member_id IN (SELECT id FROM members WHERE trainer_id = ? AND deleted_at IS NULL)
             ";
-            
+
             $updateStmt = $this->db->prepare($updateSql);
             $updateStmt->execute($updateValues);
 
@@ -467,7 +492,7 @@ class TrainerMemberProgressNoteController {
 
     public function destroy(int $id): void {
         AuthMiddleware::hasRole(['trainer']);
-        
+
         $this->db->beginTransaction();
         try {
             $trainerId = $this->getTrainerProfileIdForUpdate();
@@ -476,13 +501,21 @@ class TrainerMemberProgressNoteController {
                 SELECT pn.id, pn.member_id, pn.deleted_at, m.trainer_id as current_member_trainer, m.deleted_at as member_deleted_at
                 FROM member_progress_notes pn
                 JOIN members m ON pn.member_id = m.id
-                WHERE pn.id = ? AND pn.trainer_id = ? FOR UPDATE
+                WHERE pn.id = :id
+                  AND pn.trainer_id = :pn_trainer_id
+                  AND m.trainer_id = :m_trainer_id
+                  AND m.deleted_at IS NULL
+                  AND pn.deleted_at IS NULL
+                FOR UPDATE
             ";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$id, $trainerId]);
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':pn_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->bindValue(':m_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->execute();
             $current = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$current || $current['deleted_at'] !== null || $current['member_deleted_at'] !== null || (int)$current['current_member_trainer'] !== $trainerId) {
+            if (!$current) {
                 $this->db->rollBack();
                 Response::error('Progress note not found', 'NOT_FOUND', 404);
             }
@@ -490,11 +523,11 @@ class TrainerMemberProgressNoteController {
             $adminId = (int)$_SESSION['admin_id'];
 
             $delSql = "
-                UPDATE member_progress_notes 
+                UPDATE member_progress_notes
                 SET deleted_at = CURRENT_TIMESTAMP, updated_by = ?
-                WHERE id = ? 
-                  AND trainer_id = ? 
-                  AND deleted_at IS NULL 
+                WHERE id = ?
+                  AND trainer_id = ?
+                  AND deleted_at IS NULL
                   AND member_id IN (SELECT id FROM members WHERE trainer_id = ? AND deleted_at IS NULL)
             ";
             $delStmt = $this->db->prepare($delSql);
@@ -534,7 +567,7 @@ class TrainerMemberProgressNoteController {
 
     public function restore(int $id): void {
         AuthMiddleware::hasRole(['trainer']);
-        
+
         $this->db->beginTransaction();
         try {
             $trainerId = $this->getTrainerProfileIdForUpdate();
@@ -543,13 +576,20 @@ class TrainerMemberProgressNoteController {
                 SELECT pn.id, pn.member_id, pn.deleted_at, m.trainer_id as current_member_trainer, m.deleted_at as member_deleted_at
                 FROM member_progress_notes pn
                 JOIN members m ON pn.member_id = m.id
-                WHERE pn.id = ? AND pn.trainer_id = ? FOR UPDATE
+                WHERE pn.id = :id
+                  AND pn.trainer_id = :pn_trainer_id
+                  AND m.trainer_id = :m_trainer_id
+                  AND m.deleted_at IS NULL
+                FOR UPDATE
             ";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([$id, $trainerId]);
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':pn_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->bindValue(':m_trainer_id', $trainerId, PDO::PARAM_INT);
+            $stmt->execute();
             $current = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$current || $current['member_deleted_at'] !== null || (int)$current['current_member_trainer'] !== $trainerId) {
+            if (!$current) {
                 $this->db->rollBack();
                 Response::error('Progress note not found', 'NOT_FOUND', 404);
             }
@@ -562,11 +602,11 @@ class TrainerMemberProgressNoteController {
             $adminId = (int)$_SESSION['admin_id'];
 
             $resSql = "
-                UPDATE member_progress_notes 
+                UPDATE member_progress_notes
                 SET deleted_at = NULL, updated_by = ?
-                WHERE id = ? 
-                  AND trainer_id = ? 
-                  AND deleted_at IS NOT NULL 
+                WHERE id = ?
+                  AND trainer_id = ?
+                  AND deleted_at IS NOT NULL
                   AND member_id IN (SELECT id FROM members WHERE trainer_id = ? AND deleted_at IS NULL)
             ";
             $resStmt = $this->db->prepare($resSql);
