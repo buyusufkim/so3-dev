@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "verify:runtime-seo": "node scripts/verify-runtime-seo.mjs"
+    "verify:runtime-seo": "node scripts/verify-runtime-seo.mjs",
+    "verify:trainer-progress-notes": "node scripts/verify-trainer-progress-notes.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
