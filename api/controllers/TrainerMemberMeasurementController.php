@@ -16,19 +16,19 @@ class TrainerMemberMeasurementController {
     }
 
     private function getTrainerProfileId(): int {
-        $adminId = $_SESSION['admin_id'] ?? null;
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
         if (!$adminId) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
             Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
         }
-
         $stmt = $this->db->prepare("
             SELECT id FROM trainers
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
         ");
-        $stmt->execute([$adminId]);
+        $stmt->bindValue(1, $adminId, PDO::PARAM_INT);
+        $stmt->execute();
         $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$trainer) {
@@ -42,20 +42,20 @@ class TrainerMemberMeasurementController {
     }
 
     private function getTrainerProfileIdForUpdate(): int {
-        $adminId = $_SESSION['admin_id'] ?? null;
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
         if (!$adminId) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
             Response::error('Bu işlem için yetkiniz yok.', 'FORBIDDEN', 403);
         }
-
         $stmt = $this->db->prepare("
             SELECT id FROM trainers
             WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1
             FOR UPDATE
         ");
-        $stmt->execute([$adminId]);
+        $stmt->bindValue(1, $adminId, PDO::PARAM_INT);
+        $stmt->execute();
         $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$trainer) {
@@ -70,7 +70,9 @@ class TrainerMemberMeasurementController {
 
     private function checkMemberOwnership(int $memberId, int $trainerId): void {
         $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL");
-        $stmt->execute([$memberId, $trainerId]);
+        $stmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $stmt->execute();
         if (!$stmt->fetch()) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
@@ -81,7 +83,9 @@ class TrainerMemberMeasurementController {
 
     private function checkMemberOwnershipForUpdate(int $memberId, int $trainerId): void {
         $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND trainer_id = ? AND deleted_at IS NULL FOR UPDATE");
-        $stmt->execute([$memberId, $trainerId]);
+        $stmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $stmt->execute();
         if (!$stmt->fetch()) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
@@ -666,7 +670,11 @@ class TrainerMemberMeasurementController {
                   AND deleted_at IS NULL
                   AND member_id IN (SELECT id FROM members WHERE trainer_id = ? AND deleted_at IS NULL)
             ");
-            $deleteStmt->execute([$adminId, $id, $trainerId, $trainerId]);
+            $deleteStmt->bindValue(1, $adminId, PDO::PARAM_INT);
+            $deleteStmt->bindValue(2, $id, PDO::PARAM_INT);
+            $deleteStmt->bindValue(3, $trainerId, PDO::PARAM_INT);
+            $deleteStmt->bindValue(4, $trainerId, PDO::PARAM_INT);
+            $deleteStmt->execute();
 
             if ($deleteStmt->rowCount() !== 1) {
                 $this->db->rollBack();
@@ -747,7 +755,11 @@ class TrainerMemberMeasurementController {
                   AND deleted_at IS NOT NULL
                   AND member_id IN (SELECT id FROM members WHERE trainer_id = ? AND deleted_at IS NULL)
             ");
-            $restoreStmt->execute([$adminId, $id, $trainerId, $trainerId]);
+            $restoreStmt->bindValue(1, $adminId, PDO::PARAM_INT);
+            $restoreStmt->bindValue(2, $id, PDO::PARAM_INT);
+            $restoreStmt->bindValue(3, $trainerId, PDO::PARAM_INT);
+            $restoreStmt->bindValue(4, $trainerId, PDO::PARAM_INT);
+            $restoreStmt->execute();
 
             if ($restoreStmt->rowCount() !== 1) {
                 $this->db->rollBack();
