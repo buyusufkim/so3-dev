@@ -86,7 +86,8 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
       setNotes(initialData.notes || '');
     } else {
       const now = new Date();
-      const localStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const localStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
       setMeasuredAt(localStr);
     }
   }, [initialData]);
@@ -176,6 +177,23 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
     };
   };
 
+  const handleApiError = (err: unknown) => {
+    if (!isMounted.current) return;
+    if (err instanceof ApiError) {
+      if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
+        setError("Üyeye eğitmen atanmamış.");
+      } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
+        setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
+      } else {
+        setError(err.message);
+      }
+    } else if (err instanceof Error) {
+      setError(err.message);
+    } else {
+      setError("Kayıt sırasında bir hata oluştu.");
+    }
+  };
+
   const handleSave = async () => {
     if (isSubmitting.current) return;
     
@@ -210,22 +228,11 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
         if (!isMemberProgressSuccessResponse(res)) {
           throw new Error("Sunucudan geçersiz yanıt döndü.");
         }
+        if (!isMounted.current) return;
         setIsDirty(false);
         onSuccess();
       } catch (err: unknown) {
-        if (err instanceof ApiError) {
-          if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
-            setError("Üyeye eğitmen atanmamış.");
-          } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
-            setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
-          } else {
-            setError(err.message);
-          }
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("Kayıt sırasında bir hata oluştu.");
-        }
+        handleApiError(err);
       } finally {
         isSubmitting.current = false;
         if (isMounted.current) setSaving(false);
@@ -240,22 +247,11 @@ export function MemberMeasurementFormModal({ memberId, initialData, onClose, onS
         if (!isMemberMeasurementCreateResponse(res)) {
           throw new Error("Sunucudan geçersiz yanıt döndü.");
         }
+        if (!isMounted.current) return;
         setIsDirty(false);
         onSuccess();
       } catch (err: unknown) {
-        if (err instanceof ApiError) {
-          if (err.message.includes('MEMBER_TRAINER_NOT_ASSIGNED') || err.code === 'MEMBER_TRAINER_NOT_ASSIGNED') {
-            setError("Üyeye eğitmen atanmamış.");
-          } else if (err.message.includes('MEMBER_TRAINER_INVALID') || err.code === 'MEMBER_TRAINER_INVALID') {
-            setError("Üyenin atanmış eğitmeni pasif veya geçersiz.");
-          } else {
-            setError(err.message);
-          }
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("Kayıt sırasında bir hata oluştu.");
-        }
+        handleApiError(err);
       } finally {
         isSubmitting.current = false;
         if (isMounted.current) setSaving(false);

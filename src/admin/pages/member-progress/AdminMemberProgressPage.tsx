@@ -82,6 +82,14 @@ export function AdminMemberProgressPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const isMutating = useRef(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const isMounted = useRef(true);
+  const [activeMutation, setActiveMutation] = useState<{ id: number, action: 'archive' | 'restore' } | null>(null);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   const clearDetailSelection = () => {
     setSelectedId(null);
     setSelectedMeasurement(null);
@@ -89,6 +97,7 @@ export function AdminMemberProgressPage() {
     setDetailError(null);
     setDetailLoading(false);
     setMutationError(null);
+    setActiveMutation(null);
   };
 
   const handleTabChange = (newTab: 'measurements' | 'notes') => {
@@ -115,22 +124,32 @@ export function AdminMemberProgressPage() {
     if (!window.confirm('Bu ölçümü arşivlemek istediğinize emin misiniz?')) return;
     isMutating.current = true;
     setMutationError(null);
+    setActiveMutation({ id, action: 'archive' });
     try {
       const res: unknown = await apiClient.delete(`/api/admin/member-measurements/${id}`);
       if (!isMemberProgressSuccessResponse(res)) {
         throw new Error('Sunucudan geçersiz yanıt döndü.');
       }
+      if (!isMounted.current) return;
       clearDetailSelection();
       setPage(1);
       setRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
+      if (!isMounted.current) return;
       if (err instanceof ApiError) {
-        setMutationError(err.message);
+        if (err.status === 403) setMutationError("Bu işlem için yetkiniz yok.");
+        else if (err.status === 404) setMutationError("Ölçüm kaydı bulunamadı.");
+        else if (err.code === 'MEASUREMENT_NOT_ARCHIVED') setMutationError("Ölçüm kaydı arşivlenmiş durumda değil.");
+        else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
+        else setMutationError(err.message);
       } else {
-        setMutationError('Arşivleme işlemi başarısız oldu.');
+        setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       }
     } finally {
       isMutating.current = false;
+      if (isMounted.current) {
+        setActiveMutation(null);
+      }
     }
   };
 
@@ -140,22 +159,32 @@ export function AdminMemberProgressPage() {
     if (!window.confirm('Bu ölçümü geri yüklemek istediğinize emin misiniz?')) return;
     isMutating.current = true;
     setMutationError(null);
+    setActiveMutation({ id, action: 'restore' });
     try {
       const res: unknown = await apiClient.post(`/api/admin/member-measurements/${id}/restore`, {});
       if (!isMemberProgressSuccessResponse(res)) {
         throw new Error('Sunucudan geçersiz yanıt döndü.');
       }
+      if (!isMounted.current) return;
       clearDetailSelection();
       setPage(1);
       setRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
+      if (!isMounted.current) return;
       if (err instanceof ApiError) {
-        setMutationError(err.message);
+        if (err.status === 403) setMutationError("Bu işlem için yetkiniz yok.");
+        else if (err.status === 404) setMutationError("Ölçüm kaydı bulunamadı.");
+        else if (err.code === 'MEASUREMENT_NOT_ARCHIVED') setMutationError("Ölçüm kaydı arşivlenmiş durumda değil.");
+        else if (err.status === 409) setMutationError("İşlem çakışması veya veri bütünlüğü hatası.");
+        else setMutationError(err.message);
       } else {
-        setMutationError('Geri yükleme işlemi başarısız oldu.');
+        setMutationError('İşlem tamamlanamadı. Lütfen tekrar deneyin.');
       }
     } finally {
       isMutating.current = false;
+      if (isMounted.current) {
+        setActiveMutation(null);
+      }
     }
   };
 
@@ -385,8 +414,9 @@ export function AdminMemberProgressPage() {
                         <div className="flex items-center gap-4 flex-wrap text-sm text-gray-400">
                           {m.deleted_at && (
                             <button
+                              disabled={activeMutation?.id === m.id && activeMutation?.action === 'restore'}
                               onClick={(e) => handleRestore(m.id, e)}
-                              className="p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded transition"
+                              className="p-1.5 bg-gray-800 text-gray-400 hover:text-white rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Geri Yükle"
                             >
                               <RotateCcw className="w-4 h-4" />
@@ -490,8 +520,9 @@ export function AdminMemberProgressPage() {
                             <span className="hidden sm:inline">Düzenle</span>
                           </button>
                           <button
+                            disabled={activeMutation?.id === selectedMeasurement.id && activeMutation?.action === 'archive'}
                             onClick={() => handleArchive(selectedMeasurement.id)}
-                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition flex items-center gap-2 text-sm"
+                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-4 h-4" />
                             <span className="hidden sm:inline">Arşivle</span>
