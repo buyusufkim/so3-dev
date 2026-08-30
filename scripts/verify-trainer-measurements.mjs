@@ -545,10 +545,15 @@ function verify() {
     );
 
     // 15. Invariant 15: Audit call extraction & 5-arg contract
-    const mutationMethodNames = ['store', 'update', 'destroy', 'restore'];
+    const mutationCommitAnchors = [
+        { name: 'store', commitAnchor: 'INSERT INTO member_measurements' },
+        { name: 'update', commitAnchor: 'UPDATE member_measurements' },
+        { name: 'destroy', commitAnchor: 'UPDATE member_measurements' },
+        { name: 'restore', commitAnchor: 'UPDATE member_measurements' }
+    ];
     let auditAllValid = true;
 
-    for (const mName of mutationMethodNames) {
+    for (const { name: mName, commitAnchor } of mutationCommitAnchors) {
         const mBody = methods[mName];
         const auditCall = extractBalancedCall(mBody, 'AuditLogger::log(');
         if (!auditCall) {
@@ -585,17 +590,62 @@ function verify() {
             }
         }
 
-        // Audit error boundary: must be inside try/catch(Throwable $auditError) and post-commit
-        const commitIdx = mBody.indexOf('$this->db->commit();');
-        const auditIdx = mBody.indexOf(auditCall);
-        if (commitIdx === -1 || auditIdx < commitIdx) {
-            console.error(`❌ Invariant 15: Audit call in ${mName} is not post-commit`);
+        // Mutation commit must be after the mutation statement (preventing no-op commit confusion in update)
+        const anchorIdx = mBody.indexOf(commitAnchor);
+        if (anchorIdx === -1) {
+            console.error(`❌ Invariant 15: Missing mutation anchor '${commitAnchor}' in ${mName}`);
             auditAllValid = false;
+            continue;
         }
 
-        if (!mBody.includes('catch (Throwable $auditError)')) {
-            console.error(`❌ Invariant 15: Audit call in ${mName} is missing Throwable catch error boundary`);
+        const mutationCommitIdx = mBody.indexOf('$this->db->commit();', anchorIdx);
+        const auditIdx = mBody.indexOf(auditCall);
+        if (mutationCommitIdx === -1 || auditIdx < mutationCommitIdx) {
+            console.error(`❌ Invariant 15: Audit call in ${mName} is not post-mutation-commit`);
             auditAllValid = false;
+            continue;
+        }
+
+        // Dedicated inner try/catch block enclosing AuditLogger::log
+        const innerTryIdx = mBody.lastIndexOf('try', auditIdx);
+        if (innerTryIdx === -1 || innerTryIdx < mutationCommitIdx) {
+            console.error(`❌ Invariant 15: Audit call in ${mName} is not enclosed in a dedicated inner try block after commit`);
+            auditAllValid = false;
+            continue;
+        }
+
+        const tryOpenBrace = mBody.indexOf('{', innerTryIdx);
+        if (tryOpenBrace === -1 || tryOpenBrace > auditIdx) {
+            console.error(`❌ Invariant 15: Invalid try block syntax before audit in ${mName}`);
+            auditAllValid = false;
+            continue;
+        }
+
+        let depth = 0;
+        let tryCloseBrace = -1;
+        for (let i = tryOpenBrace; i < mBody.length; i++) {
+            if (mBody[i] === '{') depth++;
+            else if (mBody[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    tryCloseBrace = i;
+                    break;
+                }
+            }
+        }
+
+        if (tryCloseBrace === -1 || auditIdx >= tryCloseBrace) {
+            console.error(`❌ Invariant 15: Audit call in ${mName} is outside its inner try block`);
+            auditAllValid = false;
+            continue;
+        }
+
+        const afterTry = mBody.slice(tryCloseBrace + 1).trimStart();
+        const catchMatch = afterTry.match(/^catch\s*\(\s*\\?Throwable\s+\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*\s*\)\s*\{/);
+        if (!catchMatch) {
+            console.error(`❌ Invariant 15: Dedicated inner catch (Throwable) block missing after audit try in ${mName}`);
+            auditAllValid = false;
+            continue;
         }
     }
 
