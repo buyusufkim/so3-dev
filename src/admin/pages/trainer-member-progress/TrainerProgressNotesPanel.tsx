@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FileText,
   Calendar,
@@ -9,14 +9,17 @@ import {
   Clock,
   AlertCircle,
   Plus,
-  Pencil
+  Pencil,
+  Archive,
+  RotateCcw
 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
   MemberProgressNoteListItem,
   MemberProgressNoteDetail,
   isMemberProgressNoteListResponse,
-  isMemberProgressNoteDetail
+  isMemberProgressNoteDetail,
+  isMemberProgressSuccessResponse
 } from "../member-progress/types";
 import { TrainerProgressNoteFormModal } from "./TrainerProgressNoteFormModal";
 
@@ -67,6 +70,47 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editData, setEditData] = useState<MemberProgressNoteDetail | null>(null);
+
+  // Mutation Locks & Feedback State
+  const isMutatingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const getMutationErrorMessage = (err: unknown, defaultMsg: string): string => {
+    if (err instanceof ApiError) {
+      if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+        return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
+      } else if (err.status === 403 || err.code === "FORBIDDEN") {
+        return "Bu işlem için yetkiniz yok.";
+      } else if (err.status === 404 || err.code === "NOT_FOUND") {
+        return "Gelişim notu bulunamadı veya erişilemiyor.";
+      } else if (err.code === "PROGRESS_NOTE_NOT_ARCHIVED") {
+        return "Gelişim notu zaten arşivlenmiş değil veya durumu değişmiş.";
+      } else if (err.status === 409 || err.code === "CONFLICT") {
+        return "Kayıt durumu değişmiş veya işlem çakışmış olabilir.";
+      } else if (err.status === 413 || err.code === "PAYLOAD_TOO_LARGE") {
+        return "Veri boyutu sınırı aşıldı.";
+      } else if (err.status === 415 || err.code === "UNSUPPORTED_MEDIA_TYPE") {
+        return "Desteklenmeyen istek formatı.";
+      } else if (err.status === 422 || err.code === "VALIDATION_ERROR") {
+        return err.message || "Form verilerini kontrol edin.";
+      } else {
+        return err.message || defaultMsg;
+      }
+    } else if (err instanceof Error && err.message) {
+      return err.message;
+    }
+    return defaultMsg;
+  };
 
   // 1. Fetch Notes List
   useEffect(() => {
@@ -193,6 +237,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     setDetail(null);
     setDetailLoading(false);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -202,6 +247,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     setDetail(null);
     setDetailLoading(false);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleItemClick = (n: MemberProgressNoteListItem) => {
@@ -215,26 +261,31 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     setSelectedNoteId(n.id);
     setDetail(null);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleCloseDetail = () => {
     setSelectedNoteId(null);
     setDetail(null);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleOpenCreate = () => {
     setEditData(null);
     setIsModalOpen(true);
+    setActionError(null);
   };
 
   const handleOpenEdit = (n: MemberProgressNoteDetail) => {
     setEditData(n);
     setIsModalOpen(true);
+    setActionError(null);
   };
 
   const handleFormSuccess = () => {
     setIsModalOpen(false);
+    setActionError(null);
     if (editData) {
       // Edit mode success: refresh list and current active detail
       setListRefreshKey((k) => k + 1);
@@ -252,8 +303,99 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     }
   };
 
+  const handleArchive = async (id: number) => {
+    if (isMutatingRef.current) return;
+
+    if (!window.confirm("Bu gelişim notunu arşivlemek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    isMutatingRef.current = true;
+    setArchivingId(id);
+    setActionError(null);
+
+    try {
+      const res = await apiClient.delete(`/api/trainer/member-progress-notes/${id}`);
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+
+      if (!isMountedRef.current) return;
+
+      // Archive success state
+      setSelectedNoteId(null);
+      setDetail(null);
+      setDetailError(null);
+      setPage(1);
+      setListRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setActionError(getMutationErrorMessage(err, "Gelişim notu arşivlenirken bir hata oluştu. Lütfen tekrar deneyin."));
+    } finally {
+      isMutatingRef.current = false;
+      if (isMountedRef.current) {
+        setArchivingId(null);
+      }
+    }
+  };
+
+  const handleRestore = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+
+    if (isMutatingRef.current) return;
+
+    if (!window.confirm("Bu gelişim notunu geri yüklemek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    isMutatingRef.current = true;
+    setRestoringId(id);
+    setActionError(null);
+
+    try {
+      const res = await apiClient.post(`/api/trainer/member-progress-notes/${id}/restore`, {});
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+
+      if (!isMountedRef.current) return;
+
+      // Restore success state
+      setSelectedNoteId(null);
+      setDetail(null);
+      setDetailError(null);
+      setPage(1);
+      setListRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setActionError(getMutationErrorMessage(err, "Gelişim notu geri yüklenirken bir hata oluştu. Lütfen tekrar deneyin."));
+    } finally {
+      isMutatingRef.current = false;
+      if (isMountedRef.current) {
+        setRestoringId(null);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Action Error Banner */}
+      {actionError && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-xs flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-red-400/60 hover:text-red-400 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-[#121212] border border-white/10 p-4 rounded-xl">
         <div className="flex items-center gap-2">
@@ -379,9 +521,21 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                           </span>
                         </div>
                         {isArchived ? (
-                          <span className="text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded inline-block">
-                            Arşivlenmiş
-                          </span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded inline-block">
+                              Arşivlenmiş
+                            </span>
+                            <button
+                              type="button"
+                              disabled={restoringId === n.id || archivingId !== null || isMutatingRef.current}
+                              onClick={(e) => handleRestore(e, n.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded text-xs font-medium transition disabled:opacity-50"
+                              title="Gelişim Notunu Geri Yükle"
+                            >
+                              <RotateCcw className={`w-3.5 h-3.5 ${restoringId === n.id ? "animate-spin" : ""}`} />
+                              <span>{restoringId === n.id ? "Geri Yükleniyor..." : "Geri Yükle"}</span>
+                            </button>
+                          </div>
                         ) : (
                           <div className="text-[11px] text-white/40 font-mono">
                             {n.uuid}
@@ -481,15 +635,28 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                   </div>
                   <div className="flex items-center gap-1.5">
                     {detail.deleted_at === null && (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(detail)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition"
-                        title="Gelişim Notunu Düzenle"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Düzenle
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          disabled={archivingId === detail.id || isMutatingRef.current}
+                          onClick={() => handleOpenEdit(detail)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition disabled:opacity-50"
+                          title="Gelişim Notunu Düzenle"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Düzenle
+                        </button>
+                        <button
+                          type="button"
+                          disabled={archivingId === detail.id || isMutatingRef.current}
+                          onClick={() => handleArchive(detail.id)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded border border-red-500/20 text-xs font-medium transition disabled:opacity-50"
+                          title="Gelişim Notunu Arşivle"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                          {archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"
