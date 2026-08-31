@@ -32,6 +32,93 @@ function readSource(relPath) {
   return fs.readFileSync(fullPath, 'utf8');
 }
 
+function extractObjectBlock(source, searchPattern) {
+  const index = typeof searchPattern === 'string' 
+    ? source.indexOf(searchPattern)
+    : source.search(searchPattern);
+  if (index === -1) return null;
+
+  let openIndex = -1;
+  let depth = 0;
+  for (let i = index; i >= 0; i--) {
+    if (source[i] === '}') depth++;
+    else if (source[i] === '{') {
+      if (depth === 0) {
+        openIndex = i;
+        break;
+      }
+      depth--;
+    }
+  }
+  if (openIndex === -1) return null;
+
+  depth = 0;
+  let closeIndex = -1;
+  for (let i = openIndex; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(openIndex, closeIndex + 1);
+}
+
+function extractFunctionBlock(source, functionName) {
+  const regex = new RegExp(`(?:const\\s+${functionName}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>|function\\s+${functionName}\\s*\\([^)]*\\))\\s*\\{`);
+  const match = source.match(regex);
+  if (!match || match.index === undefined) return null;
+
+  const openBraceIndex = source.indexOf('{', match.index);
+  if (openBraceIndex === -1) return null;
+
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openBraceIndex; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(openBraceIndex, closeIndex + 1);
+}
+
+function extractUseEffectBlocks(source) {
+  const blocks = [];
+  const regex = /useEffect\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*\{/g;
+  let match;
+  while ((match = regex.exec(source)) !== null) {
+    const openBraceIndex = source.indexOf('{', match.index);
+    if (openBraceIndex === -1) continue;
+
+    let depth = 0;
+    let closeIndex = -1;
+    for (let i = openBraceIndex; i < source.length; i++) {
+      if (source[i] === '{') depth++;
+      else if (source[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          closeIndex = i;
+          break;
+        }
+      }
+    }
+    if (closeIndex !== -1) {
+      blocks.push(source.substring(openBraceIndex, closeIndex + 1));
+    }
+  }
+  return blocks;
+}
+
 console.log("Starting Trainer Member Progress Frontend Contract Verification...");
 
 // ==========================================
@@ -68,34 +155,26 @@ const programsListContent = readSource('src/admin/pages/trainer-training-program
 const typesContent = readSource('src/admin/pages/member-progress/types.ts') || '';
 
 // ==========================================
-// Invariant 2: Route Configuration
+// Invariant 2: Route-Local Configuration & Isolation
 // ==========================================
-const hasTrainerMemberDetailImport = routesContent.includes('TrainerMemberDetail');
-const hasTrainerProgressImport = routesContent.includes('TrainerMemberProgressPage');
-const hasTrainerProgramsImport = routesContent.includes('TrainerTrainingProgramsList');
+const memberDetailRouteBlock = extractObjectBlock(routesContent, /path:\s*["']my-members\/:id["']/);
+const progressRouteBlock = extractObjectBlock(routesContent, /path:\s*["']my-members\/:memberId\/progress["']/);
+const programsRouteBlock = extractObjectBlock(routesContent, /path:\s*["']my-members\/:memberId\/training-programs["']/);
 
-const hasMyMembersDetailRoute = routesContent.includes('path: "my-members/:id"') &&
-  routesContent.includes('<TrainerMemberDetail');
-const hasMyMembersProgressRoute = routesContent.includes('path: "my-members/:memberId/progress"') &&
-  routesContent.includes('<TrainerMemberProgressPage');
-const hasMyMembersProgramsRoute = routesContent.includes('path: "my-members/:memberId/training-programs"') &&
-  routesContent.includes('<TrainerTrainingProgramsList');
+const hasValidMemberRoute = Boolean(memberDetailRouteBlock && memberDetailRouteBlock.includes('TrainerMemberDetail'));
+const hasValidProgressRoute = Boolean(
+  progressRouteBlock &&
+  progressRouteBlock.includes('TrainerMemberProgressPage') &&
+  !progressRouteBlock.includes('AdminMemberProgressPage')
+);
+const hasValidProgramsRoute = Boolean(programsRouteBlock && programsRouteBlock.includes('TrainerTrainingProgramsList'));
 
-// Ensure trainer progress route is NOT connected to admin progress page
-const isTrainerProgressIsolatedFromAdmin = !routesContent.includes('path: "my-members/:memberId/progress",\n        element: <AdminSuspense><AdminMemberProgressPage');
-
-const routeWiringPass = hasTrainerMemberDetailImport &&
-  hasTrainerProgressImport &&
-  hasTrainerProgramsImport &&
-  hasMyMembersDetailRoute &&
-  hasMyMembersProgressRoute &&
-  hasMyMembersProgramsRoute &&
-  isTrainerProgressIsolatedFromAdmin;
+const routeWiringPass = hasValidMemberRoute && hasValidProgressRoute && hasValidProgramsRoute;
 
 reportInvariant(
   routeWiringPass,
-  "Invariant 2: Application route configuration maps trainer member routes to dedicated trainer components",
-  "Routes index must correctly map /admin/my-members/:id, :memberId/progress and :memberId/training-programs without leaking AdminMemberProgressPage"
+  "Invariant 2: Route-local configuration strictly binds trainer workspace paths without leaking admin components",
+  "Route object blocks for /admin/my-members/:id, :memberId/progress, and :memberId/training-programs must bind dedicated trainer components"
 );
 
 // ==========================================
@@ -184,31 +263,46 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 7: Measurements Runtime Response Validation
+// Invariant 7: Measurements Strict Runtime Response Validation (No Fallbacks)
 // ==========================================
 const hasMeasurementListValidator = progressPageContent.includes('isMemberMeasurementListResponse(');
 const hasMeasurementDetailValidator = progressPageContent.includes('isMemberMeasurementDetail(');
 const hasMeasurementSuccessValidator = progressPageContent.includes('isMemberProgressSuccessResponse(') &&
   measurementModalContent.includes('isMemberProgressSuccessResponse(');
-const hasMeasurementCreateValidator = measurementModalContent.includes('isMemberMeasurementCreateResponse(') ||
-  measurementModalContent.includes('isMemberProgressSuccessResponse(');
+const hasMeasurementStrictCreateValidator = measurementModalContent.includes('isMemberMeasurementCreateResponse(');
 
 const measurementValidationPass = hasMeasurementListValidator &&
   hasMeasurementDetailValidator &&
   hasMeasurementSuccessValidator &&
-  hasMeasurementCreateValidator;
+  hasMeasurementStrictCreateValidator;
 
 reportInvariant(
   measurementValidationPass,
-  "Invariant 7: Measurements runtime response validation enforces strict payload type guards",
-  "Runtime type guards (isMemberMeasurementListResponse, isMemberMeasurementDetail, isMemberProgressSuccessResponse) must be invoked"
+  "Invariant 7: Measurements runtime response validation enforces strict separate create and mutation type guards",
+  "TrainerMeasurementFormModal must strictly invoke isMemberMeasurementCreateResponse on create and isMemberProgressSuccessResponse on patch"
 );
 
 // ==========================================
-// Invariant 8: Measurements Archived Detail Safety, Click Isolation & Stale State Reset
+// Invariant 8: Measurements Archived Detail Safety & Stale State Reset
 // ==========================================
-const hasMeasurementArchivedCheck = progressPageContent.includes('deleted_at !== null') &&
-  progressPageContent.includes('Arşivlenmiş kayıtların detay notu görüntülenemez');
+const progressUseEffects = extractUseEffectBlocks(progressPageContent);
+const measurementDetailEffect = progressUseEffects.find(
+  b => b.includes('selectedMeasurementId') && b.includes('/api/trainer/member-measurements/')
+);
+
+let archivedSafetyPass = false;
+if (measurementDetailEffect) {
+  const hasItemFind = measurementDetailEffect.includes('measurements.find');
+  const hasDeletedCheck = measurementDetailEffect.includes('deleted_at !== null') || measurementDetailEffect.includes('deleted_at != null');
+  const hasDetailReset = measurementDetailEffect.includes('setDetail(null)');
+  
+  const deletedCheckPos = measurementDetailEffect.indexOf('deleted_at');
+  const apiFetchPos = measurementDetailEffect.indexOf('apiClient.get');
+  const earlyReturnBeforeApi = deletedCheckPos !== -1 && apiFetchPos !== -1 && deletedCheckPos < apiFetchPos;
+
+  archivedSafetyPass = hasItemFind && hasDeletedCheck && hasDetailReset && earlyReturnBeforeApi;
+}
+
 const hasMeasurementRestoreClickIsolation = progressPageContent.includes('e.stopPropagation()') &&
   progressPageContent.includes('handleRestore');
 const hasMeasurementPaginationReset = progressPageContent.includes('handlePageChange') &&
@@ -218,7 +312,7 @@ const hasMeasurementFilterReset = progressPageContent.includes('handleFilterChan
   progressPageContent.includes('setSelectedMeasurementId(null)') &&
   progressPageContent.includes('setDetail(null)');
 
-const measurementSafetyPass = hasMeasurementArchivedCheck &&
+const measurementSafetyPass = archivedSafetyPass &&
   hasMeasurementRestoreClickIsolation &&
   hasMeasurementPaginationReset &&
   hasMeasurementFilterReset;
@@ -226,7 +320,7 @@ const measurementSafetyPass = hasMeasurementArchivedCheck &&
 reportInvariant(
   measurementSafetyPass,
   "Invariant 8: Measurements archived record detail safety, click isolation, and stale state reset",
-  "Archived records must be guarded against detail fetch, restore button must stop click propagation, and page/filter changes must clear selected detail"
+  "Archived records must be guarded against detail fetch via early return, restore button must stop propagation, and page/filter changes must clear selected detail"
 );
 
 // ==========================================
@@ -255,31 +349,39 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 10: Progress Notes Runtime Response Validation
+// Invariant 10: Progress Notes Strict Runtime Response Validation (No Fallbacks)
 // ==========================================
 const hasNotesListValidator = notesPanelContent.includes('isMemberProgressNoteListResponse(');
 const hasNotesDetailValidator = notesPanelContent.includes('isMemberProgressNoteDetail(');
 const hasNotesSuccessValidator = notesPanelContent.includes('isMemberProgressSuccessResponse(') &&
   noteModalContent.includes('isMemberProgressSuccessResponse(');
-const hasNotesCreateValidator = noteModalContent.includes('isMemberProgressNoteCreateResponse(') ||
-  noteModalContent.includes('isMemberProgressSuccessResponse(');
+const hasNotesStrictCreateValidator = noteModalContent.includes('isMemberProgressNoteCreateResponse(');
 
 const notesValidationPass = hasNotesListValidator &&
   hasNotesDetailValidator &&
   hasNotesSuccessValidator &&
-  hasNotesCreateValidator;
+  hasNotesStrictCreateValidator;
 
 reportInvariant(
   notesValidationPass,
-  "Invariant 10: Progress Notes runtime response validation enforces strict payload type guards",
-  "Runtime type guards (isMemberProgressNoteListResponse, isMemberProgressNoteDetail, isMemberProgressSuccessResponse) must be invoked"
+  "Invariant 10: Progress Notes runtime response validation enforces strict separate create and mutation type guards",
+  "TrainerProgressNoteFormModal must strictly invoke isMemberProgressNoteCreateResponse on create and isMemberProgressSuccessResponse on patch"
 );
 
 // ==========================================
 // Invariant 11: Progress Notes Archived Detail Safety, Restore Click Isolation & Stale State Reset
 // ==========================================
-const hasNotesArchivedCheck = notesPanelContent.includes('n.deleted_at !== null') ||
-  notesPanelContent.includes('deleted_at !== null');
+const itemClickBlock = extractFunctionBlock(notesPanelContent, 'handleItemClick');
+let archivedNotesSafetyPass = false;
+if (itemClickBlock) {
+  const hasDeletedCheck = itemClickBlock.includes('deleted_at !== null') || itemClickBlock.includes('deleted_at != null');
+  const deletedCheckPos = itemClickBlock.indexOf('deleted_at');
+  const setSelectedPos = itemClickBlock.indexOf('setSelectedNoteId');
+  const earlyReturnBeforeSelect = deletedCheckPos !== -1 && setSelectedPos !== -1 && deletedCheckPos < setSelectedPos;
+
+  archivedNotesSafetyPass = hasDeletedCheck && earlyReturnBeforeSelect;
+}
+
 const hasNotesRestoreClickIsolation = notesPanelContent.includes('e.stopPropagation()') &&
   notesPanelContent.includes('handleRestore');
 const hasNotesPaginationReset = notesPanelContent.includes('handlePageChange') &&
@@ -289,7 +391,7 @@ const hasNotesFilterReset = notesPanelContent.includes('handleFilterChange') &&
   notesPanelContent.includes('setSelectedNoteId(null)') &&
   notesPanelContent.includes('setDetail(null)');
 
-const notesSafetyPass = hasNotesArchivedCheck &&
+const notesSafetyPass = archivedNotesSafetyPass &&
   hasNotesRestoreClickIsolation &&
   hasNotesPaginationReset &&
   hasNotesFilterReset;
@@ -297,45 +399,96 @@ const notesSafetyPass = hasNotesArchivedCheck &&
 reportInvariant(
   notesSafetyPass,
   "Invariant 11: Progress Notes archived record detail safety, restore click isolation, and stale state reset",
-  "Archived notes must be guarded against detail fetch, restore button must stop click propagation, and page/filter changes must clear selected detail"
+  "Archived notes must be guarded against detail selection via early return in handleItemClick, restore button must stop propagation, and page/filter changes must clear selected detail"
 );
 
 // ==========================================
-// Invariant 12: Measurement Form Modal Contract
+// Invariant 12: Measurement Form Modal Duplicate Submit Lock & Changed-Only PATCH
 // ==========================================
-const measurementHasSubmittingRef = measurementModalContent.includes('isSubmitting') || measurementModalContent.includes('saving');
-const measurementHasChangedOnlyLogic = measurementModalContent.includes('!hasChanges') || measurementModalContent.includes('hasChanges');
-const measurementHasNumericValidation = measurementModalContent.includes('parseAndValidateNumeric') ||
-  measurementModalContent.includes('max 2');
+const measurementSaveBlock = extractFunctionBlock(measurementModalContent, 'handleSave');
+let measurementModalSemanticsPass = false;
 
-const measurementModalPass = measurementHasSubmittingRef &&
-  measurementHasChangedOnlyLogic &&
-  measurementHasNumericValidation;
+if (measurementSaveBlock) {
+  const hasSubmittingRefDecl = measurementModalContent.includes('useRef(false)') && measurementModalContent.includes('isSubmitting');
+  const hasSubmittingGuard = measurementSaveBlock.includes('if (isSubmitting.current) return') ||
+    measurementSaveBlock.includes('if(isSubmitting.current)return') ||
+    measurementSaveBlock.includes('isSubmitting.current) return');
+  const hasLockTrue = measurementSaveBlock.includes('isSubmitting.current = true');
+  const hasLockFalseInFinally = measurementSaveBlock.includes('finally') && measurementSaveBlock.includes('isSubmitting.current = false');
+
+  const hasPatchPayload = measurementSaveBlock.includes('patchPayload');
+  const hasChangesFlag = measurementSaveBlock.includes('hasChanges');
+  const hasNoChangesCheck = measurementSaveBlock.includes('!hasChanges');
+  
+  const noChangesPos = measurementSaveBlock.indexOf('!hasChanges');
+  const patchPos = measurementSaveBlock.indexOf('apiClient.patch');
+  const noChangesReturnsBeforePatch = noChangesPos !== -1 && patchPos !== -1 && noChangesPos < patchPos;
+
+  const patchUsesPayload = measurementSaveBlock.includes('patchPayload') &&
+    measurementSaveBlock.includes('apiClient.patch');
+
+  measurementModalSemanticsPass = hasSubmittingRefDecl &&
+    hasSubmittingGuard &&
+    hasLockTrue &&
+    hasLockFalseInFinally &&
+    hasPatchPayload &&
+    hasChangesFlag &&
+    hasNoChangesCheck &&
+    noChangesReturnsBeforePatch &&
+    patchUsesPayload;
+}
 
 reportInvariant(
-  measurementModalPass,
-  "Invariant 12: Measurement Form Modal enforces changed-only PATCH, duplicate submit guard, and numeric bounds",
-  "TrainerMeasurementFormModal must avoid sending unchanged PATCH requests and guard against duplicate submissions"
+  measurementModalSemanticsPass,
+  "Invariant 12: Measurement Form Modal enforces duplicate-submit ref lock and changed-only PATCH with no-op early return",
+  "TrainerMeasurementFormModal must enforce isSubmitting ref lock lifecycle and bypass API calls on unchanged data"
 );
 
 // ==========================================
-// Invariant 13: Progress Note Form Modal Contract
+// Invariant 13: Progress Note Form Modal Duplicate Submit Lock, Text Bounds & Changed-Only PATCH
 // ==========================================
-const noteHasSubmittingRef = noteModalContent.includes('isSubmitting') || noteModalContent.includes('saving');
-const noteHasChangedOnlyLogic = noteModalContent.includes('!hasChanges') || noteModalContent.includes('hasChanges');
-const noteHasLengthCheck = noteModalContent.includes('5000') &&
-  (noteModalContent.includes('length > 5000') || noteModalContent.includes('5000 karakter'));
-const noteHasEmptyCheck = noteModalContent.includes('note.trim() === ""') || noteModalContent.includes('trim()');
+const noteSaveBlock = extractFunctionBlock(noteModalContent, 'handleSave');
+let noteModalSemanticsPass = false;
 
-const noteModalPass = noteHasSubmittingRef &&
-  noteHasChangedOnlyLogic &&
-  noteHasLengthCheck &&
-  noteHasEmptyCheck;
+if (noteSaveBlock) {
+  const hasSubmittingRefDecl = noteModalContent.includes('useRef(false)') && noteModalContent.includes('isSubmitting');
+  const hasSubmittingGuard = noteSaveBlock.includes('if (isSubmitting.current) return') ||
+    noteSaveBlock.includes('if(isSubmitting.current)return') ||
+    noteSaveBlock.includes('isSubmitting.current) return');
+  const hasLockTrue = noteSaveBlock.includes('isSubmitting.current = true');
+  const hasLockFalseInFinally = noteSaveBlock.includes('finally') && noteSaveBlock.includes('isSubmitting.current = false');
+
+  const hasPatchPayload = noteSaveBlock.includes('patchPayload');
+  const hasChangesFlag = noteSaveBlock.includes('hasChanges');
+  const hasNoChangesCheck = noteSaveBlock.includes('!hasChanges');
+  
+  const noChangesPos = noteSaveBlock.indexOf('!hasChanges');
+  const patchPos = noteSaveBlock.indexOf('apiClient.patch');
+  const noChangesReturnsBeforePatch = noChangesPos !== -1 && patchPos !== -1 && noChangesPos < patchPos;
+
+  const patchUsesPayload = noteSaveBlock.includes('patchPayload') &&
+    noteSaveBlock.includes('apiClient.patch');
+
+  const hasLengthCheck = noteModalContent.includes('5000') && noteModalContent.includes('length > 5000');
+  const hasEmptyCheck = noteModalContent.includes('trim() === ""') || noteModalContent.includes('trim()');
+
+  noteModalSemanticsPass = hasSubmittingRefDecl &&
+    hasSubmittingGuard &&
+    hasLockTrue &&
+    hasLockFalseInFinally &&
+    hasPatchPayload &&
+    hasChangesFlag &&
+    hasNoChangesCheck &&
+    noChangesReturnsBeforePatch &&
+    patchUsesPayload &&
+    hasLengthCheck &&
+    hasEmptyCheck;
+}
 
 reportInvariant(
-  noteModalPass,
-  "Invariant 13: Progress Note Form Modal enforces changed-only PATCH, duplicate submit guard, and text validation",
-  "TrainerProgressNoteFormModal must validate note non-emptiness, enforce 5000 char maximum, and prevent duplicate submission"
+  noteModalSemanticsPass,
+  "Invariant 13: Progress Note Form Modal enforces duplicate-submit ref lock, text validation, and changed-only PATCH",
+  "TrainerProgressNoteFormModal must validate non-empty 5000-char text, enforce ref lock, and bypass API on unchanged data"
 );
 
 // ==========================================
