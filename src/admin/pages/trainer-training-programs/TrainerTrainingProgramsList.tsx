@@ -34,8 +34,45 @@ export function TrainerTrainingProgramsList() {
 
   useEffect(() => {
     if (!isValidMemberId) return;
+
+    let isSubscribed = true;
+    setLoading(true);
+    setError(null);
+
+    const fetchPrograms = async () => {
+      try {
+        const query = new URLSearchParams();
+        query.set("page", page.toString());
+        query.set("per_page", perPage.toString());
+
+        if (statusFilter !== "all") {
+          query.set("status", statusFilter);
+        }
+
+        const rawRes = await apiClient.get(`/api/trainer/members/${memberId}/training-programs?${query.toString()}`);
+        if (!isSubscribed) return;
+        if (!isTrainerTrainingProgramsResponse(rawRes)) {
+          throw new ContractValidationError("Antrenman programı verisi doğrulanamadı.");
+        }
+        setItems(rawRes.items);
+        setTotal(rawRes.pagination.total);
+        setLastPage(rawRes.pagination.last_page);
+      } catch (err: unknown) {
+        if (!isSubscribed) return;
+        setError(getErrorMessage(err));
+      } finally {
+        if (isSubscribed) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchPrograms();
-  }, [memberId, page, statusFilter]);
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [memberId, page, statusFilter, isValidMemberId, perPage]);
 
   const getErrorMessage = (err: unknown): string => {
     if (err instanceof ContractValidationError) {
@@ -45,45 +82,20 @@ export function TrainerTrainingProgramsList() {
       if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
         return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
       }
-      if (err.status === 404 || err.code === "NOT_FOUND") {
-        return "Üye bulunamadı veya bu üyeye erişim yetkiniz yok.";
-      }
       if (err.status === 403 || err.code === "FORBIDDEN") {
         return "Bu alana erişim yetkiniz yok.";
       }
+      if (err.status === 404 || err.code === "NOT_FOUND") {
+        return "Üye bulunamadı veya bu üyeye erişim yetkiniz yok.";
+      }
       if (err.status === 422 || err.code === "VALIDATION_ERROR") {
-        return err.message || "Doğrulama hatası.";
+        return err.message || "Geçersiz istek parametresi.";
       }
       return "Programlar yüklenirken bir hata oluştu.";
+    } else if (err instanceof Error) {
+      return err.message;
     }
     return "Programlar yüklenirken bir hata oluştu.";
-  };
-
-  const fetchPrograms = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const query = new URLSearchParams();
-      query.set("page", page.toString());
-      query.set("per_page", perPage.toString());
-
-      if (statusFilter !== "all") {
-        query.set("status", statusFilter);
-      }
-
-      const rawRes = await apiClient.get(`/api/trainer/members/${memberId}/training-programs?${query.toString()}`);
-      if (!isTrainerTrainingProgramsResponse(rawRes)) {
-        throw new ContractValidationError("Antrenman programı verisi doğrulanamadı.");
-      }
-      setItems(rawRes.items);
-      setTotal(rawRes.pagination.total);
-      setLastPage(rawRes.pagination.last_page);
-    } catch (err: unknown) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleStatusChange = (val: string) => {

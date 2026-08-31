@@ -7,29 +7,42 @@ import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspa
 
 export function TrainerMemberDetail() {
   const { id } = useParams<{ id: string }>();
+  const isValidMemberId = /^[1-9]\d*$/.test(id || "");
   const [member, setMember] = useState<ITrainerMemberDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isValidMemberId) {
+      setLoading(false);
+      setError("Geçersiz üye ID parametresi.");
+      return;
+    }
+
+    let isSubscribed = true;
+    setLoading(true);
+    setError(null);
+
     const fetchMember = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const response = await apiClient.get(`/api/trainer/members/${id}`);
+        if (!isSubscribed) return;
         if (isTrainerMemberDetail(response)) {
           setMember(response);
         } else {
           throw new Error('Geçersiz sunucu yanıtı.');
         }
       } catch (err: unknown) {
+        if (!isSubscribed) return;
         if (err instanceof ApiError) {
           if (err.code === 'TRAINER_PROFILE_NOT_LINKED') {
             setError('Aktif eğitmen profiliniz hesabınıza bağlanmamış.');
-          } else if (err.status === 403) {
+          } else if (err.status === 403 || err.code === 'FORBIDDEN') {
             setError('Bu alana erişim yetkiniz yok.');
           } else if (err.status === 404 || err.code === 'NOT_FOUND') {
             setError('Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
+          } else if (err.status === 422 || err.code === 'VALIDATION_ERROR') {
+            setError(err.message || 'Geçersiz istek parametresi.');
           } else {
             setError(err.message || 'Üye bulunamadı veya bu üyeye erişim yetkiniz yok.');
           }
@@ -39,14 +52,18 @@ export function TrainerMemberDetail() {
           setError('Bilinmeyen bir hata oluştu.');
         }
       } finally {
-        setLoading(false);
+        if (isSubscribed) {
+          setLoading(false);
+        }
       }
     };
 
-    if (id) {
-      fetchMember();
-    }
-  }, [id]);
+    fetchMember();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [id, isValidMemberId]);
 
   if (loading) {
     return (
