@@ -12,7 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Clock
+  Clock,
+  Plus,
+  Pencil
 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "../trainer-members/types";
@@ -22,6 +24,7 @@ import {
   isMemberMeasurementListResponse,
   isMemberMeasurementDetail
 } from "../member-progress/types";
+import { TrainerMeasurementFormModal } from "./TrainerMeasurementFormModal";
 
 type ProgressTab = "measurements" | "notes";
 type DeletedFilter = "active" | "deleted" | "all";
@@ -90,6 +93,12 @@ export function TrainerMemberProgressPage() {
   const [detail, setDetail] = useState<MemberMeasurementDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  // Form Modal & Refresh Keys
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [editingMeasurement, setEditingMeasurement] = useState<MemberMeasurementDetail | null>(null);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
   // 1. Fetch Member Context
   useEffect(() => {
@@ -193,7 +202,7 @@ export function TrainerMemberProgressPage() {
     return () => {
       isSubscribed = false;
     };
-  }, [memberId, isValidMemberId, activeTab, deletedFilter, page]);
+  }, [memberId, isValidMemberId, activeTab, deletedFilter, page, listRefreshKey]);
 
   // 3. Fetch Measurement Detail
   useEffect(() => {
@@ -252,7 +261,7 @@ export function TrainerMemberProgressPage() {
     return () => {
       isSubscribed = false;
     };
-  }, [selectedMeasurementId, activeTab, measurements]);
+  }, [selectedMeasurementId, activeTab, measurements, detailRefreshKey]);
 
   const handleFilterChange = (filter: DeletedFilter) => {
     if (filter === deletedFilter) return;
@@ -289,6 +298,39 @@ export function TrainerMemberProgressPage() {
     setSelectedMeasurementId(null);
     setDetail(null);
     setDetailError(null);
+  };
+
+  const handleOpenCreate = () => {
+    setEditingMeasurement(null);
+    setIsFormModalOpen(true);
+  };
+
+  const handleOpenEdit = (targetDetail: MemberMeasurementDetail) => {
+    setEditingMeasurement(targetDetail);
+    setIsFormModalOpen(true);
+  };
+
+  const handleFormSuccess = () => {
+    setIsFormModalOpen(false);
+    if (!editingMeasurement) {
+      // Create success: reset to active filter, page 1, clear stale detail, trigger list refresh
+      setDeletedFilter("active");
+      setPage(1);
+      setSelectedMeasurementId(null);
+      setDetail(null);
+      setDetailError(null);
+      setListRefreshKey((k) => k + 1);
+    } else {
+      // Edit success: refresh list and refetch detail
+      setListRefreshKey((k) => k + 1);
+      setDetailRefreshKey((k) => k + 1);
+    }
+    setEditingMeasurement(null);
+  };
+
+  const handleCloseModal = () => {
+    setIsFormModalOpen(false);
+    setEditingMeasurement(null);
   };
 
   if (loading) {
@@ -410,7 +452,7 @@ export function TrainerMemberProgressPage() {
       {/* Tab Content: Measurements Read-Only View */}
       {activeTab === "measurements" && (
         <div className="space-y-6">
-          {/* Controls Bar: Filter & Info */}
+          {/* Controls Bar: Filter, New Button & Info */}
           <div className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
             <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-lg border border-white/5">
               <button
@@ -448,8 +490,18 @@ export function TrainerMemberProgressPage() {
               </button>
             </div>
 
-            <div className="text-xs text-white/50">
-              Toplam <span className="text-white font-medium">{total}</span> ölçüm kaydı
+            <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="text-xs text-white/50">
+                Toplam <span className="text-white font-medium">{total}</span> ölçüm kaydı
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCreate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                Yeni Ölçüm
+              </button>
             </div>
           </div>
 
@@ -636,14 +688,27 @@ export function TrainerMemberProgressPage() {
                           {detail.uuid}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleCloseDetail}
-                        className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
-                        title="Kapat"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {detail.deleted_at === null && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(detail)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition"
+                            title="Ölçümü Düzenle"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Düzenle
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleCloseDetail}
+                          className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                          title="Kapat"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Metrics 2-column Grid */}
@@ -773,6 +838,16 @@ export function TrainerMemberProgressPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Create / Edit Measurement Modal */}
+      {isFormModalOpen && isValidMemberId && memberId && (
+        <TrainerMeasurementFormModal
+          memberId={parseInt(memberId, 10)}
+          initialData={editingMeasurement}
+          onClose={handleCloseModal}
+          onSuccess={handleFormSuccess}
+        />
       )}
     </div>
   );
