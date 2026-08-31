@@ -28,6 +28,7 @@ import {
   isMemberProgressSuccessResponse
 } from "../member-progress/types";
 import { TrainerMeasurementFormModal } from "./TrainerMeasurementFormModal";
+import { TrainerProgressNotesPanel } from "./TrainerProgressNotesPanel";
 
 type ProgressTab = "measurements" | "notes";
 type DeletedFilter = "active" | "deleted" | "all";
@@ -951,53 +952,9 @@ export function TrainerMemberProgressPage() {
         </div>
       )}
 
-      {/* Tab Content: Foundation Workspace Notes State (Unchanged) */}
-      {activeTab === "notes" && (
-        <div className="bg-[#121212] border border-white/10 rounded-xl p-8 space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#851C35]/15 border border-[#851C35]/30 flex items-center justify-center text-[#851C35] shrink-0">
-              <FileText className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Eğitmen Gelişim Notları ve Gözlemler</h3>
-              <p className="text-sm text-white/60 mt-1">
-                Bu alanda üyenin antrenman adaptasyonu, form durumu, seans geri bildirimleri ve gelişim değerlendirmeleri yönetilir.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <Calendar className="w-4 h-4 text-[#851C35]" />
-                Tarihli Seans Notları
-              </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Her antrenman veya değerlendirme seansına ait tarihsel gözlemler ve performans kayıtları.
-              </p>
-            </div>
-
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <Sparkles className="w-4 h-4 text-[#851C35]" />
-                Form & Adaptasyon
-              </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Hareket formları, kondisyon düzeyi ve program adaptasyonuna ilişkin eğitmen değerlendirmeleri.
-              </p>
-            </div>
-
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <TrendingUp className="w-4 h-4 text-[#851C35]" />
-                Hedef ve Süreç Takibi
-              </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Belirlenen bireysel hedeflere yönelik gelişim seyri ve bir sonraki aşama planlama notları.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* Tab Content: Trainer Progress Notes Panel */}
+      {activeTab === "notes" && isValidMemberId && memberId && (
+        <TrainerProgressNotesPanel memberId={parseInt(memberId, 10)} />
       )}
 
       {/* Create / Edit Measurement Modal */}
