@@ -1,20 +1,97 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Activity, FileText, Dumbbell, Calendar, HeartPulse, Sparkles, TrendingUp } from "lucide-react";
+import {
+  ArrowLeft,
+  Activity,
+  FileText,
+  Dumbbell,
+  Calendar,
+  HeartPulse,
+  Sparkles,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Clock
+} from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "../trainer-members/types";
+import {
+  MemberMeasurementListItem,
+  MemberMeasurementDetail,
+  isMemberMeasurementListResponse,
+  isMemberMeasurementDetail
+} from "../member-progress/types";
 
 type ProgressTab = "measurements" | "notes";
+type DeletedFilter = "active" | "deleted" | "all";
+
+function formatDateTime(dateStr: unknown): string {
+  if (typeof dateStr !== "string") return "—";
+  const regex = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+  const match = dateStr.match(regex);
+  if (!match) return dateStr;
+
+  const [, yStr, mStr, dStr, hStr, iStr, sStr] = match;
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const day = parseInt(dStr, 10);
+  const hour = parseInt(hStr, 10);
+  const minute = parseInt(iStr, 10);
+  const second = parseInt(sStr, 10);
+
+  const dateObj = new Date(year, month - 1, day, hour, minute, second);
+
+  if (
+    dateObj.getFullYear() !== year ||
+    dateObj.getMonth() !== month - 1 ||
+    dateObj.getDate() !== day ||
+    dateObj.getHours() !== hour ||
+    dateObj.getMinutes() !== minute ||
+    dateObj.getSeconds() !== second
+  ) {
+    return dateStr;
+  }
+
+  try {
+    return new Intl.DateTimeFormat("tr-TR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(dateObj);
+  } catch {
+    return dateStr;
+  }
+}
 
 export function TrainerMemberProgressPage() {
   const { memberId } = useParams<{ memberId: string }>();
   const isValidMemberId = /^[1-9]\d*$/.test(memberId || "");
 
+  // Member State
   const [member, setMember] = useState<ITrainerMemberDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProgressTab>("measurements");
 
+  // Measurements State
+  const [deletedFilter, setDeletedFilter] = useState<DeletedFilter>("active");
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [measurements, setMeasurements] = useState<MemberMeasurementListItem[]>([]);
+  const [measurementsLoading, setMeasurementsLoading] = useState(false);
+  const [measurementsError, setMeasurementsError] = useState<string | null>(null);
+
+  // Selected Detail State
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<MemberMeasurementDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  // 1. Fetch Member Context
   useEffect(() => {
     if (!isValidMemberId) {
       setLoading(false);
@@ -22,17 +99,21 @@ export function TrainerMemberProgressPage() {
       return;
     }
 
+    let isSubscribed = true;
+    setLoading(true);
+    setError(null);
+
     const fetchMember = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const response = await apiClient.get(`/api/trainer/members/${memberId}`);
+        if (!isSubscribed) return;
         if (isTrainerMemberDetail(response)) {
           setMember(response);
         } else {
           throw new Error("Geçersiz sunucu yanıtı.");
         }
       } catch (err: unknown) {
+        if (!isSubscribed) return;
         if (err instanceof ApiError) {
           if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
             setError("Aktif eğitmen profiliniz hesabınıza bağlanmamış.");
@@ -49,12 +130,152 @@ export function TrainerMemberProgressPage() {
           setError("Bilinmeyen bir hata oluştu.");
         }
       } finally {
-        setLoading(false);
+        if (isSubscribed) setLoading(false);
       }
     };
 
     fetchMember();
+
+    return () => {
+      isSubscribed = false;
+    };
   }, [memberId, isValidMemberId]);
+
+  // 2. Fetch Measurements List
+  useEffect(() => {
+    if (!isValidMemberId || activeTab !== "measurements") {
+      return;
+    }
+
+    let isSubscribed = true;
+    setMeasurementsLoading(true);
+    setMeasurementsError(null);
+
+    const fetchMeasurements = async () => {
+      try {
+        const res = await apiClient.get(
+          `/api/trainer/members/${memberId}/measurements?page=${page}&per_page=20&deleted=${deletedFilter}`
+        );
+        if (!isSubscribed) return;
+        if (isMemberMeasurementListResponse(res)) {
+          setMeasurements(res.items);
+          setLastPage(res.pagination.last_page);
+          setTotal(res.pagination.total);
+        } else {
+          setMeasurementsError("Sunucudan geçersiz ölçüm listesi yanıtı alındı.");
+        }
+      } catch (err: unknown) {
+        if (!isSubscribed) return;
+        if (err instanceof ApiError) {
+          if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+            setMeasurementsError("Aktif eğitmen profiliniz hesabınıza bağlanmamış.");
+          } else if (err.status === 403 || err.code === "FORBIDDEN") {
+            setMeasurementsError("Bu alana erişim yetkiniz yok.");
+          } else if (err.status === 404 || err.code === "NOT_FOUND") {
+            setMeasurementsError("Üye bulunamadı veya bu üyeye erişim yetkiniz yok.");
+          } else if (err.status === 422 || err.code === "VALIDATION_ERROR") {
+            setMeasurementsError("Geçersiz istek parametresi.");
+          } else {
+            setMeasurementsError(err.message || "Ölçümler yüklenirken bir hata oluştu.");
+          }
+        } else if (err instanceof Error) {
+          setMeasurementsError(err.message);
+        } else {
+          setMeasurementsError("Bilinmeyen bir hata oluştu.");
+        }
+      } finally {
+        if (isSubscribed) setMeasurementsLoading(false);
+      }
+    };
+
+    fetchMeasurements();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [memberId, isValidMemberId, activeTab, deletedFilter, page]);
+
+  // 3. Fetch Measurement Detail
+  useEffect(() => {
+    if (!selectedMeasurementId || activeTab !== "measurements") {
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError(null);
+      return;
+    }
+
+    const currentItem = measurements.find((m) => m.id === selectedMeasurementId);
+    if (currentItem && currentItem.deleted_at !== null) {
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError("Arşivlenmiş kayıtların detay notu görüntülenemez.");
+      return;
+    }
+
+    let isSubscribed = true;
+    setDetailLoading(true);
+    setDetailError(null);
+
+    const fetchDetail = async () => {
+      try {
+        const res = await apiClient.get(`/api/trainer/member-measurements/${selectedMeasurementId}`);
+        if (!isSubscribed) return;
+        if (isMemberMeasurementDetail(res)) {
+          setDetail(res);
+        } else {
+          setDetailError("Sunucudan geçersiz ölçüm detay yanıtı alındı.");
+        }
+      } catch (err: unknown) {
+        if (!isSubscribed) return;
+        if (err instanceof ApiError) {
+          if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+            setDetailError("Aktif eğitmen profiliniz hesabınıza bağlanmamış.");
+          } else if (err.status === 403 || err.code === "FORBIDDEN") {
+            setDetailError("Bu alana erişim yetkiniz yok.");
+          } else if (err.status === 404 || err.code === "NOT_FOUND") {
+            setDetailError("Ölçüm kaydı bulunamadı veya erişilemiyor.");
+          } else {
+            setDetailError(err.message || "Ölçüm detayı yüklenemedi.");
+          }
+        } else if (err instanceof Error) {
+          setDetailError(err.message);
+        } else {
+          setDetailError("Ölçüm detayı yüklenirken bir hata oluştu.");
+        }
+      } finally {
+        if (isSubscribed) setDetailLoading(false);
+      }
+    };
+
+    fetchDetail();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [selectedMeasurementId, activeTab, measurements]);
+
+  const handleFilterChange = (filter: DeletedFilter) => {
+    setDeletedFilter(filter);
+    setPage(1);
+    setSelectedMeasurementId(null);
+    setDetail(null);
+    setDetailError(null);
+  };
+
+  const handleItemClick = (m: MemberMeasurementListItem) => {
+    if (selectedMeasurementId === m.id) {
+      return;
+    }
+    setSelectedMeasurementId(m.id);
+    setDetail(null);
+    setDetailError(null);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedMeasurementId(null);
+    setDetail(null);
+    setDetailError(null);
+  };
 
   if (loading) {
     return (
@@ -172,55 +393,326 @@ export function TrainerMemberProgressPage() {
         </button>
       </div>
 
-      {/* Tab Content: Foundation Workspace States */}
+      {/* Tab Content: Measurements Read-Only View */}
       {activeTab === "measurements" && (
-        <div className="bg-[#121212] border border-white/10 rounded-xl p-8 space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#851C35]/15 border border-[#851C35]/30 flex items-center justify-center text-[#851C35] shrink-0">
-              <Activity className="w-6 h-6" />
+        <div className="space-y-6">
+          {/* Controls Bar: Filter & Info */}
+          <div className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+            <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-lg border border-white/5">
+              <button
+                type="button"
+                onClick={() => handleFilterChange("active")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  deletedFilter === "active"
+                    ? "bg-[#851C35] text-white shadow-sm"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                Aktif Kayıtlar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFilterChange("deleted")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  deletedFilter === "deleted"
+                    ? "bg-[#851C35] text-white shadow-sm"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                Arşivlenmiş
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFilterChange("all")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  deletedFilter === "all"
+                    ? "bg-[#851C35] text-white shadow-sm"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                Tümü
+              </button>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Fiziksel Ölçüm ve Vücut Kompozisyonu</h3>
-              <p className="text-sm text-white/60 mt-1">
-                Bu alanda üyenin periyodik vücut kompozisyonu ve bölgesel çevre ölçümleri tarihsel olarak takip edilir.
-              </p>
+
+            <div className="text-xs text-white/50">
+              Toplam <span className="text-white font-medium">{total}</span> ölçüm kaydı
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <HeartPulse className="w-4 h-4 text-[#851C35]" />
-                Kilo & Yağ Oranı
+          {measurementsError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm">
+              {measurementsError}
+            </div>
+          )}
+
+          {/* List + Detail Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left 2 Cols: Measurements List */}
+            <div className="lg:col-span-2 flex flex-col">
+              <div className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden flex flex-col min-h-[420px]">
+                {measurementsLoading ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-white/50">
+                    <div className="w-8 h-8 border-2 border-[#851C35]/30 border-t-[#851C35] rounded-full animate-spin mb-3" />
+                    <span className="text-xs">Ölçümler yükleniyor...</span>
+                  </div>
+                ) : measurements.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-white/40 text-center">
+                    <Activity className="w-12 h-12 mb-3 opacity-20 text-[#851C35]" />
+                    <p className="text-sm font-medium text-white/60">Ölçüm kaydı bulunamadı.</p>
+                    <p className="text-xs text-white/40 mt-1 max-w-sm">
+                      {deletedFilter === "active"
+                        ? "Bu üye için henüz aktif fiziksel ölçüm kaydı bulunmuyor."
+                        : deletedFilter === "deleted"
+                        ? "Arşivlenmiş herhangi bir ölçüm kaydı bulunamadı."
+                        : "Bu üye için kayıtlı herhangi bir ölçüm bulunamadı."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col divide-y divide-white/5">
+                    {measurements.map((m) => {
+                      const isSelected = selectedMeasurementId === m.id;
+                      const isArchived = m.deleted_at !== null;
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => handleItemClick(m)}
+                          className={`p-4 transition cursor-pointer flex flex-col gap-3 ${
+                            isSelected
+                              ? "bg-[#851C35]/15 border-l-4 border-[#851C35]"
+                              : "hover:bg-white/[0.03] border-l-4 border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-3.5 h-3.5 text-[#851C35]" />
+                              <span className="text-sm font-semibold text-white">
+                                {formatDateTime(m.measured_at)}
+                              </span>
+                            </div>
+                            {isArchived && (
+                              <span className="text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+                                Arşivlenmiş
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Kilo</span>
+                              <span className="text-white font-medium">
+                                {m.weight_kg !== null ? `${m.weight_kg} kg` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Yağ</span>
+                              <span className="text-white font-medium">
+                                {m.body_fat_percent !== null ? `%${m.body_fat_percent}` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Göğüs</span>
+                              <span className="text-white font-medium">
+                                {m.chest_cm !== null ? `${m.chest_cm} cm` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Bel</span>
+                              <span className="text-white font-medium">
+                                {m.waist_cm !== null ? `${m.waist_cm} cm` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Kalça</span>
+                              <span className="text-white font-medium">
+                                {m.hip_cm !== null ? `${m.hip_cm} cm` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Kol</span>
+                              <span className="text-white font-medium">
+                                {m.arm_cm !== null ? `${m.arm_cm} cm` : "—"}
+                              </span>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/5 rounded p-2">
+                              <span className="text-white/40 block text-[10px]">Bacak</span>
+                              <span className="text-white font-medium">
+                                {m.thigh_cm !== null ? `${m.thigh_cm} cm` : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Pagination Controls */}
+                {!measurementsLoading && measurements.length > 0 && (
+                  <div className="p-4 border-t border-white/10 bg-[#121212] flex items-center justify-between text-xs text-white/60">
+                    <div>
+                      Toplam {total} kayıt • Sayfa {page} / {lastPage}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
+                        title="Önceki Sayfa"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={page >= lastPage}
+                        onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
+                        title="Sonraki Sayfa"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Vücut ağırlığı (kg) ve yağ oranı (%) değerlerinin seans bazlı kayıtları ve periyot analizi.
-              </p>
             </div>
 
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <TrendingUp className="w-4 h-4 text-[#851C35]" />
-                Bölgesel Çevre Ölçümleri
-              </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Göğüs, bel, kalça, kol ve bacak çevre ölçümlerinin santimetre bazında hassas takibi.
-              </p>
-            </div>
+            {/* Right 1 Col: Measurement Detail Card */}
+            <div className="lg:col-span-1">
+              <div className="bg-[#121212] border border-white/10 rounded-xl p-5 min-h-[420px] sticky top-6">
+                {!selectedMeasurementId ? (
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-6 space-y-2">
+                    <Activity className="w-8 h-8 opacity-25 text-[#851C35]" />
+                    <p className="font-medium text-white/60">Ölçüm Detayı</p>
+                    <p className="leading-relaxed">
+                      Detaylı verileri ve antrenör notunu görüntülemek için sol taraftaki listeden bir ölçüme tıklayın.
+                    </p>
+                  </div>
+                ) : detailLoading ? (
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center p-8 text-white/50">
+                    <div className="w-7 h-7 border-2 border-[#851C35]/30 border-t-[#851C35] rounded-full animate-spin mb-3" />
+                    <span className="text-xs">Ölçüm detayı alınıyor...</span>
+                  </div>
+                ) : detailError ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-white">Ölçüm Detayı</h4>
+                      <button
+                        type="button"
+                        onClick={handleCloseDetail}
+                        className="p-1 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-xs leading-relaxed">
+                      {detailError}
+                    </div>
+                  </div>
+                ) : detail ? (
+                  <div className="space-y-5">
+                    {/* Detail Card Header */}
+                    <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
+                      <div>
+                        <div className="text-xs text-white/50 font-medium">Ölçüm Detayı</div>
+                        <h4 className="text-base font-bold text-white mt-0.5">
+                          {formatDateTime(detail.measured_at)}
+                        </h4>
+                        <div className="text-[11px] text-white/40 font-mono mt-0.5">
+                          {detail.uuid}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCloseDetail}
+                        className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                        title="Kapat"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
 
-            <div className="bg-white/[0.03] border border-white/5 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                <Calendar className="w-4 h-4 text-[#851C35]" />
-                Tarihsel Karşılaştırma
+                    {/* Metrics 2-column Grid */}
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Ağırlık (Kilo)</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.weight_kg !== null ? `${detail.weight_kg} kg` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Vücut Yağ Oranı</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.body_fat_percent !== null ? `%${detail.body_fat_percent}` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Göğüs Çevresi</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.chest_cm !== null ? `${detail.chest_cm} cm` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Bel Çevresi</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.waist_cm !== null ? `${detail.waist_cm} cm` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Kalça Çevresi</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.hip_cm !== null ? `${detail.hip_cm} cm` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Kol Çevresi</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.arm_cm !== null ? `${detail.arm_cm} cm` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3 col-span-2">
+                        <span className="text-white/40 text-[11px] block mb-0.5">Bacak / Uyluk Çevresi</span>
+                        <span className="text-sm font-semibold text-white">
+                          {detail.thigh_cm !== null ? `${detail.thigh_cm} cm` : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Notes Section */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-xs font-medium text-white/80 block">Antrenör Notları</span>
+                      {detail.notes ? (
+                        <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-xs text-white/80 whitespace-pre-wrap leading-relaxed">
+                          {detail.notes}
+                        </div>
+                      ) : (
+                        <div className="bg-white/[0.01] border border-dashed border-white/10 rounded-lg p-3 text-xs text-white/40 italic">
+                          Bu ölçüm kaydına ait açıklama veya not bulunmuyor.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Timestamps Info */}
+                    <div className="pt-2 border-t border-white/5 flex flex-col gap-1 text-[11px] text-white/40">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3 h-3 text-white/30" />
+                        <span>Kayıt: {formatDateTime(detail.created_at)}</span>
+                      </div>
+                      {detail.updated_at !== detail.created_at && (
+                        <div className="flex items-center gap-1.5 pl-4.5 text-white/30">
+                          <span>Güncellenme: {formatDateTime(detail.updated_at)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <p className="text-xs text-white/50 leading-relaxed">
-                Önceki ölçümlerle karşılaştırmalı değişim oranları ve hedef doğrultusunda fiziksel ilerleme.
-              </p>
             </div>
           </div>
         </div>
       )}
 
+      {/* Tab Content: Foundation Workspace Notes State (Unchanged) */}
       {activeTab === "notes" && (
         <div className="bg-[#121212] border border-white/10 rounded-xl p-8 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -271,3 +763,4 @@ export function TrainerMemberProgressPage() {
     </div>
   );
 }
+
