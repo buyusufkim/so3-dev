@@ -255,10 +255,24 @@ export function TrainerMemberProgressPage() {
   }, [selectedMeasurementId, activeTab, measurements]);
 
   const handleFilterChange = (filter: DeletedFilter) => {
+    if (filter === deletedFilter) return;
     setDeletedFilter(filter);
     setPage(1);
     setSelectedMeasurementId(null);
     setDetail(null);
+    setDetailLoading(false);
+    setDetailError(null);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    const targetPage = Math.max(1, Math.min(lastPage, newPage));
+    if (targetPage === page) {
+      return;
+    }
+    setPage(targetPage);
+    setSelectedMeasurementId(null);
+    setDetail(null);
+    setDetailLoading(false);
     setDetailError(null);
   };
 
@@ -556,7 +570,7 @@ export function TrainerMemberProgressPage() {
                       <button
                         type="button"
                         disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        onClick={() => handlePageChange(page - 1)}
                         className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
                         title="Önceki Sayfa"
                       >
@@ -565,7 +579,7 @@ export function TrainerMemberProgressPage() {
                       <button
                         type="button"
                         disabled={page >= lastPage}
-                        onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+                        onClick={() => handlePageChange(page + 1)}
                         className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
                         title="Sonraki Sayfa"
                       >
