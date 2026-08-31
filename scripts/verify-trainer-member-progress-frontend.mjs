@@ -92,6 +92,31 @@ function extractFunctionBlock(source, functionName) {
   return source.substring(openBraceIndex, closeIndex + 1);
 }
 
+function extractIfBlock(source, searchPattern) {
+  const matchIndex = typeof searchPattern === 'string'
+    ? source.indexOf(searchPattern)
+    : source.search(searchPattern);
+  if (matchIndex === -1) return null;
+
+  const openBraceIndex = source.indexOf('{', matchIndex);
+  if (openBraceIndex === -1) return null;
+
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openBraceIndex; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(openBraceIndex, closeIndex + 1);
+}
+
 function extractUseEffectBlocks(source) {
   const blocks = [];
   const regex = /useEffect\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*\{/g;
@@ -293,14 +318,18 @@ const measurementDetailEffect = progressUseEffects.find(
 let archivedSafetyPass = false;
 if (measurementDetailEffect) {
   const hasItemFind = measurementDetailEffect.includes('measurements.find');
-  const hasDeletedCheck = measurementDetailEffect.includes('deleted_at !== null') || measurementDetailEffect.includes('deleted_at != null');
-  const hasDetailReset = measurementDetailEffect.includes('setDetail(null)');
+  const archivedIfBlock = extractIfBlock(measurementDetailEffect, /deleted_at\s*!==\s*null|deleted_at\s*!=\s*null/);
   
-  const deletedCheckPos = measurementDetailEffect.indexOf('deleted_at');
-  const apiFetchPos = measurementDetailEffect.indexOf('apiClient.get');
-  const earlyReturnBeforeApi = deletedCheckPos !== -1 && apiFetchPos !== -1 && deletedCheckPos < apiFetchPos;
+  if (archivedIfBlock) {
+    const hasDetailReset = archivedIfBlock.includes('setDetail(null)');
+    const hasReturn = /\breturn\b/.test(archivedIfBlock);
+    
+    const ifBlockPos = measurementDetailEffect.indexOf(archivedIfBlock);
+    const apiFetchPos = measurementDetailEffect.indexOf('apiClient.get');
+    const earlyReturnBeforeApi = ifBlockPos !== -1 && apiFetchPos !== -1 && ifBlockPos < apiFetchPos;
 
-  archivedSafetyPass = hasItemFind && hasDeletedCheck && hasDetailReset && earlyReturnBeforeApi;
+    archivedSafetyPass = Boolean(hasItemFind && hasDetailReset && hasReturn && earlyReturnBeforeApi);
+  }
 }
 
 const hasMeasurementRestoreClickIsolation = progressPageContent.includes('e.stopPropagation()') &&
@@ -320,7 +349,7 @@ const measurementSafetyPass = archivedSafetyPass &&
 reportInvariant(
   measurementSafetyPass,
   "Invariant 8: Measurements archived record detail safety, click isolation, and stale state reset",
-  "Archived records must be guarded against detail fetch via early return, restore button must stop propagation, and page/filter changes must clear selected detail"
+  "Archived records must be guarded via early return with setDetail(null) in deleted_at if-block before detail GET, restore button must stop propagation, and page/filter changes must clear selected detail"
 );
 
 // ==========================================
@@ -374,12 +403,15 @@ reportInvariant(
 const itemClickBlock = extractFunctionBlock(notesPanelContent, 'handleItemClick');
 let archivedNotesSafetyPass = false;
 if (itemClickBlock) {
-  const hasDeletedCheck = itemClickBlock.includes('deleted_at !== null') || itemClickBlock.includes('deleted_at != null');
-  const deletedCheckPos = itemClickBlock.indexOf('deleted_at');
-  const setSelectedPos = itemClickBlock.indexOf('setSelectedNoteId');
-  const earlyReturnBeforeSelect = deletedCheckPos !== -1 && setSelectedPos !== -1 && deletedCheckPos < setSelectedPos;
+  const archivedIfBlock = extractIfBlock(itemClickBlock, /deleted_at\s*!==\s*null|deleted_at\s*!=\s*null/);
+  if (archivedIfBlock) {
+    const hasReturn = /\breturn\b/.test(archivedIfBlock);
+    const ifBlockPos = itemClickBlock.indexOf(archivedIfBlock);
+    const setSelectedPos = itemClickBlock.indexOf('setSelectedNoteId');
+    const earlyReturnBeforeSelect = ifBlockPos !== -1 && setSelectedPos !== -1 && (ifBlockPos + archivedIfBlock.length) <= setSelectedPos;
 
-  archivedNotesSafetyPass = hasDeletedCheck && earlyReturnBeforeSelect;
+    archivedNotesSafetyPass = Boolean(hasReturn && earlyReturnBeforeSelect);
+  }
 }
 
 const hasNotesRestoreClickIsolation = notesPanelContent.includes('e.stopPropagation()') &&
@@ -399,7 +431,7 @@ const notesSafetyPass = archivedNotesSafetyPass &&
 reportInvariant(
   notesSafetyPass,
   "Invariant 11: Progress Notes archived record detail safety, restore click isolation, and stale state reset",
-  "Archived notes must be guarded against detail selection via early return in handleItemClick, restore button must stop propagation, and page/filter changes must clear selected detail"
+  "Archived notes must be guarded via real early return in deleted_at if-block before setSelectedNoteId in handleItemClick, restore button must stop propagation, and page/filter changes must clear selected detail"
 );
 
 // ==========================================
@@ -418,30 +450,36 @@ if (measurementSaveBlock) {
 
   const hasPatchPayload = measurementSaveBlock.includes('patchPayload');
   const hasChangesFlag = measurementSaveBlock.includes('hasChanges');
-  const hasNoChangesCheck = measurementSaveBlock.includes('!hasChanges');
   
-  const noChangesPos = measurementSaveBlock.indexOf('!hasChanges');
-  const patchPos = measurementSaveBlock.indexOf('apiClient.patch');
-  const noChangesReturnsBeforePatch = noChangesPos !== -1 && patchPos !== -1 && noChangesPos < patchPos;
+  const noChangesIfBlock = extractIfBlock(measurementSaveBlock, /!\s*hasChanges/);
+  let noChangesReturnsBeforePatch = false;
+
+  if (noChangesIfBlock) {
+    const hasReturnInNoChanges = /\breturn\b/.test(noChangesIfBlock);
+    const ifBlockPos = measurementSaveBlock.indexOf(noChangesIfBlock);
+    const patchPos = measurementSaveBlock.indexOf('apiClient.patch');
+    noChangesReturnsBeforePatch = Boolean(hasReturnInNoChanges && ifBlockPos !== -1 && patchPos !== -1 && (ifBlockPos + noChangesIfBlock.length) <= patchPos);
+  }
 
   const patchUsesPayload = measurementSaveBlock.includes('patchPayload') &&
     measurementSaveBlock.includes('apiClient.patch');
 
-  measurementModalSemanticsPass = hasSubmittingRefDecl &&
+  measurementModalSemanticsPass = Boolean(
+    hasSubmittingRefDecl &&
     hasSubmittingGuard &&
     hasLockTrue &&
     hasLockFalseInFinally &&
     hasPatchPayload &&
     hasChangesFlag &&
-    hasNoChangesCheck &&
     noChangesReturnsBeforePatch &&
-    patchUsesPayload;
+    patchUsesPayload
+  );
 }
 
 reportInvariant(
   measurementModalSemanticsPass,
   "Invariant 12: Measurement Form Modal enforces duplicate-submit ref lock and changed-only PATCH with no-op early return",
-  "TrainerMeasurementFormModal must enforce isSubmitting ref lock lifecycle and bypass API calls on unchanged data"
+  "TrainerMeasurementFormModal must enforce isSubmitting ref lock lifecycle and bypass API calls via real return in !hasChanges if-block before PATCH"
 );
 
 // ==========================================
@@ -460,11 +498,16 @@ if (noteSaveBlock) {
 
   const hasPatchPayload = noteSaveBlock.includes('patchPayload');
   const hasChangesFlag = noteSaveBlock.includes('hasChanges');
-  const hasNoChangesCheck = noteSaveBlock.includes('!hasChanges');
   
-  const noChangesPos = noteSaveBlock.indexOf('!hasChanges');
-  const patchPos = noteSaveBlock.indexOf('apiClient.patch');
-  const noChangesReturnsBeforePatch = noChangesPos !== -1 && patchPos !== -1 && noChangesPos < patchPos;
+  const noChangesIfBlock = extractIfBlock(noteSaveBlock, /!\s*hasChanges/);
+  let noChangesReturnsBeforePatch = false;
+
+  if (noChangesIfBlock) {
+    const hasReturnInNoChanges = /\breturn\b/.test(noChangesIfBlock);
+    const ifBlockPos = noteSaveBlock.indexOf(noChangesIfBlock);
+    const patchPos = noteSaveBlock.indexOf('apiClient.patch');
+    noChangesReturnsBeforePatch = Boolean(hasReturnInNoChanges && ifBlockPos !== -1 && patchPos !== -1 && (ifBlockPos + noChangesIfBlock.length) <= patchPos);
+  }
 
   const patchUsesPayload = noteSaveBlock.includes('patchPayload') &&
     noteSaveBlock.includes('apiClient.patch');
@@ -472,23 +515,24 @@ if (noteSaveBlock) {
   const hasLengthCheck = noteModalContent.includes('5000') && noteModalContent.includes('length > 5000');
   const hasEmptyCheck = noteModalContent.includes('trim() === ""') || noteModalContent.includes('trim()');
 
-  noteModalSemanticsPass = hasSubmittingRefDecl &&
+  noteModalSemanticsPass = Boolean(
+    hasSubmittingRefDecl &&
     hasSubmittingGuard &&
     hasLockTrue &&
     hasLockFalseInFinally &&
     hasPatchPayload &&
     hasChangesFlag &&
-    hasNoChangesCheck &&
     noChangesReturnsBeforePatch &&
     patchUsesPayload &&
     hasLengthCheck &&
-    hasEmptyCheck;
+    hasEmptyCheck
+  );
 }
 
 reportInvariant(
   noteModalSemanticsPass,
   "Invariant 13: Progress Note Form Modal enforces duplicate-submit ref lock, text validation, and changed-only PATCH",
-  "TrainerProgressNoteFormModal must validate non-empty 5000-char text, enforce ref lock, and bypass API on unchanged data"
+  "TrainerProgressNoteFormModal must validate non-empty 5000-char text, enforce ref lock, and bypass API via real return in !hasChanges if-block before PATCH"
 );
 
 // ==========================================
