@@ -7,7 +7,9 @@ import {
   ChevronRight,
   X,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Pencil
 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
@@ -16,6 +18,7 @@ import {
   isMemberProgressNoteListResponse,
   isMemberProgressNoteDetail
 } from "../member-progress/types";
+import { TrainerProgressNoteFormModal } from "./TrainerProgressNoteFormModal";
 
 type DeletedFilter = "active" | "deleted" | "all";
 
@@ -52,12 +55,18 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
   const [lastPage, setLastPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [deletedFilter, setDeletedFilter] = useState<DeletedFilter>("active");
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   // Detail State
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
   const [detail, setDetail] = useState<MemberProgressNoteDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editData, setEditData] = useState<MemberProgressNoteDetail | null>(null);
 
   // 1. Fetch Notes List
   useEffect(() => {
@@ -117,7 +126,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     return () => {
       isSubscribed = false;
     };
-  }, [memberId, page, deletedFilter]);
+  }, [memberId, page, deletedFilter, listRefreshKey]);
 
   // 2. Fetch Active Note Detail
   useEffect(() => {
@@ -174,7 +183,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     return () => {
       isSubscribed = false;
     };
-  }, [selectedNoteId]);
+  }, [selectedNoteId, detailRefreshKey]);
 
   const handleFilterChange = (filter: DeletedFilter) => {
     if (filter === deletedFilter) return;
@@ -212,6 +221,35 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
     setSelectedNoteId(null);
     setDetail(null);
     setDetailError(null);
+  };
+
+  const handleOpenCreate = () => {
+    setEditData(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (n: MemberProgressNoteDetail) => {
+    setEditData(n);
+    setIsModalOpen(true);
+  };
+
+  const handleFormSuccess = () => {
+    setIsModalOpen(false);
+    if (editData) {
+      // Edit mode success: refresh list and current active detail
+      setListRefreshKey((k) => k + 1);
+      setDetailRefreshKey((k) => k + 1);
+      setEditData(null);
+    } else {
+      // Create mode success: reset filter to active, page to 1, clear selected, refresh list
+      setDeletedFilter("active");
+      setPage(1);
+      setSelectedNoteId(null);
+      setDetail(null);
+      setDetailError(null);
+      setListRefreshKey((k) => k + 1);
+      setEditData(null);
+    }
   };
 
   return (
@@ -260,8 +298,18 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
           </div>
         </div>
 
-        <div className="text-xs text-white/40 self-end sm:self-center">
-          Toplam <span className="text-white font-medium">{total}</span> kayıt listeleniyor
+        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="text-xs text-white/40">
+            Toplam <span className="text-white font-medium">{total}</span> kayıt listeleniyor
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Yeni Gelişim Notu
+          </button>
         </div>
       </div>
 
@@ -431,14 +479,27 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                       {detail.uuid}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCloseDetail}
-                    className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
-                    title="Kapat"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {detail.deleted_at === null && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(detail)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition"
+                        title="Gelişim Notunu Düzenle"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Düzenle
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCloseDetail}
+                      className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                      title="Kapat"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Note Content */}
@@ -468,6 +529,19 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
           </div>
         </div>
       </div>
+
+      {/* Create / Edit Progress Note Modal */}
+      {isModalOpen && (
+        <TrainerProgressNoteFormModal
+          memberId={memberId}
+          initialData={editData}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditData(null);
+          }}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </div>
   );
 }
