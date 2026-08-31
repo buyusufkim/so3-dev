@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,7 +14,9 @@ import {
   X,
   Clock,
   Plus,
-  Pencil
+  Pencil,
+  Archive,
+  RotateCcw
 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "../trainer-members/types";
@@ -22,7 +24,8 @@ import {
   MemberMeasurementListItem,
   MemberMeasurementDetail,
   isMemberMeasurementListResponse,
-  isMemberMeasurementDetail
+  isMemberMeasurementDetail,
+  isMemberProgressSuccessResponse
 } from "../member-progress/types";
 import { TrainerMeasurementFormModal } from "./TrainerMeasurementFormModal";
 
@@ -99,6 +102,20 @@ export function TrainerMemberProgressPage() {
   const [editingMeasurement, setEditingMeasurement] = useState<MemberMeasurementDetail | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+
+  // Mutation Locks & State
+  const isMutatingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 1. Fetch Member Context
   useEffect(() => {
@@ -263,6 +280,29 @@ export function TrainerMemberProgressPage() {
     };
   }, [selectedMeasurementId, activeTab, measurements, detailRefreshKey]);
 
+  const getMutationErrorMessage = (err: unknown, defaultMsg: string): string => {
+    if (err instanceof ApiError) {
+      if (err.code === "TRAINER_PROFILE_NOT_LINKED") {
+        return "Aktif eğitmen profiliniz hesabınıza bağlanmamış.";
+      }
+      if (err.status === 403 || err.code === "FORBIDDEN") {
+        return "Bu işlem için yetkiniz yok.";
+      }
+      if (err.status === 404 || err.code === "NOT_FOUND") {
+        return "Ölçüm kaydı bulunamadı veya erişilemiyor.";
+      }
+      if (err.code === "MEASUREMENT_NOT_ARCHIVED" || err.status === 409 || err.code === "CONFLICT") {
+        return "Ölçüm arşivlenmiş durumda değil / kayıt durumu değişmiş olabilir.";
+      }
+      if (err.message) {
+        return err.message;
+      }
+    } else if (err instanceof Error && err.message) {
+      return err.message;
+    }
+    return defaultMsg;
+  };
+
   const handleFilterChange = (filter: DeletedFilter) => {
     if (filter === deletedFilter) return;
     setDeletedFilter(filter);
@@ -271,6 +311,7 @@ export function TrainerMemberProgressPage() {
     setDetail(null);
     setDetailLoading(false);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -283,6 +324,7 @@ export function TrainerMemberProgressPage() {
     setDetail(null);
     setDetailLoading(false);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleItemClick = (m: MemberMeasurementListItem) => {
@@ -292,26 +334,31 @@ export function TrainerMemberProgressPage() {
     setSelectedMeasurementId(m.id);
     setDetail(null);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleCloseDetail = () => {
     setSelectedMeasurementId(null);
     setDetail(null);
     setDetailError(null);
+    setActionError(null);
   };
 
   const handleOpenCreate = () => {
     setEditingMeasurement(null);
     setIsFormModalOpen(true);
+    setActionError(null);
   };
 
   const handleOpenEdit = (targetDetail: MemberMeasurementDetail) => {
     setEditingMeasurement(targetDetail);
     setIsFormModalOpen(true);
+    setActionError(null);
   };
 
   const handleFormSuccess = () => {
     setIsFormModalOpen(false);
+    setActionError(null);
     if (!editingMeasurement) {
       // Create success: reset to active filter, page 1, clear stale detail, trigger list refresh
       setDeletedFilter("active");
@@ -331,6 +378,80 @@ export function TrainerMemberProgressPage() {
   const handleCloseModal = () => {
     setIsFormModalOpen(false);
     setEditingMeasurement(null);
+  };
+
+  const handleArchive = async (id: number) => {
+    if (isMutatingRef.current) return;
+
+    if (!window.confirm("Bu ölçümü arşivlemek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    isMutatingRef.current = true;
+    setArchivingId(id);
+    setActionError(null);
+
+    try {
+      const res = await apiClient.delete(`/api/trainer/member-measurements/${id}`);
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+
+      if (!isMountedRef.current) return;
+
+      // Archive success state
+      setSelectedMeasurementId(null);
+      setDetail(null);
+      setDetailError(null);
+      setPage(1);
+      setListRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setActionError(getMutationErrorMessage(err, "Ölçüm arşivlenirken bir hata oluştu. Lütfen tekrar deneyin."));
+    } finally {
+      isMutatingRef.current = false;
+      if (isMountedRef.current) {
+        setArchivingId(null);
+      }
+    }
+  };
+
+  const handleRestore = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+
+    if (isMutatingRef.current) return;
+
+    if (!window.confirm("Bu ölçümü geri yüklemek istediğinize emin misiniz?")) {
+      return;
+    }
+
+    isMutatingRef.current = true;
+    setRestoringId(id);
+    setActionError(null);
+
+    try {
+      const res = await apiClient.post(`/api/trainer/member-measurements/${id}/restore`, {});
+      if (!isMemberProgressSuccessResponse(res)) {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+
+      if (!isMountedRef.current) return;
+
+      // Restore success state
+      setSelectedMeasurementId(null);
+      setDetail(null);
+      setDetailError(null);
+      setPage(1);
+      setListRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setActionError(getMutationErrorMessage(err, "Ölçüm geri yüklenirken bir hata oluştu. Lütfen tekrar deneyin."));
+    } finally {
+      isMutatingRef.current = false;
+      if (isMountedRef.current) {
+        setRestoringId(null);
+      }
+    }
   };
 
   if (loading) {
@@ -511,6 +632,20 @@ export function TrainerMemberProgressPage() {
             </div>
           )}
 
+          {actionError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm flex items-center justify-between gap-2">
+              <span>{actionError}</span>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                className="p-1 text-red-400/70 hover:text-red-400 rounded hover:bg-red-500/10 transition shrink-0"
+                title="Kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* List + Detail Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left 2 Cols: Measurements List */}
@@ -556,9 +691,21 @@ export function TrainerMemberProgressPage() {
                               </span>
                             </div>
                             {isArchived && (
-                              <span className="text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
-                                Arşivlenmiş
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+                                  Arşivlenmiş
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={isMutatingRef.current || restoringId !== null}
+                                  onClick={(e) => handleRestore(e, m.id)}
+                                  className="flex items-center gap-1.5 px-2 py-0.5 bg-[#851C35]/20 hover:bg-[#851C35]/40 text-white rounded border border-[#851C35]/40 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title="Ölçümü Geri Yükle"
+                                >
+                                  <RotateCcw className="w-3 h-3 text-[#851C35]" />
+                                  {restoringId === m.id ? "Geri Yükleniyor..." : "Geri Yükle"}
+                                </button>
+                              </div>
                             )}
                           </div>
 
@@ -688,17 +835,30 @@ export function TrainerMemberProgressPage() {
                           {detail.uuid}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {detail.deleted_at === null && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(detail)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition"
-                            title="Ölçümü Düzenle"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            Düzenle
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              disabled={isMutatingRef.current || archivingId !== null}
+                              onClick={() => handleOpenEdit(detail)}
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Ölçümü Düzenle"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Düzenle
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isMutatingRef.current || archivingId !== null}
+                              onClick={() => handleArchive(detail.id)}
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded border border-red-500/20 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Ölçümü Arşivle"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                              {archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}
+                            </button>
+                          </>
                         )}
                         <button
                           type="button"
