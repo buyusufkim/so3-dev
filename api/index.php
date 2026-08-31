@@ -457,6 +457,15 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    // Dynamic matching for trainer dashboard endpoint
+    if (preg_match('#^/api/trainer/dashboard$#', $requestUri)) {
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'GET') {
+            (new \Controllers\TrainerDashboardController())->index();
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for trainer members endpoints
     if (preg_match('#^/api/trainer/members$#', $requestUri)) {
         AuthMiddleware::hasRole(['trainer']);
