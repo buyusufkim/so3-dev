@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Dumbbell, Activity } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "./types";
+import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
 
 export function TrainerMemberDetail() {
   const { id } = useParams<{ id: string }>();
@@ -93,28 +94,16 @@ export function TrainerMemberDetail() {
             <div className="text-sm text-white/50 font-mono mt-1">{member.uuid}</div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/admin/my-members/${member.id}/progress`}
-            className="flex items-center gap-2 px-4 py-2 bg-[#851C35]/20 border border-[#851C35]/40 hover:bg-[#851C35]/30 text-white text-sm font-medium rounded transition"
-          >
-            <Activity className="w-4 h-4 text-[#851C35]" />
-            Gelişim Takibi
-          </Link>
-          <Link
-            to={`/admin/my-members/${member.id}/training-programs`}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded transition"
-          >
-            <Dumbbell className="w-4 h-4" />
-            Antrenman Programları
-          </Link>
+        <div className="flex items-center gap-3">
           <span className={`inline-flex px-3 py-1.5 rounded text-sm font-medium ${
-            member.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+            member.status === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
           }`}>
             {member.status === 'active' ? 'Aktif Üye' : 'Pasif Üye'}
           </span>
         </div>
       </div>
+
+      <TrainerMemberWorkspaceNav memberId={member.id} active="member" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-6">

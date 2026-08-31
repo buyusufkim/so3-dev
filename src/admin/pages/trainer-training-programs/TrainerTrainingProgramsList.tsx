@@ -7,6 +7,7 @@ import {
   isTrainerTrainingProgramsResponse,
   isTrainingProgramStatus
 } from "./types";
+import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
 
 class ContractValidationError extends Error {
   constructor(message: string) {
@@ -111,13 +112,14 @@ export function TrainerTrainingProgramsList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link
             to={`/admin/my-members/${memberId}`}
-            className="p-2 hover:bg-white/10 rounded-full transition text-white/70 hover:text-white"
+            className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition text-white/70 hover:text-white"
+            title="Üye Detayına Dön"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
             <h1 className="text-2xl font-bold">Antrenman Programları</h1>
@@ -129,12 +131,14 @@ export function TrainerTrainingProgramsList() {
 
         <Link
           to={`/admin/my-members/${memberId}/training-programs/new`}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition shrink-0"
         >
           <Plus className="w-4 h-4" />
           Yeni Program
         </Link>
       </div>
+
+      <TrainerMemberWorkspaceNav memberId={memberId} active="programs" />
 
       <div className="flex flex-wrap gap-4 bg-[#121212] p-4 rounded-lg border border-white/10">
         <div className="space-y-1">

@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Activity,
   FileText,
-  Dumbbell,
   Calendar,
   HeartPulse,
   Sparkles,
@@ -29,6 +28,7 @@ import {
 } from "../member-progress/types";
 import { TrainerMeasurementFormModal } from "./TrainerMeasurementFormModal";
 import { TrainerProgressNotesPanel } from "./TrainerProgressNotesPanel";
+import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
 
 type ProgressTab = "measurements" | "notes";
 type DeletedFilter = "active" | "deleted" | "all";
@@ -530,18 +530,10 @@ export function TrainerMemberProgressPage() {
             </div>
           </div>
         </div>
-
-        {/* Action Link to Training Programs */}
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/admin/my-members/${member.id}/training-programs`}
-            className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded transition"
-          >
-            <Dumbbell className="w-4 h-4 text-white/80" />
-            Antrenman Programları
-          </Link>
-        </div>
       </div>
+
+      {/* Workspace Navigation */}
+      <TrainerMemberWorkspaceNav memberId={member.id} active="progress" />
 
       {/* Navigation Tabs */}
       <div className="bg-[#121212] border border-white/10 rounded-xl p-2 flex flex-wrap gap-2">
