@@ -441,13 +441,33 @@ if (isTrainerDashboardDataBlock) {
     recentUuidCheck && recentFirstNameCheck && recentLastNameCheck && recentUpdatedAtCheck &&
     recentStatusValid;
 
-  runtimeValidatorPass = Boolean(trainerValid && membersValid && tpValid && recentValid);
+  // Field-level attention checks:
+  const attentionObjCheck = /!d\.attention\s*\|\|\s*typeof\s+d\.attention\s*!==\s*['"]object['"]/.test(isTrainerDashboardDataBlock);
+  
+  // 1. members_without_active_program
+  const attNoProgArrayCheck = /Array\.isArray\(\s*att\.members_without_active_program\s*\)/.test(isTrainerDashboardDataBlock);
+  // 2. draft_programs
+  const attDraftProgArrayCheck = /Array\.isArray\(\s*att\.draft_programs\s*\)/.test(isTrainerDashboardDataBlock);
+  const attDraftProgMemberIdCheck = /typeof\s+p\.member_id\s*!==\s*['"]number['"]/.test(isTrainerDashboardDataBlock);
+  const attDraftProgTitleCheck = /typeof\s+p\.title\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  // 3. expired_active_memberships
+  const attExpMemArrayCheck = /Array\.isArray\(\s*att\.expired_active_memberships\s*\)/.test(isTrainerDashboardDataBlock);
+  const attExpMemDateCheck = /typeof\s+m\.membership_end_date\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  // 4. expired_active_programs
+  const attExpProgArrayCheck = /Array\.isArray\(\s*att\.expired_active_programs\s*\)/.test(isTrainerDashboardDataBlock);
+  const attExpProgDateCheck = /typeof\s+p\.end_date\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+
+  const attentionValid = attentionObjCheck && attNoProgArrayCheck && attDraftProgArrayCheck &&
+    attDraftProgMemberIdCheck && attDraftProgTitleCheck && attExpMemArrayCheck &&
+    attExpMemDateCheck && attExpProgArrayCheck && attExpProgDateCheck;
+
+  runtimeValidatorPass = Boolean(trainerValid && membersValid && tpValid && recentValid && attentionValid);
 }
 
 reportInvariant(
   runtimeValidatorPass,
-  "Invariant 7: Field-level runtime validator semantics strictly verified for trainer, members, training_programs, and recent_members",
-  "types.ts must implement individual field-level type, integer, non-negative, string, and enum checks"
+  "Invariant 7: Field-level runtime validator semantics strictly verified for trainer, members, training_programs, recent_members, and attention categories",
+  "types.ts must implement individual field-level type, integer, non-negative, string, and enum checks including all 4 attention sub-collections"
 );
 
 // ==========================================
@@ -637,6 +657,62 @@ reportInvariant(
   navigationPass,
   "Invariant 14: Workspace member navigation links target /admin/my-members/${member.id} and /admin/my-members without leaking admin member paths",
   "Member navigation in TrainerDashboard must exclusively route to /admin/my-members namespace"
+);
+
+// ==========================================
+// Invariant 15: Operational Attention Presentation & Category Rendering
+// ==========================================
+const rendersAttentionSection = dashboardContent.includes('Dikkat Gerektirenler');
+const rendersNoProgramCategory = dashboardContent.includes('Aktif Programı Olmayan Üyeler') &&
+  dashboardContent.includes('data.attention.members_without_active_program');
+const rendersDraftCategory = dashboardContent.includes('Taslak Programlar') &&
+  dashboardContent.includes('data.attention.draft_programs');
+const rendersExpMemCategory = dashboardContent.includes('Süresi Bitmiş Aktif Üyelikler') &&
+  dashboardContent.includes('data.attention.expired_active_memberships');
+const rendersExpProgCategory = dashboardContent.includes('Süresi Bitmiş Aktif Programlar') &&
+  dashboardContent.includes('data.attention.expired_active_programs');
+
+const attentionPresentationPass = rendersAttentionSection && rendersNoProgramCategory &&
+  rendersDraftCategory && rendersExpMemCategory && rendersExpProgCategory;
+
+reportInvariant(
+  attentionPresentationPass,
+  "Invariant 15: Operational Attention presentation renders all 4 distinct operational categories under Dikkat Gerektirenler",
+  "TrainerDashboard must present Aktif Programı Olmayan Üyeler, Taslak Programlar, Süresi Bitmiş Aktif Üyelikler, and Süresi Bitmiş Aktif Programlar"
+);
+
+// ==========================================
+// Invariant 16: Operational Attention Empty State & Aggregate Count Suppression
+// ==========================================
+const hasGlobalEmptyState = dashboardContent.includes('Mevcut operasyon kurallarına göre dikkat gerektiren kayıt bulunmuyor');
+const hasAnyAttentionCheck = /hasAnyAttention\s*=\s*(?:hasNoProgramMembers\s*\|\|\s*hasDraftPrograms\s*\|\|\s*hasExpiredMemberships\s*\|\|\s*hasExpiredPrograms|!data\.attention)/.test(dashboardContent) ||
+  dashboardContent.includes('hasAnyAttention');
+
+// Verify NO aggregate count displayed from fixed-limit attention arrays (e.g. data.attention.xxx.length rendered as total count)
+const leaksAggregateAttentionCount = /data\.attention\.\w+\.length\s*(?:adet|toplam|sorun|kayıt)/i.test(dashboardContent);
+
+const attentionEmptyStatePass = hasGlobalEmptyState && hasAnyAttentionCheck && !leaksAggregateAttentionCount;
+
+reportInvariant(
+  attentionEmptyStatePass,
+  "Invariant 16: Controlled empty state when no attention items exist and suppression of aggregate counts from fixed LIMIT lists",
+  "TrainerDashboard must render a global empty message if all attention lists are empty and must not represent 5-item lists as total count"
+);
+
+// ==========================================
+// Invariant 17: Attention Navigation Isolation to Trainer Workspace
+// ==========================================
+const hasNoProgTarget = dashboardContent.includes('/admin/my-members/${item.id}/training-programs');
+const hasDraftProgTarget = dashboardContent.includes('/admin/my-members/${item.member_id}/training-programs/${item.id}');
+const hasExpMemTarget = dashboardContent.includes('/admin/my-members/${item.id}');
+const hasExpProgTarget = dashboardContent.includes('/admin/my-members/${item.member_id}/training-programs/${item.id}');
+
+const attentionNavPass = hasNoProgTarget && hasDraftProgTarget && hasExpMemTarget && hasExpProgTarget;
+
+reportInvariant(
+  attentionNavPass,
+  "Invariant 17: Attention actionable items link exclusively into /admin/my-members workspace subpaths",
+  "Attention actions must strictly route to /admin/my-members/:id/training-programs, /admin/my-members/:memberId/training-programs/:id, and /admin/my-members/:id"
 );
 
 // ==========================================

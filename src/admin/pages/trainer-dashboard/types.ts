@@ -1,3 +1,39 @@
+export interface AttentionMemberWithoutActiveProgram {
+  id: number;
+  uuid: string;
+  first_name: string;
+  last_name: string;
+  updated_at: string;
+}
+
+export interface AttentionDraftProgram {
+  id: number;
+  uuid: string;
+  member_id: number;
+  member_first_name: string;
+  member_last_name: string;
+  title: string;
+  updated_at: string;
+}
+
+export interface AttentionExpiredActiveMembership {
+  id: number;
+  uuid: string;
+  first_name: string;
+  last_name: string;
+  membership_end_date: string;
+}
+
+export interface AttentionExpiredActiveProgram {
+  id: number;
+  uuid: string;
+  member_id: number;
+  member_first_name: string;
+  member_last_name: string;
+  title: string;
+  end_date: string;
+}
+
 export interface TrainerDashboardData {
   trainer: {
     id: number;
@@ -22,6 +58,12 @@ export interface TrainerDashboardData {
     status: 'active' | 'inactive';
     updated_at: string;
   }>;
+  attention: {
+    members_without_active_program: AttentionMemberWithoutActiveProgram[];
+    draft_programs: AttentionDraftProgram[];
+    expired_active_memberships: AttentionExpiredActiveMembership[];
+    expired_active_programs: AttentionExpiredActiveProgram[];
+  };
 }
 
 export function isTrainerDashboardData(data: unknown): data is TrainerDashboardData {
@@ -60,6 +102,62 @@ export function isTrainerDashboardData(data: unknown): data is TrainerDashboardD
     if (typeof m.last_name !== 'string') return false;
     if (m.status !== 'active' && m.status !== 'inactive') return false;
     if (typeof m.updated_at !== 'string') return false;
+  }
+
+  // Validate attention
+  if (!d.attention || typeof d.attention !== 'object') return false;
+  const att = d.attention as Record<string, unknown>;
+
+  // 1. members_without_active_program
+  if (!Array.isArray(att.members_without_active_program)) return false;
+  for (const item of att.members_without_active_program) {
+    if (!item || typeof item !== 'object') return false;
+    const m = item as Record<string, unknown>;
+    if (typeof m.id !== 'number' || !Number.isInteger(m.id) || m.id <= 0) return false;
+    if (typeof m.uuid !== 'string') return false;
+    if (typeof m.first_name !== 'string') return false;
+    if (typeof m.last_name !== 'string') return false;
+    if (typeof m.updated_at !== 'string') return false;
+  }
+
+  // 2. draft_programs
+  if (!Array.isArray(att.draft_programs)) return false;
+  for (const item of att.draft_programs) {
+    if (!item || typeof item !== 'object') return false;
+    const p = item as Record<string, unknown>;
+    if (typeof p.id !== 'number' || !Number.isInteger(p.id) || p.id <= 0) return false;
+    if (typeof p.uuid !== 'string') return false;
+    if (typeof p.member_id !== 'number' || !Number.isInteger(p.member_id) || p.member_id <= 0) return false;
+    if (typeof p.member_first_name !== 'string') return false;
+    if (typeof p.member_last_name !== 'string') return false;
+    if (typeof p.title !== 'string') return false;
+    if (typeof p.updated_at !== 'string') return false;
+  }
+
+  // 3. expired_active_memberships
+  if (!Array.isArray(att.expired_active_memberships)) return false;
+  for (const item of att.expired_active_memberships) {
+    if (!item || typeof item !== 'object') return false;
+    const m = item as Record<string, unknown>;
+    if (typeof m.id !== 'number' || !Number.isInteger(m.id) || m.id <= 0) return false;
+    if (typeof m.uuid !== 'string') return false;
+    if (typeof m.first_name !== 'string') return false;
+    if (typeof m.last_name !== 'string') return false;
+    if (typeof m.membership_end_date !== 'string') return false;
+  }
+
+  // 4. expired_active_programs
+  if (!Array.isArray(att.expired_active_programs)) return false;
+  for (const item of att.expired_active_programs) {
+    if (!item || typeof item !== 'object') return false;
+    const p = item as Record<string, unknown>;
+    if (typeof p.id !== 'number' || !Number.isInteger(p.id) || p.id <= 0) return false;
+    if (typeof p.uuid !== 'string') return false;
+    if (typeof p.member_id !== 'number' || !Number.isInteger(p.member_id) || p.member_id <= 0) return false;
+    if (typeof p.member_first_name !== 'string') return false;
+    if (typeof p.member_last_name !== 'string') return false;
+    if (typeof p.title !== 'string') return false;
+    if (typeof p.end_date !== 'string') return false;
   }
 
   return true;
