@@ -91,6 +91,7 @@ const indexPhpSource = fs.readFileSync('api/index.php', 'utf8');
 const routeMatch = indexPhpSource.match(/preg_match\('#\^\/api\/reception\/members\/\(\[1-9\]\\d\*\)\/renew\$#'/);
 assert(routeMatch !== null, "Invariant: Exact renewal route positive integer regex found");
 const routeBlock = extractBraceBlock(indexPhpSource, "preg_match('#^/api/reception/members/([1-9]\\d*)/renew$#'");
+assert(routeBlock !== null, "Invariant: Route block extracted");
 if (routeBlock) {
     assert(routeBlock.content.includes("AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])"), "Invariant: Exact RBAC on renewal route");
     assert(routeBlock.content.includes("$method === 'POST'"), "Invariant: Method exact POST on renewal route");
@@ -107,13 +108,31 @@ assert(renewBlock !== null, "Invariant: renew() method extracted successfully");
 if (renewBlock) {
     const renewSrc = renewBlock.content;
 
-    // 3. Exact request contract
-    assert(renewSrc.includes("INVALID_JSON") && renewSrc.includes("400"), "Invariant: Invalid JSON rejection with 400");
-    assert(renewSrc.includes("count($decoded) !== 2") || renewSrc.includes("count($decoded) === 2") || renewSrc.includes("count($decoded) != 2"), "Invariant: Exact 2 fields payload count check");
-    assert(renewSrc.includes("new_start_date") && renewSrc.includes("new_end_date"), "Invariant: new_start_date and new_end_date explicitly checked");
+    // Query rejection guard
+    const queryRejectionValid = /if\s*\(\!empty\(\$_GET\)\)\s*\{[\s\S]*?Response::error\([^,]+,\s*'VALIDATION_ERROR',\s*422\);[\s\S]*?return;[\s\S]*?\}/.test(renewSrc);
+    assert(queryRejectionValid, "Invariant: Renewal rejects all query parameters with 422");
+
+    // Empty body guard
+    const emptyBodyValid = /\$rawBody\s*=\s*trim\(file_get_contents\('php:\/\/input'\)\);[\s\S]*?if\s*\(\$rawBody\s*===\s*''\)\s*\{[\s\S]*?Response::error\([^,]+,\s*'VALIDATION_ERROR',\s*422\);[\s\S]*?return;[\s\S]*?\}/.test(renewSrc);
+    assert(emptyBodyValid, "Invariant: Empty request body rejection");
+
+    // Invalid JSON guard
+    const invalidJsonValid = /if\s*\(json_last_error\(\)\s*!==\s*JSON_ERROR_NONE\)\s*\{[\s\S]*?Response::error\([^,]+,\s*'INVALID_JSON',\s*400\);[\s\S]*?return;[\s\S]*?\}/.test(renewSrc);
+    assert(invalidJsonValid, "Invariant: Invalid JSON rejection with 400");
+
+    // Exact payload validation branch
+    const payloadValidationRegex = /if\s*\(\!is_array\(\$decoded\)\s*\|\|\s*count\(\$decoded\)\s*!==\s*2\s*\|\|\s*\!isset\(\$decoded\['new_start_date'\]\)\s*\|\|\s*\!isset\(\$decoded\['new_end_date'\]\)\)\s*\{[\s\S]*?Response::error\([^,]+,\s*'VALIDATION_ERROR',\s*422\);[\s\S]*?return;[\s\S]*?\}/;
+    assert(payloadValidationRegex.test(renewSrc), "Invariant: Exact payload validation branch (count!==2 and isset checks)");
 
     // 4. Strict date contract
-    assert(renewSrc.includes("DateTime::createFromFormat('Y-m-d'"), "Invariant: Y-m-d strict parsing used in renewal");
+    const startParseValid = /\$startDateTime\s*=\s*\\DateTime::createFromFormat\('Y-m-d',\s*\$newStartDate\);/.test(renewSrc);
+    const endParseValid = /\$endDateTime\s*=\s*\\DateTime::createFromFormat\('Y-m-d',\s*\$newEndDate\);/.test(renewSrc);
+    const startRoundTrip = /\$startDateTime->format\('Y-m-d'\)\s*!==\s*\$newStartDate/.test(renewSrc);
+    const endRoundTrip = /\$endDateTime->format\('Y-m-d'\)\s*!==\s*\$newEndDate/.test(renewSrc);
+    
+    assert(startParseValid && startRoundTrip, "Invariant: Start date strict round-trip validation");
+    assert(endParseValid && endRoundTrip, "Invariant: End date strict round-trip validation");
+
     assert(renewSrc.includes("$endDateTime < $startDateTime") || renewSrc.includes("strtotime($newEndDate) < strtotime($newStartDate)"), "Invariant: End < Start check allows same-day");
     assert(!renewSrc.includes("$endDateTime <= $startDateTime") && !renewSrc.includes("strtotime($newEndDate) <= strtotime($newStartDate)"), "Invariant: <= is NOT used for date comparison (same-day allowed)");
 
@@ -171,12 +190,14 @@ if (renewBlock) {
 
     // Positive renewal ID and Throwable
     const posIdBlock = extractBraceBlock(renewSrc, "if ($renewalId <= 0)");
+    assert(posIdBlock !== null, "Invariant: Positive-ID branch block extracted");
     if (posIdBlock) {
         assert(posIdBlock.content.includes("rollBack()") && posIdBlock.content.includes("INTERNAL_ERROR") && posIdBlock.content.includes("500"), "Invariant: Positive-ID branch-scoped rollback");
         assert(posIdBlock.content.indexOf("rollBack()") < posIdBlock.content.indexOf("INTERNAL_ERROR"), "Invariant: Positive-ID rollback BEFORE response");
     }
 
     const catchBlock = extractBraceBlock(renewSrc, "catch (\\Throwable");
+    assert(catchBlock !== null, "Invariant: Throwable catch block extracted");
     if (catchBlock) {
         assert(catchBlock.content.includes("inTransaction()") && catchBlock.content.includes("rollBack()") && catchBlock.content.includes("INTERNAL_ERROR") && catchBlock.content.includes("500"), "Invariant: Throwable catch-scoped rollback");
     }
@@ -217,8 +238,10 @@ if (renewBlock) {
 // 15. Create validation scoped
 const memberControllerSource = fs.readFileSync('api/controllers/MemberController.php', 'utf8');
 const valBlock = extractBraceBlock(memberControllerSource, "private function validateMemberData");
+assert(valBlock !== null, "Invariant: validateMemberData block extracted");
 if (valBlock) {
     const isUpdateBlock = extractBraceBlock(valBlock.content, "if ($isUpdate)");
+    assert(isUpdateBlock !== null, "Invariant: isUpdate block extracted");
     if (isUpdateBlock) {
         assert(isUpdateBlock.content.includes("array_key_exists('membership_start_date'"), "Invariant: Independent membership_start_date update key rejection");
         assert(isUpdateBlock.content.includes("array_key_exists('membership_end_date'"), "Invariant: Independent membership_end_date update key rejection");
@@ -226,14 +249,23 @@ if (valBlock) {
         assert(valBlock.content.indexOf("if ($isUpdate)") < valBlock.content.indexOf("$allowedFields = ["), "Invariant: Rejection occurs before normal validation execution");
     }
 
-    assert(memberControllerSource.includes("private function validateDate") && memberControllerSource.includes("DateTime::createFromFormat('Y-m-d'"), "Invariant: Strict date format validation in MemberController shared validator");
-    assert(valBlock.content.includes("$endDateTime < $startDateTime") || valBlock.content.includes("strtotime"), "Invariant: End < Start logic inside MemberController::validateMemberData");
+    const startValValid = /if\s*\(\s*array_key_exists\('membership_start_date',\s*\$data\)\s*\)\s*\{[\s\S]*?\$this->validateDate\(\$sdate\)[\s\S]*?VALIDATION_ERROR[\s\S]*?422[\s\S]*?\}/.test(valBlock.content);
+    assert(startValValid, "Invariant: create membership_start_date validation branch has key check, string check, validateDate, and 422 error");
+
+    const endValValid = /if\s*\(\s*array_key_exists\('membership_end_date',\s*\$data\)\s*\)\s*\{[\s\S]*?\$this->validateDate\(\$edate\)[\s\S]*?VALIDATION_ERROR[\s\S]*?422[\s\S]*?\}/.test(valBlock.content);
+    assert(endValValid, "Invariant: create membership_end_date validation branch has key check, string check, validateDate, and 422 error");
+
+    const endBeforeStart = /strtotime\(\$val\['membership_end_date'\]\)\s*<\s*strtotime\(\$val\['membership_start_date'\]\)/.test(valBlock.content);
+    assert(endBeforeStart, "Invariant: create end-before-start validation uses exact strtotime comparison");
 }
 
 const createBlock = extractBraceBlock(memberControllerSource, "public function create()");
+assert(createBlock !== null, "Invariant: create() method block extracted");
 if (createBlock) {
     assert(createBlock.content.includes("validateMemberData($data, false)"), "Invariant: Create path correctly uses validateMemberData(..., false)");
     assert(createBlock.content.includes("membership_start_date") && createBlock.content.includes("membership_end_date"), "Invariant: Create INSERT carries both dates");
+    assert(createBlock.content.includes("$val['membership_start_date'] ?? null"), "Invariant: Create path maps membership_start_date value");
+    assert(createBlock.content.includes("$val['membership_end_date'] ?? null"), "Invariant: Create path maps membership_end_date value");
 }
 
 // Frontend validation
@@ -242,12 +274,14 @@ const frontendSrc = fs.readFileSync(frontendFile, 'utf8');
 
 const payloadBlockStart = frontendSrc.indexOf("const payload: any =");
 const payloadBlock = extractBraceBlock(frontendSrc.substring(payloadBlockStart), "{");
+assert(payloadBlock !== null, "Invariant: frontend payload block extracted");
 if (payloadBlock) {
     assert(!payloadBlock.content.includes("membership_start_date") && !payloadBlock.content.includes("membership_end_date"), "Invariant: Base payload strictly has no membership dates");
 }
 
 const isNewStart = frontendSrc.indexOf("if (isNew)", payloadBlockStart);
 const isNewBlock = extractBraceBlock(frontendSrc.substring(isNewStart), "{");
+assert(isNewBlock !== null, "Invariant: frontend isNew block extracted");
 if (isNewBlock) {
     assert(isNewBlock.content.includes("payload.membership_start_date =") && isNewBlock.content.includes("payload.membership_end_date ="), "Invariant: Both dates assigned exactly inside the create-only block");
 }
