@@ -32,6 +32,7 @@ const TrainerTrainingProgramEditor = lazy(() => import("../admin/pages/trainer-t
 
 const TrainerMemberDetail = lazy(() => import("../admin/pages/trainer-members/TrainerMemberDetail").then(m => ({ default: m.TrainerMemberDetail })));
 const TrainerMemberProgressPage = lazy(() => import("../admin/pages/trainer-member-progress/TrainerMemberProgressPage").then(m => ({ default: m.TrainerMemberProgressPage })));
+const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/TrainerDashboard").then(m => ({ default: m.TrainerDashboard })));
 const ReceptionPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.ReceptionPlaceholder })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
@@ -179,6 +180,10 @@ const router = createBrowserRouter([
       {
         path: "settings",
         element: <AdminSuspense><AdminSettings /></AdminSuspense>,
+      },
+      {
+        path: "trainer",
+        element: <AdminSuspense><TrainerDashboard /></AdminSuspense>,
       },
       {
         path: "my-members",

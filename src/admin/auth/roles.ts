@@ -32,7 +32,7 @@ export const getRoleStartRoute = (role: AdminRole): string => {
     case 'editor':
       return '/admin/homepage';
     case 'trainer':
-      return '/admin/my-members';
+      return '/admin/trainer';
     case 'reception':
       return '/admin/reception';
     default:
@@ -44,6 +44,7 @@ export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
   if (role === 'super_admin' || role === 'admin') return true;
   
   if (role === 'trainer') {
+    if (pathname === '/admin/trainer') return true;
     const basePath = '/admin/my-members';
     return pathname === basePath || pathname.startsWith(basePath + '/');
   }

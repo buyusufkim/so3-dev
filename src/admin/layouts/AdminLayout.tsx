@@ -129,6 +129,7 @@ export function AdminLayout() {
             <div>
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Eğitmen</h3>
               <div className="space-y-1">
+                <NavLink to="/admin/trainer" end className={navLinkClass}>Dashboard</NavLink>
                 <NavLink to="/admin/my-members" className={navLinkClass}>Bana Atanan Üyeler</NavLink>
               </div>
             </div>
