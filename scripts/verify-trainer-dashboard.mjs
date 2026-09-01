@@ -219,9 +219,117 @@ reportInvariant(
     "Invariant 7: Recent members query enforces trainer ownership, minimal fields, updated_at DESC ordering, and LIMIT 5"
 );
 
-// Invariant 8: Privacy and minimal data contract (Negative Invariant)
-// Check both SQL projection fields and response key mappings (case-insensitive)
-const forbiddenPrivacyRegex = /\b(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs)\b/i;
+// Invariant 8: Attention - members_without_active_program query isolation
+let noProgramPass = false;
+const noProgramSectionMatch = indexMethodBlock.match(/\$noProgramStmt\s*=\s*\$this->db->prepare\(\s*"([\s\S]*?)"\s*\);/);
+if (noProgramSectionMatch) {
+    const query = noProgramSectionMatch[1];
+    const hasTrainerOwnership = /m\.trainer_id\s*=\s*\?/.test(query);
+    const hasDeletedNull = /m\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasStatusActive = /m\.status\s*=\s*'active'/.test(query);
+    const hasNotExists = /NOT\s+EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+training_programs\s+tp\s+WHERE\s+tp\.member_id\s*=\s*m\.id\s+AND\s+tp\.trainer_id\s*=\s*\?\s+AND\s+tp\.status\s*=\s*'active'\s+AND\s+tp\.deleted_at\s+IS\s+NULL\s*\)/i.test(query);
+    const hasOrder = /ORDER\s+BY\s+m\.updated_at\s+DESC\s*,\s*m\.id\s+DESC/i.test(query);
+    const hasLimit5 = /\bLIMIT\s+5\b/i.test(query);
+
+    const hasBindings = indexMethodBlock.includes("$noProgramStmt->bindValue(1, $trainerId, PDO::PARAM_INT);") &&
+                        indexMethodBlock.includes("$noProgramStmt->bindValue(2, $trainerId, PDO::PARAM_INT);");
+
+    const hasFields = query.includes("m.id, m.uuid, m.first_name, m.last_name, m.updated_at");
+
+    noProgramPass = Boolean(hasTrainerOwnership && hasDeletedNull && hasStatusActive && hasNotExists && hasOrder && hasLimit5 && hasBindings && hasFields);
+}
+
+reportInvariant(
+    noProgramPass,
+    "Invariant 8: Attention 'members_without_active_program' enforces trainer scope, member active/nondeleted, NOT EXISTS active current-trainer program, LIMIT 5, and deterministic ordering"
+);
+
+// Invariant 9: Attention - draft_programs query isolation
+let draftProgPass = false;
+const draftProgSectionMatch = indexMethodBlock.match(/\$draftProgStmt\s*=\s*\$this->db->prepare\(\s*"([\s\S]*?)"\s*\);/);
+if (draftProgSectionMatch) {
+    const query = draftProgSectionMatch[1];
+    const hasTpTrainer = /tp\.trainer_id\s*=\s*\?/.test(query);
+    const hasTpDeletedNull = /tp\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasTpDraftStatus = /tp\.status\s*=\s*'draft'/.test(query);
+    const hasJoinedMemberTrainer = /m\.trainer_id\s*=\s*\?/.test(query);
+    const hasMemberDeletedNull = /m\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasMemberStatusActive = /m\.status\s*=\s*'active'/.test(query);
+    const hasOrder = /ORDER\s+BY\s+tp\.updated_at\s+DESC\s*,\s*tp\.id\s+DESC/i.test(query);
+    const hasLimit5 = /\bLIMIT\s+5\b/i.test(query);
+
+    const hasBindings = indexMethodBlock.includes("$draftProgStmt->bindValue(1, $trainerId, PDO::PARAM_INT);") &&
+                        indexMethodBlock.includes("$draftProgStmt->bindValue(2, $trainerId, PDO::PARAM_INT);");
+
+    const hasFields = query.includes("tp.id, tp.uuid, tp.member_id, tp.title, tp.updated_at") &&
+                      query.includes("m.first_name AS member_first_name") &&
+                      query.includes("m.last_name AS member_last_name");
+
+    draftProgPass = Boolean(hasTpTrainer && hasTpDeletedNull && hasTpDraftStatus && hasJoinedMemberTrainer && hasMemberDeletedNull && hasMemberStatusActive && hasOrder && hasLimit5 && hasBindings && hasFields);
+}
+
+reportInvariant(
+    draftProgPass,
+    "Invariant 9: Attention 'draft_programs' enforces dual trainer ownership (tp and joined m), active/nondeleted member, draft status, LIMIT 5, and deterministic ordering"
+);
+
+// Invariant 10: Attention - expired_active_memberships query isolation
+let expiredMemPass = false;
+const expiredMemSectionMatch = indexMethodBlock.match(/\$expiredMemStmt\s*=\s*\$this->db->prepare\(\s*"([\s\S]*?)"\s*\);/);
+if (expiredMemSectionMatch) {
+    const query = expiredMemSectionMatch[1];
+    const hasTrainerOwnership = /m\.trainer_id\s*=\s*\?/.test(query);
+    const hasDeletedNull = /m\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasStatusActive = /m\.status\s*=\s*'active'/.test(query);
+    const hasEndDateNotNull = /m\.membership_end_date\s+IS\s+NOT\s+NULL/.test(query);
+    const hasStrictlyLessThanCurdate = /m\.membership_end_date\s*<\s*CURDATE\(\)/.test(query) && !/m\.membership_end_date\s*<=\s*CURDATE\(\)/.test(query);
+    const hasOrder = /ORDER\s+BY\s+m\.membership_end_date\s+DESC\s*,\s*m\.id\s+DESC/i.test(query);
+    const hasLimit5 = /\bLIMIT\s+5\b/i.test(query);
+
+    const hasBindings = indexMethodBlock.includes("$expiredMemStmt->bindValue(1, $trainerId, PDO::PARAM_INT);");
+    const hasFields = query.includes("m.id, m.uuid, m.first_name, m.last_name, m.membership_end_date");
+
+    expiredMemPass = Boolean(hasTrainerOwnership && hasDeletedNull && hasStatusActive && hasEndDateNotNull && hasStrictlyLessThanCurdate && hasOrder && hasLimit5 && hasBindings && hasFields);
+}
+
+reportInvariant(
+    expiredMemPass,
+    "Invariant 10: Attention 'expired_active_memberships' enforces trainer ownership, active/nondeleted member, strictly < CURDATE() end date, LIMIT 5, and deterministic ordering"
+);
+
+// Invariant 11: Attention - expired_active_programs query isolation
+let expiredProgPass = false;
+const expiredProgSectionMatch = indexMethodBlock.match(/\$expiredProgStmt\s*=\s*\$this->db->prepare\(\s*"([\s\S]*?)"\s*\);/);
+if (expiredProgSectionMatch) {
+    const query = expiredProgSectionMatch[1];
+    const hasTpTrainer = /tp\.trainer_id\s*=\s*\?/.test(query);
+    const hasTpDeletedNull = /tp\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasTpActiveStatus = /tp\.status\s*=\s*'active'/.test(query);
+    const hasEndDateNotNull = /tp\.end_date\s+IS\s+NOT\s+NULL/.test(query);
+    const hasStrictlyLessThanCurdate = /tp\.end_date\s*<\s*CURDATE\(\)/.test(query) && !/tp\.end_date\s*<=\s*CURDATE\(\)/.test(query);
+    const hasJoinedMemberTrainer = /m\.trainer_id\s*=\s*\?/.test(query);
+    const hasMemberDeletedNull = /m\.deleted_at\s+IS\s+NULL/.test(query);
+    const hasMemberStatusActive = /m\.status\s*=\s*'active'/.test(query);
+    const hasOrder = /ORDER\s+BY\s+tp\.end_date\s+DESC\s*,\s*tp\.id\s+DESC/i.test(query);
+    const hasLimit5 = /\bLIMIT\s+5\b/i.test(query);
+
+    const hasBindings = indexMethodBlock.includes("$expiredProgStmt->bindValue(1, $trainerId, PDO::PARAM_INT);") &&
+                        indexMethodBlock.includes("$expiredProgStmt->bindValue(2, $trainerId, PDO::PARAM_INT);");
+
+    const hasFields = query.includes("tp.id, tp.uuid, tp.member_id, tp.title, tp.end_date") &&
+                      query.includes("m.first_name AS member_first_name") &&
+                      query.includes("m.last_name AS member_last_name");
+
+    expiredProgPass = Boolean(hasTpTrainer && hasTpDeletedNull && hasTpActiveStatus && hasEndDateNotNull && hasStrictlyLessThanCurdate && hasJoinedMemberTrainer && hasMemberDeletedNull && hasMemberStatusActive && hasOrder && hasLimit5 && hasBindings && hasFields);
+}
+
+reportInvariant(
+    expiredProgPass,
+    "Invariant 11: Attention 'expired_active_programs' enforces dual trainer ownership, active program and member, strictly < CURDATE() end date, LIMIT 5, and deterministic ordering"
+);
+
+// Invariant 12: Privacy and minimal data contract (Negative Invariant across all projections and response mappings)
+const forbiddenPrivacyRegex = /\b(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs|measurement_value)\b/i;
 
 // A. SQL Projections check
 const sqlMatches = [...controllerContent.matchAll(/SELECT\s+([\s\S]*?)\s+FROM/gi)];
@@ -235,7 +343,7 @@ for (const match of sqlMatches) {
 }
 
 // B. Response array keys check
-const forbiddenResponseKeyRegex = /(['"])(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs)\1\s*=>/i;
+const forbiddenResponseKeyRegex = /(['"])(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs|measurement_value)\1\s*=>/i;
 const hasForbiddenResponseKey = forbiddenResponseKeyRegex.test(indexMethodBlock);
 
 const noAuditLogs = !controllerContent.includes("AuditLogger") && !controllerContent.includes("audit_logs");
@@ -244,10 +352,10 @@ const privacyPass = sqlPrivacyPass && !hasForbiddenResponseKey && noAuditLogs;
 
 reportInvariant(
     privacyPass,
-    "Invariant 8: Privacy invariant confirms zero leaks in SQL projections and response array keys (case-insensitive)"
+    "Invariant 12: Privacy invariant confirms zero leaks in SQL projections and response array keys (case-insensitive)"
 );
 
-// Invariant 9: Response contract structure
+// Invariant 13: Response contract structure (including attention section)
 const hasResponseJson = controllerContent.includes("Response::json([");
 const hasTrainerSection = controllerContent.includes("'trainer' => [") &&
                           controllerContent.includes("'id' => (int)$trainer['id']") &&
@@ -255,16 +363,21 @@ const hasTrainerSection = controllerContent.includes("'trainer' => [") &&
 const hasMembersSection = controllerContent.includes("'members' => $memberMetrics");
 const hasProgramsSection = controllerContent.includes("'training_programs' => $programMetrics");
 const hasRecentSection = controllerContent.includes("'recent_members' => $recentMembers");
+const hasAttentionSection = controllerContent.includes("'attention' => [") &&
+                            controllerContent.includes("'members_without_active_program' => $membersWithoutActiveProgram") &&
+                            controllerContent.includes("'draft_programs' => $draftPrograms") &&
+                            controllerContent.includes("'expired_active_memberships' => $expiredActiveMemberships") &&
+                            controllerContent.includes("'expired_active_programs' => $expiredActivePrograms");
 
 const responseContractPass = hasResponseJson && hasTrainerSection && 
-                             hasMembersSection && hasProgramsSection && hasRecentSection;
+                             hasMembersSection && hasProgramsSection && hasRecentSection && hasAttentionSection;
 
 reportInvariant(
     responseContractPass,
-    "Invariant 9: Final JSON response strictly adheres to the trainer, members, training_programs, and recent_members contract"
+    "Invariant 13: Final JSON response strictly adheres to the trainer, members, training_programs, recent_members, and attention contract"
 );
 
-// Invariant 10: No query parameters or external filters accepted
+// Invariant 14: No query parameters or external filters accepted
 const noGetSuperglobal = !controllerContent.includes("$_GET");
 const noPostSuperglobal = !controllerContent.includes("$_POST");
 const noRequestSuperglobal = !controllerContent.includes("$_REQUEST");
@@ -274,23 +387,29 @@ const noQueryParamPass = noGetSuperglobal && noPostSuperglobal && noRequestSuper
 
 reportInvariant(
     noQueryParamPass,
-    "Invariant 10: Endpoint is a static operational overview accepting zero query parameters or arbitrary filters"
+    "Invariant 14: Endpoint is a static operational overview accepting zero query parameters or arbitrary filters"
 );
 
-// Invariant 11: Empty dataset semantics
+// Invariant 15: Empty dataset semantics
 const handlesEmptyMemberRow = controllerContent.includes("$memberRow = $memberStmt->fetch(PDO::FETCH_ASSOC) ?: [];");
 const handlesEmptyProgramRow = controllerContent.includes("$programRow = $programStmt->fetch(PDO::FETCH_ASSOC) ?: [];");
 const handlesEmptyRecentRows = controllerContent.includes("$recentRows = $recentStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];");
+const handlesEmptyNoProgramRows = controllerContent.includes("$noProgramRows = $noProgramStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];");
+const handlesEmptyDraftRows = controllerContent.includes("$draftProgRows = $draftProgStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];");
+const handlesEmptyExpiredMemRows = controllerContent.includes("$expiredMemRows = $expiredMemStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];");
+const handlesEmptyExpiredProgRows = controllerContent.includes("$expiredProgRows = $expiredProgStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];");
 const no404OnEmpty = !indexMethodBlock.includes("404");
 
-const emptySemanticsPass = handlesEmptyMemberRow && handlesEmptyProgramRow && handlesEmptyRecentRows && no404OnEmpty;
+const emptySemanticsPass = handlesEmptyMemberRow && handlesEmptyProgramRow && handlesEmptyRecentRows &&
+                           handlesEmptyNoProgramRows && handlesEmptyDraftRows && handlesEmptyExpiredMemRows && handlesEmptyExpiredProgRows &&
+                           no404OnEmpty;
 
 reportInvariant(
     emptySemanticsPass,
-    "Invariant 11: Empty dataset returns 200 with zero metrics and empty array without throwing 404"
+    "Invariant 15: Empty dataset returns 200 with zero metrics and empty attention arrays without throwing 404/422"
 );
 
-// Invariant 12: Admin dashboard isolation
+// Invariant 16: Admin dashboard isolation
 let adminIsolationPass = false;
 if (fs.existsSync(adminDashboardControllerPath)) {
     const adminIndexBlock = indexContent.includes("'/api/admin/dashboard' => function()");
@@ -301,13 +420,13 @@ if (fs.existsSync(adminDashboardControllerPath)) {
 
 reportInvariant(
     adminIsolationPass,
-    "Invariant 12: Existing admin dashboard route and AdminController remain completely isolated and intact"
+    "Invariant 16: Existing admin dashboard route and AdminController remain completely isolated and intact"
 );
 
 // Summary & Exit
 console.log("----------------------------------------");
 if (errors.length === 0) {
-    console.log("✅ Trainer Dashboard API Verification PASSED (All 12 invariants verified).");
+    console.log("✅ Trainer Dashboard API Verification PASSED (All 16 invariants verified).");
     process.exit(0);
 } else {
     console.error(`❌ Trainer Dashboard API Verification FAILED (${errors.length} errors found).`);

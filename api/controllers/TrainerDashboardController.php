@@ -113,6 +113,126 @@ class TrainerDashboardController {
             ];
         }, $recentRows);
 
+        // 4. Attention: members without active program (active non-deleted members of current trainer with no active non-deleted program by current trainer)
+        $noProgramStmt = $this->db->prepare("
+            SELECT 
+                m.id, m.uuid, m.first_name, m.last_name, m.updated_at
+            FROM members m
+            WHERE m.trainer_id = ? 
+              AND m.deleted_at IS NULL 
+              AND m.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM training_programs tp
+                  WHERE tp.member_id = m.id
+                    AND tp.trainer_id = ?
+                    AND tp.status = 'active'
+                    AND tp.deleted_at IS NULL
+              )
+            ORDER BY m.updated_at DESC, m.id DESC
+            LIMIT 5
+        ");
+        $noProgramStmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $noProgramStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $noProgramStmt->execute();
+        $noProgramRows = $noProgramStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $membersWithoutActiveProgram = array_map(function($row) {
+            return [
+                'id' => (int)$row['id'],
+                'uuid' => (string)$row['uuid'],
+                'first_name' => (string)$row['first_name'],
+                'last_name' => (string)$row['last_name'],
+                'updated_at' => (string)$row['updated_at']
+            ];
+        }, $noProgramRows);
+
+        // 5. Attention: draft programs (draft non-deleted programs of current trainer for active non-deleted members of current trainer)
+        $draftProgStmt = $this->db->prepare("
+            SELECT 
+                tp.id, tp.uuid, tp.member_id, tp.title, tp.updated_at,
+                m.first_name AS member_first_name, m.last_name AS member_last_name
+            FROM training_programs tp
+            INNER JOIN members m ON tp.member_id = m.id AND m.trainer_id = ? AND m.deleted_at IS NULL AND m.status = 'active'
+            WHERE tp.trainer_id = ? AND tp.deleted_at IS NULL AND tp.status = 'draft'
+            ORDER BY tp.updated_at DESC, tp.id DESC
+            LIMIT 5
+        ");
+        $draftProgStmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $draftProgStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $draftProgStmt->execute();
+        $draftProgRows = $draftProgStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $draftPrograms = array_map(function($row) {
+            return [
+                'id' => (int)$row['id'],
+                'uuid' => (string)$row['uuid'],
+                'member_id' => (int)$row['member_id'],
+                'member_first_name' => (string)$row['member_first_name'],
+                'member_last_name' => (string)$row['member_last_name'],
+                'title' => (string)$row['title'],
+                'updated_at' => (string)$row['updated_at']
+            ];
+        }, $draftProgRows);
+
+        // 6. Attention: expired active memberships (active non-deleted members of current trainer with membership_end_date < CURDATE())
+        $expiredMemStmt = $this->db->prepare("
+            SELECT 
+                m.id, m.uuid, m.first_name, m.last_name, m.membership_end_date
+            FROM members m
+            WHERE m.trainer_id = ? 
+              AND m.deleted_at IS NULL 
+              AND m.status = 'active'
+              AND m.membership_end_date IS NOT NULL
+              AND m.membership_end_date < CURDATE()
+            ORDER BY m.membership_end_date DESC, m.id DESC
+            LIMIT 5
+        ");
+        $expiredMemStmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $expiredMemStmt->execute();
+        $expiredMemRows = $expiredMemStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $expiredActiveMemberships = array_map(function($row) {
+            return [
+                'id' => (int)$row['id'],
+                'uuid' => (string)$row['uuid'],
+                'first_name' => (string)$row['first_name'],
+                'last_name' => (string)$row['last_name'],
+                'membership_end_date' => (string)$row['membership_end_date']
+            ];
+        }, $expiredMemRows);
+
+        // 7. Attention: expired active programs (active non-deleted programs of current trainer with end_date < CURDATE() for active non-deleted members of current trainer)
+        $expiredProgStmt = $this->db->prepare("
+            SELECT 
+                tp.id, tp.uuid, tp.member_id, tp.title, tp.end_date,
+                m.first_name AS member_first_name, m.last_name AS member_last_name
+            FROM training_programs tp
+            INNER JOIN members m ON tp.member_id = m.id AND m.trainer_id = ? AND m.deleted_at IS NULL AND m.status = 'active'
+            WHERE tp.trainer_id = ? 
+              AND tp.deleted_at IS NULL 
+              AND tp.status = 'active'
+              AND tp.end_date IS NOT NULL
+              AND tp.end_date < CURDATE()
+            ORDER BY tp.end_date DESC, tp.id DESC
+            LIMIT 5
+        ");
+        $expiredProgStmt->bindValue(1, $trainerId, PDO::PARAM_INT);
+        $expiredProgStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $expiredProgStmt->execute();
+        $expiredProgRows = $expiredProgStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $expiredActivePrograms = array_map(function($row) {
+            return [
+                'id' => (int)$row['id'],
+                'uuid' => (string)$row['uuid'],
+                'member_id' => (int)$row['member_id'],
+                'member_first_name' => (string)$row['member_first_name'],
+                'member_last_name' => (string)$row['member_last_name'],
+                'title' => (string)$row['title'],
+                'end_date' => (string)$row['end_date']
+            ];
+        }, $expiredProgRows);
+
         Response::json([
             'trainer' => [
                 'id' => (int)$trainer['id'],
@@ -120,7 +240,13 @@ class TrainerDashboardController {
             ],
             'members' => $memberMetrics,
             'training_programs' => $programMetrics,
-            'recent_members' => $recentMembers
+            'recent_members' => $recentMembers,
+            'attention' => [
+                'members_without_active_program' => $membersWithoutActiveProgram,
+                'draft_programs' => $draftPrograms,
+                'expired_active_memberships' => $expiredActiveMemberships,
+                'expired_active_programs' => $expiredActivePrograms
+            ]
         ]);
     }
 }
