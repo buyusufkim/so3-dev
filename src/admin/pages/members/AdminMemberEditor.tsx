@@ -140,20 +140,23 @@ export function AdminMemberEditor() {
          }
       }
 
-      const payload = {
+      const payload: any = {
         first_name: formData.first_name,
         last_name: formData.last_name,
         phone: formData.phone,
         email: formData.email || null,
         status: formData.status,
         trainer_id: formData.trainer_id ? parseInt(formData.trainer_id, 10) : null,
-        membership_start_date: formData.membership_start_date || null,
-        membership_end_date: formData.membership_end_date || null,
         emergency_contact_name: formData.emergency_contact_name || null,
         emergency_contact_phone: formData.emergency_contact_phone || null,
         notes: formData.notes || null,
         consent_given_at: consentVal
       };
+
+      if (isNew) {
+        payload.membership_start_date = formData.membership_start_date || null;
+        payload.membership_end_date = formData.membership_end_date || null;
+      }
 
       if (isNew) {
         const res = await apiClient.post('/api/admin/members', payload) as { id: number };
@@ -350,7 +353,9 @@ export function AdminMemberEditor() {
               type="date"
               value={formData.membership_start_date}
               onChange={(e) => handleFieldChange("membership_start_date", e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+              disabled={!isNew}
+              className={`w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors ${!isNew ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={!isNew ? "Üyelik tarihleri yenileme işlemi üzerinden güncellenmelidir." : ""}
             />
           </div>
           <div className="space-y-2">
@@ -359,7 +364,9 @@ export function AdminMemberEditor() {
               type="date"
               value={formData.membership_end_date}
               onChange={(e) => handleFieldChange("membership_end_date", e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+              disabled={!isNew}
+              className={`w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors ${!isNew ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={!isNew ? "Üyelik tarihleri yenileme işlemi üzerinden güncellenmelidir." : ""}
             />
           </div>
         </div>

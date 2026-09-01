@@ -274,6 +274,12 @@ class MemberController {
     }
 
     private function validateMemberData(array $data, bool $isUpdate): array {
+        if ($isUpdate) {
+            if (array_key_exists('membership_start_date', $data) || array_key_exists('membership_end_date', $data)) {
+                Response::error('Üyelik tarihleri yenileme işlemi üzerinden güncellenmelidir.', 'VALIDATION_ERROR', 422);
+            }
+        }
+
         $allowedFields = [
             'first_name', 'last_name', 'phone', 'email', 'status', 'trainer_id',
             'membership_start_date', 'membership_end_date', 'emergency_contact_name', 
@@ -548,15 +554,6 @@ class MemberController {
 
         $data = $this->getJsonInput();
         $val = $this->validateMemberData($data, true);
-        
-        $testStartDate = array_key_exists('membership_start_date', $val) ? $val['membership_start_date'] : $member['membership_start_date'];
-        $testEndDate = array_key_exists('membership_end_date', $val) ? $val['membership_end_date'] : $member['membership_end_date'];
-        
-        if ($testStartDate && $testEndDate) {
-            if (strtotime($testEndDate) < strtotime($testStartDate)) {
-                Response::error("Bitiş tarihi başlangıç tarihinden önce olamaz.", 'VALIDATION_ERROR', 422);
-            }
-        }
 
         try {
             $this->db->beginTransaction();
