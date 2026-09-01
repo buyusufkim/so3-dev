@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-033
+-- Generated from migrations 001-034
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -559,6 +559,26 @@ CREATE TABLE IF NOT EXISTS `member_visits` (
 CREATE INDEX `idx_member_visits_member_open` ON `member_visits`(`member_id`, `checked_out_at`);
 CREATE INDEX `idx_member_visits_open_checked_in` ON `member_visits`(`checked_out_at`, `checked_in_at`);
 
+-- Migration: 034_create_membership_renewals.sql
+-- Description: Creates append-only membership_renewals table to track membership history.
+
+CREATE TABLE IF NOT EXISTS `membership_renewals` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `member_id` INT NOT NULL,
+    `previous_start_date` DATE NULL,
+    `previous_end_date` DATE NULL,
+    `new_start_date` DATE NOT NULL,
+    `new_end_date` DATE NOT NULL,
+    `renewed_by` INT NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_membership_renewals_member_id` FOREIGN KEY (`member_id`) REFERENCES `members`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_membership_renewals_renewed_by` FOREIGN KEY (`renewed_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_membership_renewals_member_created` ON `membership_renewals`(`member_id`, `created_at`);
+
+
 
 
 -- Migration: 023_seed_trainers.sql
@@ -889,6 +909,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('030_create_members.sql', CURRENT_TIMESTAMP),
 ('031_create_training_programs.sql', CURRENT_TIMESTAMP),
 ('032_create_member_progress.sql', CURRENT_TIMESTAMP),
-('033_create_member_visits.sql', CURRENT_TIMESTAMP);
+('033_create_member_visits.sql', CURRENT_TIMESTAMP),
+('034_create_membership_renewals.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
