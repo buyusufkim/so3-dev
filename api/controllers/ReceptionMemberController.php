@@ -107,18 +107,18 @@ class ReceptionMemberController
 
         $rawBody = trim(file_get_contents('php://input'));
         if ($rawBody !== '') {
-            $decoded = json_decode($rawBody, true);
+            $decoded = json_decode($rawBody);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
                 return;
             }
-            if (!is_array($decoded) || (array_keys($decoded) === range(0, count($decoded) - 1) && count($decoded) > 0) || (array_keys($decoded) === [] && $rawBody === '[]')) {
-                 Response::error('İstek gövdesi (body) boş bir nesne {} olmalıdır.', 'VALIDATION_ERROR', 422);
-                 return;
+            if (!($decoded instanceof \stdClass)) {
+                Response::error('İstek gövdesi (body) boş bir JSON nesnesi {} olmalıdır.', 'VALIDATION_ERROR', 422);
+                return;
             }
-            if (!empty($decoded)) {
-                 Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
-                 return;
+            if (count(get_object_vars($decoded)) !== 0) {
+                Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
+                return;
             }
         }
 
