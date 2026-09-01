@@ -344,6 +344,71 @@ class ReceptionMemberController
         }
     }
 
+    public function occupancy()
+    {
+        if (!empty($_GET)) {
+            Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $db = Database::getInstance()->getConnection();
+
+        $sql = "SELECT 
+                    mv.id AS visit_id,
+                    mv.uuid AS visit_uuid,
+                    mv.member_id,
+                    mv.checked_in_at,
+                    m.uuid AS member_uuid,
+                    m.first_name,
+                    m.last_name,
+                    IF(DATE(mv.checked_in_at) < CURDATE(), 1, 0) AS is_stale
+                FROM member_visits mv
+                JOIN members m ON mv.member_id = m.id
+                WHERE mv.checked_out_at IS NULL
+                ORDER BY is_stale DESC, mv.checked_in_at ASC, mv.id ASC";
+
+        try {
+            $stmt = $db->prepare($sql);
+            $stmt->execute();
+            $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            $items = [];
+            $staleCount = 0;
+
+            foreach ($results as $row) {
+                $isStale = (bool)$row['is_stale'];
+                if ($isStale) {
+                    $staleCount++;
+                }
+
+                $items[] = [
+                    'visit' => [
+                        'id' => (int)$row['visit_id'],
+                        'uuid' => (string)$row['visit_uuid'],
+                        'checked_in_at' => (string)$row['checked_in_at']
+                    ],
+                    'member' => [
+                        'id' => (int)$row['member_id'],
+                        'uuid' => (string)$row['member_uuid'],
+                        'first_name' => (string)$row['first_name'],
+                        'last_name' => (string)$row['last_name']
+                    ],
+                    'is_stale' => $isStale
+                ];
+            }
+
+            Response::json([
+                'current_count' => count($items),
+                'stale_count' => $staleCount,
+                'items' => $items
+            ]);
+
+        } catch (\Throwable $e) {
+            error_log("ReceptionMemberController occupancy error: " . $e->getMessage());
+            Response::error('Doluluk bilgisi alınırken beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
     private function generateUuid(): string 
     {
         $data = random_bytes(16);

@@ -548,6 +548,15 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/reception/occupancy$#', $requestUri)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/ReceptionMemberController.php';
+            (new \Controllers\ReceptionMemberController())->occupancy();
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for trainer member measurements endpoints
     if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::hasRole(['trainer']);
