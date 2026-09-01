@@ -9,25 +9,35 @@ class ReceptionMemberController
 {
     public function index()
     {
+        // Strict query parameter allowlist
+        $allowedKeys = ['q'];
+        $requestKeys = array_keys($_GET);
+        $extraKeys = array_diff($requestKeys, $allowedKeys);
+        
+        if (!empty($extraKeys)) {
+            Response::error('Yalnızca q parametresine izin verilmektedir.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
         $q = $_GET['q'] ?? null;
 
         if (!is_string($q)) {
-            Response::json(['error' => 'Validation error: q parameter is required'], 422);
+            Response::error('Arama parametresi (q) eksik veya geçersiz.', 'VALIDATION_ERROR', 422);
             return;
         }
 
         $q = trim($q);
 
         if (mb_strlen($q) < 2 || mb_strlen($q) > 80) {
-            Response::json(['error' => 'Validation error: q must be between 2 and 80 characters'], 422);
+            Response::error('Arama terimi 2 ile 80 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
             return;
         }
-
-        $db = Database::getInstance()->getConnection();
 
         // Escape wildcards for LIKE
         $escapedQ = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $q);
         $likePattern = '%' . $escapedQ . '%';
+
+        $db = Database::getInstance()->getConnection();
 
         $sql = "SELECT 
                     m.id, 
@@ -42,10 +52,10 @@ class ReceptionMemberController
                 WHERE m.deleted_at IS NULL 
                 AND (
                     m.uuid = :exact_q OR 
-                    m.first_name LIKE :like_q OR 
-                    m.last_name LIKE :like_q OR 
-                    CONCAT(m.first_name, ' ', m.last_name) LIKE :like_q OR 
-                    m.phone LIKE :like_q
+                    m.first_name LIKE :like_q_1 ESCAPE '\\\\' OR 
+                    m.last_name LIKE :like_q_2 ESCAPE '\\\\' OR 
+                    CONCAT(m.first_name, ' ', m.last_name) LIKE :like_q_3 ESCAPE '\\\\' OR 
+                    m.phone LIKE :like_q_4 ESCAPE '\\\\'
                 )
                 ORDER BY m.last_name ASC, m.first_name ASC, m.id ASC
                 LIMIT 20";
@@ -53,7 +63,10 @@ class ReceptionMemberController
         try {
             $stmt = $db->prepare($sql);
             $stmt->bindValue(':exact_q', $q, \PDO::PARAM_STR);
-            $stmt->bindValue(':like_q', $likePattern, \PDO::PARAM_STR);
+            $stmt->bindValue(':like_q_1', $likePattern, \PDO::PARAM_STR);
+            $stmt->bindValue(':like_q_2', $likePattern, \PDO::PARAM_STR);
+            $stmt->bindValue(':like_q_3', $likePattern, \PDO::PARAM_STR);
+            $stmt->bindValue(':like_q_4', $likePattern, \PDO::PARAM_STR);
             $stmt->execute();
             
             $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -75,7 +88,7 @@ class ReceptionMemberController
             Response::json(['items' => $items]);
         } catch (\Exception $e) {
             error_log("ReceptionMemberController index error: " . $e->getMessage());
-            Response::json(['error' => 'An error occurred while searching members.'], 500);
+            Response::error('Üye araması sırasında bir hata oluştu.', 'INTERNAL_ERROR', 500);
         }
     }
 }
