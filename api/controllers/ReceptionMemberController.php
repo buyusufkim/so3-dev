@@ -90,6 +90,8 @@ class ReceptionMemberController
             error_log("ReceptionMemberController index error: " . $e->getMessage());
             Response::error('Üye araması sırasında bir hata oluştu.', 'INTERNAL_ERROR', 500);
         }
+    }
+
     public function checkIn($id)
     {
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
@@ -104,9 +106,20 @@ class ReceptionMemberController
         }
 
         $rawBody = trim(file_get_contents('php://input'));
-        if ($rawBody !== '' && $rawBody !== '{}') {
-            Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
-            return;
+        if ($rawBody !== '') {
+            $decoded = json_decode($rawBody, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+                return;
+            }
+            if (!is_array($decoded) || (array_keys($decoded) === range(0, count($decoded) - 1) && count($decoded) > 0) || (array_keys($decoded) === [] && $rawBody === '[]')) {
+                 Response::error('İstek gövdesi (body) boş bir nesne {} olmalıdır.', 'VALIDATION_ERROR', 422);
+                 return;
+            }
+            if (!empty($decoded)) {
+                 Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
+                 return;
+            }
         }
 
         $db = Database::getInstance()->getConnection();
@@ -202,7 +215,7 @@ class ReceptionMemberController
                 ]
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
