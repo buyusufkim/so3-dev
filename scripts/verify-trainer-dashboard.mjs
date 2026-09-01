@@ -23,6 +23,23 @@ function reportInvariant(pass, name, details = '') {
     }
 }
 
+function extractBalancedBlock(content, openChar = '{', closeChar = '}', startIndex = 0) {
+    const openIndex = content.indexOf(openChar, startIndex);
+    if (openIndex === -1) return '';
+    let depth = 1;
+    for (let i = openIndex + 1; i < content.length; i++) {
+        if (content[i] === openChar) {
+            depth++;
+        } else if (content[i] === closeChar) {
+            depth--;
+            if (depth === 0) {
+                return content.substring(openIndex + 1, i);
+            }
+        }
+    }
+    return '';
+}
+
 console.log("Starting Trainer Dashboard Read API verification (Deterministic Contract Guard)...");
 
 // Invariant 1: Required backend files exist
@@ -37,31 +54,43 @@ if (!filesExist) {
 const controllerContent = fs.readFileSync(controllerPath, 'utf8');
 const indexContent = fs.readFileSync(indexPath, 'utf8');
 
-// Invariant 2: Route wiring and role firewall
+// Invariant 2: Route wiring and role firewall (Strict GET-branch balanced isolation)
 const routePattern = "preg_match('#^/api/trainer/dashboard$#', $requestUri)";
 const routeIndex = indexContent.indexOf(routePattern);
 let routePass = false;
 
 if (routeIndex !== -1) {
-    // Extract route block until the next dynamic matching comment or block
-    const nextRouteIndex = indexContent.indexOf("// Dynamic matching for trainer members", routeIndex);
-    const routeBlock = nextRouteIndex !== -1 
-        ? indexContent.substring(routeIndex, nextRouteIndex) 
-        : indexContent.substring(routeIndex, routeIndex + 400);
+    const routeBlock = extractBalancedBlock(indexContent, '{', '}', routeIndex);
 
     const hasTrainerFirewall = routeBlock.includes("AuthMiddleware::hasRole(['trainer']);");
-    const hasGetOnly = routeBlock.includes("if ($method === 'GET')");
-    const callsController = routeBlock.includes("(new \\Controllers\\TrainerDashboardController())->index();");
-    const setsMatched = routeBlock.includes("$matched = true;");
-
-    const noPost = !routeBlock.includes("$method === 'POST'");
-    const noPatch = !routeBlock.includes("$method === 'PATCH'");
-    const noPut = !routeBlock.includes("$method === 'PUT'");
-    const noDelete = !routeBlock.includes("$method === 'DELETE'");
+    
+    // Check for absence of mutation handlers and admin roles in the route block
+    const noPost = !routeBlock.match(/\$method\s*===?\s*['"]POST['"]/i);
+    const noPatch = !routeBlock.match(/\$method\s*===?\s*['"]PATCH['"]/i);
+    const noPut = !routeBlock.match(/\$method\s*===?\s*['"]PUT['"]/i);
+    const noDelete = !routeBlock.match(/\$method\s*===?\s*['"]DELETE['"]/i);
     const noAdminRole = !routeBlock.includes("'admin'");
 
-    routePass = hasTrainerFirewall && hasGetOnly && callsController && setsMatched &&
-                noPost && noPatch && noPut && noDelete && noAdminRole;
+    // Extract the GET branch block specifically
+    const getMatch = routeBlock.match(/if\s*\(\s*\$method\s*===?\s*['"]GET['"]\s*\)/);
+    let getBranchPass = false;
+
+    if (getMatch && getMatch.index !== undefined) {
+        const getBranchBlock = extractBalancedBlock(routeBlock, '{', '}', getMatch.index);
+        const callsControllerInGet = getBranchBlock.includes("(new \\Controllers\\TrainerDashboardController())->index();");
+        const setsMatchedInGet = getBranchBlock.includes("$matched = true;");
+
+        const matchedInRouteCount = (routeBlock.match(/\$matched\s*=\s*true\s*;/g) || []).length;
+        const matchedInGetCount = (getBranchBlock.match(/\$matched\s*=\s*true\s*;/g) || []).length;
+        const controllerInRouteCount = (routeBlock.match(/TrainerDashboardController/g) || []).length;
+        const controllerInGetCount = (getBranchBlock.match(/TrainerDashboardController/g) || []).length;
+
+        getBranchPass = Boolean(callsControllerInGet && setsMatchedInGet && 
+                                matchedInRouteCount === 1 && matchedInGetCount === 1 &&
+                                controllerInRouteCount === 1 && controllerInGetCount === 1);
+    }
+
+    routePass = Boolean(hasTrainerFirewall && getBranchPass && noPost && noPatch && noPut && noDelete && noAdminRole);
 }
 
 reportInvariant(
@@ -191,22 +220,31 @@ reportInvariant(
 );
 
 // Invariant 8: Privacy and minimal data contract (Negative Invariant)
-// Ensure no sensitive personal data or notes are selected or returned in the response
-const sqlQueriesOnly = (controllerContent.match(/SELECT[\s\S]*?FROM/gi) || []).join(' ');
+// Check both SQL projection fields and response key mappings (case-insensitive)
+const forbiddenPrivacyRegex = /\b(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs)\b/i;
 
-const noPhoneInSql = !sqlQueriesOnly.includes("phone");
-const noEmailInSql = !sqlQueriesOnly.includes("email");
-const noEmergencyContactInSql = !sqlQueriesOnly.includes("emergency_contact");
-const noNotesInSql = !sqlQueriesOnly.includes("notes") && !sqlQueriesOnly.includes("note");
-const noPasswordInSql = !sqlQueriesOnly.includes("password");
+// A. SQL Projections check
+const sqlMatches = [...controllerContent.matchAll(/SELECT\s+([\s\S]*?)\s+FROM/gi)];
+let sqlPrivacyPass = true;
+for (const match of sqlMatches) {
+    const projection = match[1];
+    if (forbiddenPrivacyRegex.test(projection)) {
+        sqlPrivacyPass = false;
+        break;
+    }
+}
+
+// B. Response array keys check
+const forbiddenResponseKeyRegex = /(['"])(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?|audit_logs)\1\s*=>/i;
+const hasForbiddenResponseKey = forbiddenResponseKeyRegex.test(indexMethodBlock);
+
 const noAuditLogs = !controllerContent.includes("AuditLogger") && !controllerContent.includes("audit_logs");
 
-const privacyPass = noPhoneInSql && noEmailInSql && noEmergencyContactInSql && 
-                    noNotesInSql && noPasswordInSql && noAuditLogs;
+const privacyPass = sqlPrivacyPass && !hasForbiddenResponseKey && noAuditLogs;
 
 reportInvariant(
     privacyPass,
-    "Invariant 8: Privacy invariant confirms zero leaks of phone, email, emergency contacts, notes, or credentials"
+    "Invariant 8: Privacy invariant confirms zero leaks in SQL projections and response array keys (case-insensitive)"
 );
 
 // Invariant 9: Response contract structure
