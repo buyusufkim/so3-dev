@@ -90,5 +90,132 @@ class ReceptionMemberController
             error_log("ReceptionMemberController index error: " . $e->getMessage());
             Response::error('Üye araması sırasında bir hata oluştu.', 'INTERNAL_ERROR', 500);
         }
+    public function checkIn($id)
+    {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        if (!$adminId) {
+            Response::error('Oturum geçersiz.', 'UNAUTHORIZED', 401);
+            return;
+        }
+
+        if (!empty($_GET)) {
+            Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $rawBody = trim(file_get_contents('php://input'));
+        if ($rawBody !== '' && $rawBody !== '{}') {
+            Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $db = Database::getInstance()->getConnection();
+
+        try {
+            $db->beginTransaction();
+
+            $stmt = $db->prepare("
+                SELECT id, status, membership_end_date, deleted_at, (membership_end_date IS NULL OR membership_end_date >= CURDATE()) AS is_eligible_date
+                FROM members
+                WHERE id = :id
+                FOR UPDATE
+            ");
+            $stmt->bindValue(':id', $id, \PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $member = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$member || $member['deleted_at'] !== null) {
+                $db->rollBack();
+                Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
+                return;
+            }
+
+            if ($member['status'] !== 'active') {
+                $db->rollBack();
+                Response::error('Üye pasif durumda. Giriş yapılamaz.', 'MEMBER_INACTIVE', 409);
+                return;
+            }
+
+            if (!$member['is_eligible_date']) {
+                $db->rollBack();
+                Response::error('Üyelik süresi dolmuş. Giriş yapılamaz.', 'MEMBERSHIP_EXPIRED', 409);
+                return;
+            }
+
+            $visitStmt = $db->prepare("
+                SELECT id 
+                FROM member_visits 
+                WHERE member_id = :id AND checked_out_at IS NULL 
+                LIMIT 1
+            ");
+            $visitStmt->bindValue(':id', $id, \PDO::PARAM_INT);
+            $visitStmt->execute();
+            
+            if ($visitStmt->fetch()) {
+                $db->rollBack();
+                Response::error('Üyenin zaten açık bir ziyareti (girişi) bulunmaktadır.', 'MEMBER_ALREADY_CHECKED_IN', 409);
+                return;
+            }
+
+            $uuid = $this->generateUuid();
+            $insertStmt = $db->prepare("
+                INSERT INTO member_visits (uuid, member_id, checked_in_by, checked_in_at)
+                VALUES (:uuid, :member_id, :checked_in_by, CURRENT_TIMESTAMP)
+            ");
+            $insertStmt->bindValue(':uuid', $uuid, \PDO::PARAM_STR);
+            $insertStmt->bindValue(':member_id', $id, \PDO::PARAM_INT);
+            $insertStmt->bindValue(':checked_in_by', $adminId, \PDO::PARAM_INT);
+            $insertStmt->execute();
+
+            $visitId = (int)$db->lastInsertId();
+
+            $fetchVisitStmt = $db->prepare("
+                SELECT checked_in_at 
+                FROM member_visits 
+                WHERE id = :id
+            ");
+            $fetchVisitStmt->bindValue(':id', $visitId, \PDO::PARAM_INT);
+            $fetchVisitStmt->execute();
+            $visitData = $fetchVisitStmt->fetch(\PDO::FETCH_ASSOC);
+
+            $db->commit();
+
+            try {
+                \Core\AuditLogger::log(
+                    'reception.member.check_in',
+                    $adminId,
+                    'member_visit',
+                    $visitId,
+                    ['member_id' => $id]
+                );
+            } catch (\Exception $e) {
+                error_log("Audit log failed for check-in $visitId: " . $e->getMessage());
+            }
+
+            Response::json([
+                'visit' => [
+                    'id' => $visitId,
+                    'uuid' => $uuid,
+                    'member_id' => $id,
+                    'checked_in_at' => (string)$visitData['checked_in_at']
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log("ReceptionMemberController checkIn error: " . $e->getMessage());
+            Response::error('Giriş işlemi sırasında beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    private function generateUuid(): string 
+    {
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 }

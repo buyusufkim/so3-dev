@@ -530,6 +530,15 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/reception/members/([1-9]\d*)/check-in$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'POST') {
+            require_once __DIR__ . '/controllers/ReceptionMemberController.php';
+            (new \Controllers\ReceptionMemberController())->checkIn((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for trainer member measurements endpoints
     if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::hasRole(['trainer']);
