@@ -17,7 +17,8 @@
     "verify:trainer-members": "node scripts/verify-trainer-members.mjs",
     "verify:trainer-measurements": "node scripts/verify-trainer-measurements.mjs",
     "verify:trainer-member-progress-frontend": "node scripts/verify-trainer-member-progress-frontend.mjs",
-    "verify:trainer-dashboard": "node scripts/verify-trainer-dashboard.mjs"
+    "verify:trainer-dashboard": "node scripts/verify-trainer-dashboard.mjs",
+    "verify:trainer-dashboard-frontend": "node scripts/verify-trainer-dashboard-frontend.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
