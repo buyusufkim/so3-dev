@@ -502,14 +502,14 @@ class ReceptionMemberController
             // create history
             $renewalUuid = $this->generateUuid();
             $insertStmt = $db->prepare("
-                INSERT INTO membership_renewals (uuid, member_id, previous_start_date, previous_end_date, new_start_date, new_end_date, renewed_by, created_at)
-                VALUES (:uuid, :member_id, :prev_start, :prev_end, :new_start, :new_end, :renewed_by, NOW())
+                INSERT INTO membership_renewals (uuid, member_id, previous_start_date, previous_end_date, new_start_date, new_end_date, renewed_by)
+                VALUES (:uuid, :member_id, :prev_start, :prev_end, :new_start, :new_end, :renewed_by)
             ");
             
             $insertStmt->bindValue(':uuid', $renewalUuid);
             $insertStmt->bindValue(':member_id', $id, \PDO::PARAM_INT);
-            $insertStmt->bindValue(':prev_start', $previousStartDate);
-            $insertStmt->bindValue(':prev_end', $previousEndDate);
+            $insertStmt->bindValue(':prev_start', $previousStartDate, $previousStartDate === null ? \PDO::PARAM_NULL : \PDO::PARAM_STR);
+            $insertStmt->bindValue(':prev_end', $previousEndDate, $previousEndDate === null ? \PDO::PARAM_NULL : \PDO::PARAM_STR);
             $insertStmt->bindValue(':new_start', $newStartDate);
             $insertStmt->bindValue(':new_end', $newEndDate);
             $insertStmt->bindValue(':renewed_by', $adminId, \PDO::PARAM_INT);
