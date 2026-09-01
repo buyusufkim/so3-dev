@@ -385,6 +385,13 @@ reportInvariant(
 // ==========================================
 // Invariant 7: Field-Level Runtime Validator Semantics (types.ts)
 // ==========================================
+function extractForLoopBlock(source, arrayName) {
+  const regex = new RegExp(`for\\s*\\([^)]*\\bof\\s+(?:att\\.|d\\.)?${arrayName}\\s*\\)\\s*\\{`);
+  const match = source.match(regex);
+  if (!match || match.index === undefined) return null;
+  return extractBalancedBlock(source, match.index);
+}
+
 const isTrainerDashboardDataBlock = extractFunctionBlock(typesContent, 'isTrainerDashboardData');
 let runtimeValidatorPass = false;
 
@@ -421,45 +428,110 @@ if (isTrainerDashboardDataBlock) {
   const tpArchivedValid = checkTpField('archived');
   const tpValid = tpTotalValid && tpDraftValid && tpActiveValid && tpArchivedValid;
 
-  // Field-level recent_members checks:
-  const recentArrayCheck = /Array\.isArray\(\s*d\.recent_members\s*\)/.test(isTrainerDashboardDataBlock);
-  const recentIdNumberCheck = /typeof\s+m\.id\s*!==\s*['"]number['"]/.test(isTrainerDashboardDataBlock);
-  const recentIdIntegerCheck = /!Number\.isInteger\(\s*m\.id\s*\)/.test(isTrainerDashboardDataBlock);
-  const recentIdPositiveCheck = /m\.id\s*<=\s*0/.test(isTrainerDashboardDataBlock);
-  const recentUuidCheck = /typeof\s+m\.uuid\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  const recentFirstNameCheck = /typeof\s+m\.first_name\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  const recentLastNameCheck = /typeof\s+m\.last_name\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  const recentUpdatedAtCheck = /typeof\s+m\.updated_at\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  
-  // Status check: must validate against both 'active' and 'inactive'
-  const recentStatusActiveCheck = /m\.status\s*!==\s*['"]active['"]/.test(isTrainerDashboardDataBlock);
-  const recentStatusInactiveCheck = /m\.status\s*!==\s*['"]inactive['"]/.test(isTrainerDashboardDataBlock);
+  // Field-level recent_members checks in its isolated loop block:
+  const recentLoop = extractForLoopBlock(isTrainerDashboardDataBlock, 'recent_members');
+  const recentArrayCheck = /Array\.isArray\(\s*(?:d\.)?recent_members\s*\)/.test(isTrainerDashboardDataBlock);
+  const recentObjCheck = /typeof\s+\w+\s*!==\s*['"]object['"]|!\w+/.test(recentLoop || '');
+  const recentIdNumberCheck = /typeof\s+\w+\.id\s*!==\s*['"]number['"]/.test(recentLoop || '');
+  const recentIdIntegerCheck = /!Number\.isInteger\(\s*\w+\.id\s*\)/.test(recentLoop || '');
+  const recentIdPositiveCheck = /\w+\.id\s*<=\s*0/.test(recentLoop || '');
+  const recentUuidCheck = /typeof\s+\w+\.uuid\s*!==\s*['"]string['"]/.test(recentLoop || '');
+  const recentFirstNameCheck = /typeof\s+\w+\.first_name\s*!==\s*['"]string['"]/.test(recentLoop || '');
+  const recentLastNameCheck = /typeof\s+\w+\.last_name\s*!==\s*['"]string['"]/.test(recentLoop || '');
+  const recentUpdatedAtCheck = /typeof\s+\w+\.updated_at\s*!==\s*['"]string['"]/.test(recentLoop || '');
+  const recentStatusActiveCheck = /\w+\.status\s*!==\s*['"]active['"]/.test(recentLoop || '');
+  const recentStatusInactiveCheck = /\w+\.status\s*!==\s*['"]inactive['"]/.test(recentLoop || '');
   const recentStatusValid = recentStatusActiveCheck && recentStatusInactiveCheck;
 
-  const recentValid = recentArrayCheck &&
+  const recentValid = Boolean(
+    recentLoop && recentArrayCheck && recentObjCheck &&
     recentIdNumberCheck && recentIdIntegerCheck && recentIdPositiveCheck &&
     recentUuidCheck && recentFirstNameCheck && recentLastNameCheck && recentUpdatedAtCheck &&
-    recentStatusValid;
+    recentStatusValid
+  );
 
   // Field-level attention checks:
-  const attentionObjCheck = /!d\.attention\s*\|\|\s*typeof\s+d\.attention\s*!==\s*['"]object['"]/.test(isTrainerDashboardDataBlock);
+  const attentionObjCheck = /!(?:d\.)?attention\s*\|\|\s*typeof\s+(?:d\.)?attention\s*!==\s*['"]object['"]/.test(isTrainerDashboardDataBlock);
   
-  // 1. members_without_active_program
-  const attNoProgArrayCheck = /Array\.isArray\(\s*att\.members_without_active_program\s*\)/.test(isTrainerDashboardDataBlock);
-  // 2. draft_programs
-  const attDraftProgArrayCheck = /Array\.isArray\(\s*att\.draft_programs\s*\)/.test(isTrainerDashboardDataBlock);
-  const attDraftProgMemberIdCheck = /typeof\s+p\.member_id\s*!==\s*['"]number['"]/.test(isTrainerDashboardDataBlock);
-  const attDraftProgTitleCheck = /typeof\s+p\.title\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  // 3. expired_active_memberships
-  const attExpMemArrayCheck = /Array\.isArray\(\s*att\.expired_active_memberships\s*\)/.test(isTrainerDashboardDataBlock);
-  const attExpMemDateCheck = /typeof\s+m\.membership_end_date\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
-  // 4. expired_active_programs
-  const attExpProgArrayCheck = /Array\.isArray\(\s*att\.expired_active_programs\s*\)/.test(isTrainerDashboardDataBlock);
-  const attExpProgDateCheck = /typeof\s+p\.end_date\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  // 1. members_without_active_program isolated loop
+  const noProgLoop = extractForLoopBlock(isTrainerDashboardDataBlock, 'members_without_active_program');
+  const attNoProgArrayCheck = /Array\.isArray\(\s*(?:att\.)?members_without_active_program\s*\)/.test(isTrainerDashboardDataBlock);
+  const noProgObjCheck = /typeof\s+\w+\s*!==\s*['"]object['"]|!\w+/.test(noProgLoop || '');
+  const noProgIdNum = /typeof\s+\w+\.id\s*!==\s*['"]number['"]/.test(noProgLoop || '');
+  const noProgIdInt = /!Number\.isInteger\(\s*\w+\.id\s*\)/.test(noProgLoop || '');
+  const noProgIdPos = /\w+\.id\s*<=\s*0/.test(noProgLoop || '');
+  const noProgUuid = /typeof\s+\w+\.uuid\s*!==\s*['"]string['"]/.test(noProgLoop || '');
+  const noProgFirst = /typeof\s+\w+\.first_name\s*!==\s*['"]string['"]/.test(noProgLoop || '');
+  const noProgLast = /typeof\s+\w+\.last_name\s*!==\s*['"]string['"]/.test(noProgLoop || '');
+  const noProgUpdated = /typeof\s+\w+\.updated_at\s*!==\s*['"]string['"]/.test(noProgLoop || '');
+  const attNoProgValid = Boolean(
+    noProgLoop && attNoProgArrayCheck && noProgObjCheck &&
+    noProgIdNum && noProgIdInt && noProgIdPos &&
+    noProgUuid && noProgFirst && noProgLast && noProgUpdated
+  );
 
-  const attentionValid = attentionObjCheck && attNoProgArrayCheck && attDraftProgArrayCheck &&
-    attDraftProgMemberIdCheck && attDraftProgTitleCheck && attExpMemArrayCheck &&
-    attExpMemDateCheck && attExpProgArrayCheck && attExpProgDateCheck;
+  // 2. draft_programs isolated loop
+  const draftProgLoop = extractForLoopBlock(isTrainerDashboardDataBlock, 'draft_programs');
+  const attDraftProgArrayCheck = /Array\.isArray\(\s*(?:att\.)?draft_programs\s*\)/.test(isTrainerDashboardDataBlock);
+  const draftProgObjCheck = /typeof\s+\w+\s*!==\s*['"]object['"]|!\w+/.test(draftProgLoop || '');
+  const draftProgIdNum = /typeof\s+\w+\.id\s*!==\s*['"]number['"]/.test(draftProgLoop || '');
+  const draftProgIdInt = /!Number\.isInteger\(\s*\w+\.id\s*\)/.test(draftProgLoop || '');
+  const draftProgIdPos = /\w+\.id\s*<=\s*0/.test(draftProgLoop || '');
+  const draftProgUuid = /typeof\s+\w+\.uuid\s*!==\s*['"]string['"]/.test(draftProgLoop || '');
+  const draftProgMemberIdNum = /typeof\s+\w+\.member_id\s*!==\s*['"]number['"]/.test(draftProgLoop || '');
+  const draftProgMemberIdInt = /!Number\.isInteger\(\s*\w+\.member_id\s*\)/.test(draftProgLoop || '');
+  const draftProgMemberIdPos = /\w+\.member_id\s*<=\s*0/.test(draftProgLoop || '');
+  const draftProgMemberFirst = /typeof\s+\w+\.member_first_name\s*!==\s*['"]string['"]/.test(draftProgLoop || '');
+  const draftProgMemberLast = /typeof\s+\w+\.member_last_name\s*!==\s*['"]string['"]/.test(draftProgLoop || '');
+  const draftProgTitle = /typeof\s+\w+\.title\s*!==\s*['"]string['"]/.test(draftProgLoop || '');
+  const draftProgUpdated = /typeof\s+\w+\.updated_at\s*!==\s*['"]string['"]/.test(draftProgLoop || '');
+  const attDraftProgValid = Boolean(
+    draftProgLoop && attDraftProgArrayCheck && draftProgObjCheck &&
+    draftProgIdNum && draftProgIdInt && draftProgIdPos && draftProgUuid &&
+    draftProgMemberIdNum && draftProgMemberIdInt && draftProgMemberIdPos &&
+    draftProgMemberFirst && draftProgMemberLast && draftProgTitle && draftProgUpdated
+  );
+
+  // 3. expired_active_memberships isolated loop
+  const expMemLoop = extractForLoopBlock(isTrainerDashboardDataBlock, 'expired_active_memberships');
+  const attExpMemArrayCheck = /Array\.isArray\(\s*(?:att\.)?expired_active_memberships\s*\)/.test(isTrainerDashboardDataBlock);
+  const expMemObjCheck = /typeof\s+\w+\s*!==\s*['"]object['"]|!\w+/.test(expMemLoop || '');
+  const expMemIdNum = /typeof\s+\w+\.id\s*!==\s*['"]number['"]/.test(expMemLoop || '');
+  const expMemIdInt = /!Number\.isInteger\(\s*\w+\.id\s*\)/.test(expMemLoop || '');
+  const expMemIdPos = /\w+\.id\s*<=\s*0/.test(expMemLoop || '');
+  const expMemUuid = /typeof\s+\w+\.uuid\s*!==\s*['"]string['"]/.test(expMemLoop || '');
+  const expMemFirst = /typeof\s+\w+\.first_name\s*!==\s*['"]string['"]/.test(expMemLoop || '');
+  const expMemLast = /typeof\s+\w+\.last_name\s*!==\s*['"]string['"]/.test(expMemLoop || '');
+  const expMemEndDate = /typeof\s+\w+\.membership_end_date\s*!==\s*['"]string['"]/.test(expMemLoop || '');
+  const attExpMemValid = Boolean(
+    expMemLoop && attExpMemArrayCheck && expMemObjCheck &&
+    expMemIdNum && expMemIdInt && expMemIdPos &&
+    expMemUuid && expMemFirst && expMemLast && expMemEndDate
+  );
+
+  // 4. expired_active_programs isolated loop
+  const expProgLoop = extractForLoopBlock(isTrainerDashboardDataBlock, 'expired_active_programs');
+  const attExpProgArrayCheck = /Array\.isArray\(\s*(?:att\.)?expired_active_programs\s*\)/.test(isTrainerDashboardDataBlock);
+  const expProgObjCheck = /typeof\s+\w+\s*!==\s*['"]object['"]|!\w+/.test(expProgLoop || '');
+  const expProgIdNum = /typeof\s+\w+\.id\s*!==\s*['"]number['"]/.test(expProgLoop || '');
+  const expProgIdInt = /!Number\.isInteger\(\s*\w+\.id\s*\)/.test(expProgLoop || '');
+  const expProgIdPos = /\w+\.id\s*<=\s*0/.test(expProgLoop || '');
+  const expProgUuid = /typeof\s+\w+\.uuid\s*!==\s*['"]string['"]/.test(expProgLoop || '');
+  const expProgMemberIdNum = /typeof\s+\w+\.member_id\s*!==\s*['"]number['"]/.test(expProgLoop || '');
+  const expProgMemberIdInt = /!Number\.isInteger\(\s*\w+\.member_id\s*\)/.test(expProgLoop || '');
+  const expProgMemberIdPos = /\w+\.member_id\s*<=\s*0/.test(expProgLoop || '');
+  const expProgMemberFirst = /typeof\s+\w+\.member_first_name\s*!==\s*['"]string['"]/.test(expProgLoop || '');
+  const expProgMemberLast = /typeof\s+\w+\.member_last_name\s*!==\s*['"]string['"]/.test(expProgLoop || '');
+  const expProgTitle = /typeof\s+\w+\.title\s*!==\s*['"]string['"]/.test(expProgLoop || '');
+  const expProgEndDate = /typeof\s+\w+\.end_date\s*!==\s*['"]string['"]/.test(expProgLoop || '');
+  const attExpProgValid = Boolean(
+    expProgLoop && attExpProgArrayCheck && expProgObjCheck &&
+    expProgIdNum && expProgIdInt && expProgIdPos && expProgUuid &&
+    expProgMemberIdNum && expProgMemberIdInt && expProgMemberIdPos &&
+    expProgMemberFirst && expProgMemberLast && expProgTitle && expProgEndDate
+  );
+
+  const attentionValid = attentionObjCheck && attNoProgValid && attDraftProgValid && attExpMemValid && attExpProgValid;
 
   runtimeValidatorPass = Boolean(trainerValid && membersValid && tpValid && recentValid && attentionValid);
 }
@@ -660,59 +732,211 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 15: Operational Attention Presentation & Category Rendering
+// Invariant 15: Operational Attention Presentation & Category Rendering (Category-Local)
 // ==========================================
-const rendersAttentionSection = dashboardContent.includes('Dikkat Gerektirenler');
-const rendersNoProgramCategory = dashboardContent.includes('Aktif Programı Olmayan Üyeler') &&
-  dashboardContent.includes('data.attention.members_without_active_program');
-const rendersDraftCategory = dashboardContent.includes('Taslak Programlar') &&
-  dashboardContent.includes('data.attention.draft_programs');
-const rendersExpMemCategory = dashboardContent.includes('Süresi Bitmiş Aktif Üyelikler') &&
-  dashboardContent.includes('data.attention.expired_active_memberships');
-const rendersExpProgCategory = dashboardContent.includes('Süresi Bitmiş Aktif Programlar') &&
-  dashboardContent.includes('data.attention.expired_active_programs');
+function extractJsxConditionBlock(source, flagName) {
+  const regex = new RegExp(`{\\s*${flagName}\\s*&&\\s*\\(`);
+  const match = source.match(regex);
+  if (!match || match.index === undefined) return null;
+  const openParenIndex = source.indexOf('(', match.index);
+  if (openParenIndex === -1) return null;
 
-const attentionPresentationPass = rendersAttentionSection && rendersNoProgramCategory &&
-  rendersDraftCategory && rendersExpMemCategory && rendersExpProgCategory;
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openParenIndex; i < source.length; i++) {
+    if (source[i] === '(') depth++;
+    else if (source[i] === ')') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(match.index, closeIndex + 1);
+}
+
+const rendersAttentionSection = dashboardContent.includes('Dikkat Gerektirenler');
+
+// 1. members_without_active_program container
+const noProgContainer = extractJsxConditionBlock(dashboardContent, 'hasNoProgramMembers');
+const rendersNoProgramCategory = Boolean(
+  noProgContainer &&
+  noProgContainer.includes('Aktif Programı Olmayan Üyeler') &&
+  noProgContainer.includes('data.attention.members_without_active_program.map')
+);
+
+// 2. draft_programs container
+const draftContainer = extractJsxConditionBlock(dashboardContent, 'hasDraftPrograms');
+const rendersDraftCategory = Boolean(
+  draftContainer &&
+  draftContainer.includes('Taslak Programlar') &&
+  draftContainer.includes('data.attention.draft_programs.map')
+);
+
+// 3. expired_active_memberships container
+const expMemContainer = extractJsxConditionBlock(dashboardContent, 'hasExpiredMemberships');
+const rendersExpMemCategory = Boolean(
+  expMemContainer &&
+  expMemContainer.includes('Süresi Bitmiş Aktif Üyelikler') &&
+  expMemContainer.includes('data.attention.expired_active_memberships.map')
+);
+
+// 4. expired_active_programs container
+const expProgContainer = extractJsxConditionBlock(dashboardContent, 'hasExpiredPrograms');
+const rendersExpProgCategory = Boolean(
+  expProgContainer &&
+  expProgContainer.includes('Süresi Bitmiş Aktif Programlar') &&
+  expProgContainer.includes('data.attention.expired_active_programs.map')
+);
+
+const attentionPresentationPass = Boolean(
+  rendersAttentionSection &&
+  rendersNoProgramCategory &&
+  rendersDraftCategory &&
+  rendersExpMemCategory &&
+  rendersExpProgCategory
+);
 
 reportInvariant(
   attentionPresentationPass,
-  "Invariant 15: Operational Attention presentation renders all 4 distinct operational categories under Dikkat Gerektirenler",
-  "TrainerDashboard must present Aktif Programı Olmayan Üyeler, Taslak Programlar, Süresi Bitmiş Aktif Üyelikler, and Süresi Bitmiş Aktif Programlar"
+  "Invariant 15: Operational Attention presentation renders all 4 distinct operational categories under Dikkat Gerektirenler with category-local containers and headings",
+  "TrainerDashboard must present Aktif Programı Olmayan Üyeler, Taslak Programlar, Süresi Bitmiş Aktif Üyelikler, and Süresi Bitmiş Aktif Programlar in dedicated category containers"
 );
 
 // ==========================================
-// Invariant 16: Operational Attention Empty State & Aggregate Count Suppression
+// Invariant 16: Operational Attention Empty State, Exact Boolean Semantics & Count Truthfulness
 // ==========================================
-const hasGlobalEmptyState = dashboardContent.includes('Mevcut operasyon kurallarına göre dikkat gerektiren kayıt bulunmuyor');
-const hasAnyAttentionCheck = /hasAnyAttention\s*=\s*(?:hasNoProgramMembers\s*\|\|\s*hasDraftPrograms\s*\|\|\s*hasExpiredMemberships\s*\|\|\s*hasExpiredPrograms|!data\.attention)/.test(dashboardContent) ||
-  dashboardContent.includes('hasAnyAttention');
+// 1. Exact boolean condition flags
+const hasNoProgramDef = /const\s+hasNoProgramMembers\s*=\s*data\.attention\.members_without_active_program\.length\s*>\s*0\s*;/.test(dashboardContent);
+const hasDraftDef = /const\s+hasDraftPrograms\s*=\s*data\.attention\.draft_programs\.length\s*>\s*0\s*;/.test(dashboardContent);
+const hasExpMemDef = /const\s+hasExpiredMemberships\s*=\s*data\.attention\.expired_active_memberships\.length\s*>\s*0\s*;/.test(dashboardContent);
+const hasExpProgDef = /const\s+hasExpiredPrograms\s*=\s*data\.attention\.expired_active_programs\.length\s*>\s*0\s*;/.test(dashboardContent);
+const booleanFlagsValid = hasNoProgramDef && hasDraftDef && hasExpMemDef && hasExpProgDef;
 
-// Verify NO aggregate count displayed from fixed-limit attention arrays (e.g. data.attention.xxx.length rendered as total count)
-const leaksAggregateAttentionCount = /data\.attention\.\w+\.length\s*(?:adet|toplam|sorun|kayıt)/i.test(dashboardContent);
+// 2. Exact hasAnyAttention definition with all 4 boolean tokens in OR expression
+const hasAnyAttentionMatch = dashboardContent.match(/const\s+hasAnyAttention\s*=\s*([^;]+);/);
+let hasAnyAttentionExact = false;
+if (hasAnyAttentionMatch) {
+  const expr = hasAnyAttentionMatch[1].trim();
+  const tokens = expr.split(/\s*\|\|\s*/).map(t => t.trim());
+  const requiredTokens = ['hasNoProgramMembers', 'hasDraftPrograms', 'hasExpiredMemberships', 'hasExpiredPrograms'];
+  hasAnyAttentionExact = (tokens.length === 4 && requiredTokens.every(t => tokens.includes(t)));
+}
 
-const attentionEmptyStatePass = hasGlobalEmptyState && hasAnyAttentionCheck && !leaksAggregateAttentionCount;
+// 3. Global empty state: !hasAnyAttention condition directly guards the empty message
+const hasGlobalEmptyMessage = dashboardContent.includes('Mevcut operasyon kurallarına göre dikkat gerektiren kayıt bulunmuyor.');
+const hasEmptyStateCondition = (
+  /!\s*hasAnyAttention\s*\?[\s\S]*?Mevcut operasyon kurallarına göre dikkat gerektiren kayıt bulunmuyor/i.test(dashboardContent) ||
+  /!\s*hasAnyAttention\s*&&[\s\S]*?Mevcut operasyon kurallarına göre dikkat gerektiren kayıt bulunmuyor/i.test(dashboardContent)
+);
+const emptyStateValid = hasGlobalEmptyMessage && hasEmptyStateCondition;
+
+// 4. Strict count truthfulness: .length on attention arrays must only be used in the 4 boolean flag declarations (no aggregate/UI count)
+const allAttentionLengthMatches = [...dashboardContent.matchAll(/(?:data\.attention\.|attention\.)?(members_without_active_program|draft_programs|expired_active_memberships|expired_active_programs)\.length\b/g)];
+const exactFourLengthUsages = (allAttentionLengthMatches.length === 4) && booleanFlagsValid;
+
+const attentionEmptyStatePass = Boolean(
+  booleanFlagsValid &&
+  hasAnyAttentionExact &&
+  emptyStateValid &&
+  exactFourLengthUsages
+);
 
 reportInvariant(
   attentionEmptyStatePass,
-  "Invariant 16: Controlled empty state when no attention items exist and suppression of aggregate counts from fixed LIMIT lists",
-  "TrainerDashboard must render a global empty message if all attention lists are empty and must not represent 5-item lists as total count"
+  "Invariant 16: Controlled empty state governed by exact 4-term hasAnyAttention semantics and strict suppression of aggregate counts from fixed LIMIT lists",
+  "TrainerDashboard must evaluate hasAnyAttention across all 4 boolean flags, render the global empty message on !hasAnyAttention, and prohibit aggregate .length representations"
 );
 
 // ==========================================
-// Invariant 17: Attention Navigation Isolation to Trainer Workspace
+// Invariant 17: Attention Navigation Isolation to Trainer Workspace (Category-Local)
 // ==========================================
-const hasNoProgTarget = dashboardContent.includes('/admin/my-members/${item.id}/training-programs');
-const hasDraftProgTarget = dashboardContent.includes('/admin/my-members/${item.member_id}/training-programs/${item.id}');
-const hasExpMemTarget = dashboardContent.includes('/admin/my-members/${item.id}');
-const hasExpProgTarget = dashboardContent.includes('/admin/my-members/${item.member_id}/training-programs/${item.id}');
+function extractMapBlock(source, arrayName) {
+  const regex = new RegExp(`(?:data\\.attention\\.|attention\\.)?${arrayName}\\.map\\s*\\(`);
+  const match = source.match(regex);
+  if (!match || match.index === undefined) return null;
+  const openParenIndex = source.indexOf('(', match.index);
+  if (openParenIndex === -1) return null;
 
-const attentionNavPass = hasNoProgTarget && hasDraftProgTarget && hasExpMemTarget && hasExpProgTarget;
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openParenIndex; i < source.length; i++) {
+    if (source[i] === '(') depth++;
+    else if (source[i] === ')') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(match.index, closeIndex + 1);
+}
+
+// 1. members_without_active_program map block
+const noProgMapBlock = extractMapBlock(dashboardContent, 'members_without_active_program');
+const hasNoProgTarget = Boolean(
+  noProgMapBlock &&
+  /to=\{`\/admin\/my-members\/\$\{\w+\.id\}\/training-programs`\}/.test(noProgMapBlock) &&
+  !/to=\{`\/admin\/my-members\/\$\{\w+\.id\}`\}/.test(noProgMapBlock) &&
+  !noProgMapBlock.includes('/admin/members/')
+);
+
+// 2. draft_programs map block
+const draftMapBlock = extractMapBlock(dashboardContent, 'draft_programs');
+const hasDraftProgTarget = Boolean(
+  draftMapBlock &&
+  /to=\{`\/admin\/my-members\/\$\{\w+\.member_id\}\/training-programs\/\$\{\w+\.id\}`\}/.test(draftMapBlock) &&
+  !draftMapBlock.includes('/admin/members/')
+);
+
+// 3. expired_active_memberships map block (must NOT have /training-programs suffix)
+const expMemMapBlock = extractMapBlock(dashboardContent, 'expired_active_memberships');
+const hasExpMemTarget = Boolean(
+  expMemMapBlock &&
+  /to=\{`\/admin\/my-members\/\$\{\w+\.id\}`\}/.test(expMemMapBlock) &&
+  !expMemMapBlock.includes('/training-programs') &&
+  !expMemMapBlock.includes('/admin/members/')
+);
+
+// 4. expired_active_programs map block
+const expProgMapBlock = extractMapBlock(dashboardContent, 'expired_active_programs');
+const hasExpProgTarget = Boolean(
+  expProgMapBlock &&
+  /to=\{`\/admin\/my-members\/\$\{\w+\.member_id\}\/training-programs\/\$\{\w+\.id\}`\}/.test(expProgMapBlock) &&
+  !expProgMapBlock.includes('/admin/members/')
+);
+
+// Negative isolation in attention section: no admin links or API calls
+const attentionHeaderIndex = dashboardContent.indexOf('Dikkat Gerektirenler');
+const attentionSectionSnippet = attentionHeaderIndex !== -1 ? dashboardContent.slice(attentionHeaderIndex, attentionHeaderIndex + 8000) : '';
+const forbiddenAttentionTargets = ['/admin/settings', '/admin/trainers', '/admin/reception', '/admin/media', '/api/'];
+let noForbiddenAttentionLinks = !/(?:to=['"`]|href=['"`])\/admin\/members(?!\/my-members)/.test(attentionSectionSnippet);
+
+if (noForbiddenAttentionLinks) {
+  for (const fl of forbiddenAttentionTargets) {
+    if (attentionSectionSnippet.includes(`"${fl}"`) || attentionSectionSnippet.includes(`'${fl}'`) || attentionSectionSnippet.includes(`\`${fl}`)) {
+      noForbiddenAttentionLinks = false;
+      break;
+    }
+  }
+}
+
+const attentionNavPass = Boolean(
+  hasNoProgTarget &&
+  hasDraftProgTarget &&
+  hasExpMemTarget &&
+  hasExpProgTarget &&
+  noForbiddenAttentionLinks
+);
 
 reportInvariant(
   attentionNavPass,
-  "Invariant 17: Attention actionable items link exclusively into /admin/my-members workspace subpaths",
-  "Attention actions must strictly route to /admin/my-members/:id/training-programs, /admin/my-members/:memberId/training-programs/:id, and /admin/my-members/:id"
+  "Invariant 17: Attention actionable items link exclusively into verified category-local /admin/my-members workspace subpaths with zero forbidden leaks",
+  "Attention actions must strictly route to /admin/my-members/:id/training-programs, /admin/my-members/:memberId/training-programs/:id, and exact /admin/my-members/:id"
 );
 
 // ==========================================
