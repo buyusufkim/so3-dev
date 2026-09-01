@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-027
+-- Generated from migrations 001-032
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -26,7 +26,7 @@ CREATE TABLE `admins` (
   `email` VARCHAR(100) NOT NULL UNIQUE,
   `password_hash` VARCHAR(255) NOT NULL,
   `display_name` VARCHAR(100) NOT NULL,
-  `role` ENUM('super_admin', 'admin', 'editor') NOT NULL DEFAULT 'editor',
+  `role` ENUM('super_admin', 'admin', 'editor', 'trainer', 'reception') NOT NULL DEFAULT 'editor',
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `last_login_at` DATETIME NULL,
   `last_login_ip` VARCHAR(45) NULL,
@@ -376,6 +376,7 @@ CREATE TABLE IF NOT EXISTS `trainers` (
     `bio` TEXT NULL,
     `profile_media_id` INT NULL,
     `instagram_username` VARCHAR(80) NULL,
+    `admin_id` INT NULL,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
     `sort_order` INT NOT NULL DEFAULT 0,
     `created_by` INT NULL,
@@ -384,6 +385,8 @@ CREATE TABLE IF NOT EXISTS `trainers` (
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` TIMESTAMP NULL,
     CONSTRAINT `fk_trainer_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE RESTRICT,
+    CONSTRAINT `uq_trainers_admin_id` UNIQUE (`admin_id`),
+    CONSTRAINT `fk_trainers_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
     CONSTRAINT `fk_trainer_profile_media` FOREIGN KEY (`profile_media_id`) REFERENCES `media_assets` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_trainer_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_trainer_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
@@ -393,6 +396,148 @@ CREATE INDEX idx_trainers_branch_id ON trainers(branch_id);
 CREATE INDEX idx_trainers_is_active ON trainers(is_active);
 CREATE INDEX idx_trainers_sort_order ON trainers(sort_order);
 CREATE INDEX idx_trainers_deleted_at ON trainers(deleted_at);
+
+CREATE TABLE IF NOT EXISTS `members` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `first_name` VARCHAR(80) NOT NULL,
+    `last_name` VARCHAR(80) NOT NULL,
+    `phone` VARCHAR(20) NOT NULL,
+    `email` VARCHAR(120) NULL,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `trainer_id` INT NULL,
+    `membership_start_date` DATE NULL,
+    `membership_end_date` DATE NULL,
+    `emergency_contact_name` VARCHAR(120) NULL,
+    `emergency_contact_phone` VARCHAR(20) NULL,
+    `notes` TEXT NULL,
+    `consent_given_at` DATETIME NULL,
+    `created_by` INT NULL,
+    `updated_by` INT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+
+    CONSTRAINT `fk_members_trainer` FOREIGN KEY (`trainer_id`) REFERENCES `trainers`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_members_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_members_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_members_phone` ON `members`(`phone`);
+CREATE INDEX `idx_members_email` ON `members`(`email`);
+CREATE INDEX `idx_members_status` ON `members`(`status`);
+CREATE INDEX `idx_members_trainer_id` ON `members`(`trainer_id`);
+CREATE INDEX `idx_members_membership_end_date` ON `members`(`membership_end_date`);
+CREATE INDEX `idx_members_deleted_at` ON `members`(`deleted_at`);
+CREATE INDEX `idx_members_status_deleted` ON `members`(`status`, `deleted_at`);
+CREATE INDEX `idx_members_trainer_status_deleted` ON `members`(`trainer_id`, `status`, `deleted_at`);
+
+CREATE TABLE IF NOT EXISTS `training_programs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `member_id` INT NOT NULL,
+    `trainer_id` INT NOT NULL,
+    `title` VARCHAR(160) NOT NULL,
+    `status` ENUM('draft', 'active', 'archived') NOT NULL DEFAULT 'draft',
+    `start_date` DATE NULL,
+    `end_date` DATE NULL,
+    `notes` TEXT NULL,
+    `created_by` INT NULL,
+    `updated_by` INT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+    CONSTRAINT `fk_training_programs_member_id` FOREIGN KEY (`member_id`) REFERENCES `members`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_training_programs_trainer_id` FOREIGN KEY (`trainer_id`) REFERENCES `trainers`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_training_programs_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_training_programs_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_training_programs_member_id` ON `training_programs`(`member_id`);
+CREATE INDEX `idx_training_programs_trainer_id` ON `training_programs`(`trainer_id`);
+CREATE INDEX `idx_training_programs_status` ON `training_programs`(`status`);
+CREATE INDEX `idx_training_programs_deleted_at` ON `training_programs`(`deleted_at`);
+CREATE INDEX `idx_training_programs_member_status_deleted` ON `training_programs`(`member_id`, `status`, `deleted_at`);
+CREATE INDEX `idx_training_programs_trainer_status_deleted` ON `training_programs`(`trainer_id`, `status`, `deleted_at`);
+
+CREATE TABLE IF NOT EXISTS `program_exercises` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `program_id` INT NOT NULL,
+    `exercise_name` VARCHAR(160) NOT NULL,
+    `sets` SMALLINT UNSIGNED NULL,
+    `repetitions` VARCHAR(40) NULL,
+    `duration_seconds` INT UNSIGNED NULL,
+    `rest_seconds` SMALLINT UNSIGNED NULL,
+    `instructions` VARCHAR(1000) NULL,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_program_exercises_program_id` FOREIGN KEY (`program_id`) REFERENCES `training_programs`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_program_exercises_program_sort` ON `program_exercises`(`program_id`, `sort_order`);
+
+-- Migration: 032_create_member_progress.sql
+-- Description: Creates member_measurements and member_progress_notes tables for operational fitness progress tracking.
+-- Note: Contains general fitness training and body metrics only. Sensitive medical data must not be stored.
+
+CREATE TABLE IF NOT EXISTS `member_measurements` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `member_id` INT NOT NULL,
+    `trainer_id` INT NOT NULL,
+    `measured_at` DATETIME NOT NULL,
+    `weight_kg` DECIMAL(6,2) NULL,
+    `body_fat_percent` DECIMAL(5,2) NULL,
+    `chest_cm` DECIMAL(6,2) NULL,
+    `waist_cm` DECIMAL(6,2) NULL,
+    `hip_cm` DECIMAL(6,2) NULL,
+    `arm_cm` DECIMAL(6,2) NULL,
+    `thigh_cm` DECIMAL(6,2) NULL,
+    `notes` VARCHAR(1000) NULL COMMENT 'General training and measurement notes',
+    `created_by` INT NULL,
+    `updated_by` INT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+    CONSTRAINT `fk_member_measurements_member_id` FOREIGN KEY (`member_id`) REFERENCES `members`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_measurements_trainer_id` FOREIGN KEY (`trainer_id`) REFERENCES `trainers`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_measurements_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_measurements_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_member_measurements_member_id` ON `member_measurements`(`member_id`);
+CREATE INDEX `idx_member_measurements_trainer_id` ON `member_measurements`(`trainer_id`);
+CREATE INDEX `idx_member_measurements_measured_at` ON `member_measurements`(`measured_at`);
+CREATE INDEX `idx_member_measurements_deleted_at` ON `member_measurements`(`deleted_at`);
+CREATE INDEX `idx_member_measurements_member_measured_deleted` ON `member_measurements`(`member_id`, `measured_at`, `deleted_at`);
+CREATE INDEX `idx_member_measurements_trainer_measured_deleted` ON `member_measurements`(`trainer_id`, `measured_at`, `deleted_at`);
+
+CREATE TABLE IF NOT EXISTS `member_progress_notes` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `member_id` INT NOT NULL,
+    `trainer_id` INT NOT NULL,
+    `recorded_at` DATETIME NOT NULL,
+    `note` TEXT NOT NULL COMMENT 'General training progress note',
+    `created_by` INT NULL,
+    `updated_by` INT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+    CONSTRAINT `fk_member_progress_notes_member_id` FOREIGN KEY (`member_id`) REFERENCES `members`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_progress_notes_trainer_id` FOREIGN KEY (`trainer_id`) REFERENCES `trainers`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_progress_notes_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_member_progress_notes_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_member_progress_notes_member_id` ON `member_progress_notes`(`member_id`);
+CREATE INDEX `idx_member_progress_notes_trainer_id` ON `member_progress_notes`(`trainer_id`);
+CREATE INDEX `idx_member_progress_notes_recorded_at` ON `member_progress_notes`(`recorded_at`);
+CREATE INDEX `idx_member_progress_notes_deleted_at` ON `member_progress_notes`(`deleted_at`);
+CREATE INDEX `idx_member_progress_notes_member_recorded_deleted` ON `member_progress_notes`(`member_id`, `recorded_at`, `deleted_at`);
+CREATE INDEX `idx_member_progress_notes_trainer_recorded_deleted` ON `member_progress_notes`(`trainer_id`, `recorded_at`, `deleted_at`);
+
 
 -- Migration: 023_seed_trainers.sql
 INSERT IGNORE INTO trainers (uuid, slug, name, role_title, branch_id, is_active, sort_order) VALUES
@@ -716,6 +861,11 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('024_seed_global_settings.sql', CURRENT_TIMESTAMP),
 ('025_replace_legacy_why_so3_copy.sql', CURRENT_TIMESTAMP),
 ('026_repair_location_utf8_seed.sql', CURRENT_TIMESTAMP),
-('027_seed_canonical_demo_media.sql', CURRENT_TIMESTAMP);
+('027_seed_canonical_demo_media.sql', CURRENT_TIMESTAMP),
+('028_expand_admin_roles.sql', CURRENT_TIMESTAMP),
+('029_link_trainers_to_admins.sql', CURRENT_TIMESTAMP),
+('030_create_members.sql', CURRENT_TIMESTAMP),
+('031_create_training_programs.sql', CURRENT_TIMESTAMP),
+('032_create_member_progress.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
