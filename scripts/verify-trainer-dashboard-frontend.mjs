@@ -32,12 +32,32 @@ function readSource(relPath) {
   return fs.readFileSync(fullPath, 'utf8');
 }
 
+function extractBalancedBlock(source, startIndex) {
+  const openBraceIndex = source.indexOf('{', startIndex);
+  if (openBraceIndex === -1) return null;
+
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openBraceIndex; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        closeIndex = i;
+        break;
+      }
+    }
+  }
+  if (closeIndex === -1) return null;
+  return source.substring(openBraceIndex, closeIndex + 1);
+}
+
 function extractObjectBlock(source, searchPattern, startIndex = 0) {
-  const index = typeof searchPattern === 'string' 
+  const matchIndex = typeof searchPattern === 'string' 
     ? source.indexOf(searchPattern, startIndex)
     : source.slice(startIndex).search(searchPattern);
-  if (index === -1) return null;
-  const actualIndex = typeof searchPattern === 'string' ? index : startIndex + index;
+  if (matchIndex === -1) return null;
+  const actualIndex = typeof searchPattern === 'string' ? matchIndex : startIndex + matchIndex;
 
   let openIndex = -1;
   let depth = 0;
@@ -70,30 +90,12 @@ function extractObjectBlock(source, searchPattern, startIndex = 0) {
 }
 
 function extractFunctionBlock(source, functionName) {
-  // Supports JS/TS functions, arrow functions, and return type annotations
   const regex = new RegExp(
     `(?:const\\s+${functionName}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)(?:\\s*:\\s*[^=]+)?\\s*=>|function\\s+${functionName}\\s*(?:<[^>]*>)?\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+)?)\\s*\\{`
   );
   const match = source.match(regex);
   if (!match || match.index === undefined) return null;
-
-  const openBraceIndex = source.indexOf('{', match.index);
-  if (openBraceIndex === -1) return null;
-
-  let depth = 0;
-  let closeIndex = -1;
-  for (let i = openBraceIndex; i < source.length; i++) {
-    if (source[i] === '{') depth++;
-    else if (source[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        closeIndex = i;
-        break;
-      }
-    }
-  }
-  if (closeIndex === -1) return null;
-  return source.substring(openBraceIndex, closeIndex + 1);
+  return extractBalancedBlock(source, match.index);
 }
 
 function extractIfBlock(source, searchPattern) {
@@ -101,24 +103,7 @@ function extractIfBlock(source, searchPattern) {
     ? source.indexOf(searchPattern)
     : source.search(searchPattern);
   if (matchIndex === -1) return null;
-
-  const openBraceIndex = source.indexOf('{', matchIndex);
-  if (openBraceIndex === -1) return null;
-
-  let depth = 0;
-  let closeIndex = -1;
-  for (let i = openBraceIndex; i < source.length; i++) {
-    if (source[i] === '{') depth++;
-    else if (source[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        closeIndex = i;
-        break;
-      }
-    }
-  }
-  if (closeIndex === -1) return null;
-  return source.substring(openBraceIndex, closeIndex + 1);
+  return extractBalancedBlock(source, matchIndex);
 }
 
 function extractUseEffectBlocks(source) {
@@ -146,6 +131,36 @@ function extractUseEffectBlocks(source) {
     }
   }
   return blocks;
+}
+
+function extractTryCatchFinally(source) {
+  const tryMatch = source.match(/try\s*\{/);
+  if (!tryMatch || tryMatch.index === undefined) return { tryBlock: null, catchBlock: null, finallyBlock: null };
+
+  const tryBlock = extractBalancedBlock(source, tryMatch.index);
+  if (!tryBlock) return { tryBlock: null, catchBlock: null, finallyBlock: null };
+
+  const afterTryIndex = tryMatch.index + tryBlock.length;
+  const catchMatch = source.slice(afterTryIndex).match(/catch\s*\([^)]*\)\s*\{/);
+  
+  let catchBlock = null;
+  let afterCatchIndex = afterTryIndex;
+  if (catchMatch && catchMatch.index !== undefined) {
+    const actualCatchIndex = afterTryIndex + catchMatch.index;
+    catchBlock = extractBalancedBlock(source, actualCatchIndex);
+    if (catchBlock) {
+      afterCatchIndex = actualCatchIndex + catchBlock.length;
+    }
+  }
+
+  const finallyMatch = source.slice(afterCatchIndex).match(/finally\s*\{/);
+  let finallyBlock = null;
+  if (finallyMatch && finallyMatch.index !== undefined) {
+    const actualFinallyIndex = afterCatchIndex + finallyMatch.index;
+    finallyBlock = extractBalancedBlock(source, actualFinallyIndex);
+  }
+
+  return { tryBlock, catchBlock, finallyBlock };
 }
 
 console.log("Starting Trainer Dashboard Frontend Contract Verification (Deterministic Guard)...");
@@ -227,7 +242,7 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 4: Trainer RBAC Boundary Enforcement
+// Invariant 4: Trainer RBAC Boundary & Explicit Deny Surface
 // ==========================================
 const hasRoleAccessBlock = extractFunctionBlock(rolesContent, 'hasRoleAccess');
 let rbacBoundaryPass = false;
@@ -243,25 +258,60 @@ if (hasRoleAccessBlock) {
     const allowsMyMembersSubpaths = trainerIfBlock.includes("pathname.startsWith(basePath + '/')") ||
       trainerIfBlock.includes("pathname.startsWith('/admin/my-members/')");
     
-    // Negative check: trainer block must not contain broad /admin startsWith
+    // Negative check: trainer block must not contain broad /admin startsWith wildcard
     const noBroadAdminAccess = !trainerIfBlock.match(/pathname\.startsWith\(\s*['"]\/admin['"]\s*\)/);
 
-    rbacBoundaryPass = Boolean(allowsTrainerDashboard && allowsMyMembers && allowsMyMembersSubpaths && noBroadAdminAccess);
+    // Negative check: forbidden admin routes must not be allowed in trainer block
+    const forbiddenAdminRoutes = [
+      '/admin',
+      '/admin/settings',
+      '/admin/members',
+      '/admin/trainers',
+      '/admin/trainer-accounts',
+      '/admin/homepage',
+      '/admin/media',
+      '/admin/events',
+      '/admin/branches',
+      '/admin/reception'
+    ];
+
+    let noForbiddenRouteAllowed = true;
+    for (const fr of forbiddenAdminRoutes) {
+      const exactPattern = new RegExp(`pathname\\s*===?\\s*['"]${fr}['"]`);
+      if (exactPattern.test(trainerIfBlock)) {
+        noForbiddenRouteAllowed = false;
+        break;
+      }
+      if (fr !== '/admin') {
+        const startsWithPattern = new RegExp(`pathname\\.startsWith\\(\\s*['"]${fr}`);
+        if (startsWithPattern.test(trainerIfBlock)) {
+          noForbiddenRouteAllowed = false;
+          break;
+        }
+      }
+    }
+
+    rbacBoundaryPass = Boolean(
+      allowsTrainerDashboard &&
+      allowsMyMembers &&
+      allowsMyMembersSubpaths &&
+      noBroadAdminAccess &&
+      noForbiddenRouteAllowed
+    );
   }
 }
 
 reportInvariant(
   rbacBoundaryPass,
-  "Invariant 4: hasRoleAccess enforces strict RBAC boundary for trainer (/admin/trainer and /admin/my-members namespace only)",
-  "Trainer RBAC must allow exact /admin/trainer and /admin/my-members namespace without broad /admin startsWith wildcard"
+  "Invariant 4: hasRoleAccess enforces strict RBAC boundary for trainer with explicit forbidden route deny checks",
+  "Trainer RBAC must allow exact /admin/trainer and /admin/my-members namespace and reject all other admin routes"
 );
 
 // ==========================================
-// Invariant 5: Trainer Sidebar Navigation Targets
+// Invariant 5: Trainer Sidebar Isolation & Forbidden Routes
 // ==========================================
 let sidebarPass = false;
 
-// Check trainer navigation block in AdminLayout
 const isTrainerDecl = layoutContent.includes("isTrainer = admin?.role === 'trainer'") ||
   layoutContent.includes('isTrainer = admin?.role === "trainer"') ||
   layoutContent.includes("role === 'trainer'");
@@ -273,18 +323,36 @@ if (isTrainerDecl) {
   const hasDashboardLink = trainerNavBlock.includes('to="/admin/trainer"') || trainerNavBlock.includes("to='/admin/trainer'");
   const hasMyMembersLink = trainerNavBlock.includes('to="/admin/my-members"') || trainerNavBlock.includes("to='/admin/my-members'");
   
-  // Negative check: trainer nav does not contain admin members/settings/homepage links
-  const noAdminLinksInTrainerNav = !trainerNavBlock.includes('to="/admin/members"') &&
-    !trainerNavBlock.includes('to="/admin/settings"') &&
-    !trainerNavBlock.includes('to="/admin/homepage"');
+  // Negative check against forbidden admin links inside trainer nav block
+  const forbiddenNavLinks = [
+    '/admin/settings',
+    '/admin/members',
+    '/admin/trainers',
+    '/admin/trainer-accounts',
+    '/admin/homepage',
+    '/admin/media',
+    '/admin/events',
+    '/admin/branches',
+    '/admin/reception'
+  ];
 
-  sidebarPass = Boolean(hasDashboardLink && hasMyMembersLink && noAdminLinksInTrainerNav);
+  let noForbiddenLinksInTrainerNav = !trainerNavBlock.match(/to=['"]\/admin['"]\s/); // exact /admin
+  if (noForbiddenLinksInTrainerNav) {
+    for (const fnl of forbiddenNavLinks) {
+      if (trainerNavBlock.includes(`to="${fnl}"`) || trainerNavBlock.includes(`to='${fnl}'`)) {
+        noForbiddenLinksInTrainerNav = false;
+        break;
+      }
+    }
+  }
+
+  sidebarPass = Boolean(hasDashboardLink && hasMyMembersLink && noForbiddenLinksInTrainerNav);
 }
 
 reportInvariant(
   sidebarPass,
-  "Invariant 5: Trainer sidebar navigation contains exact links for Dashboard (/admin/trainer) and My Members (/admin/my-members)",
-  "AdminLayout.tsx must render /admin/trainer and /admin/my-members NavLinks within the trainer navigation section"
+  "Invariant 5: Trainer sidebar navigation contains exact links for Dashboard (/admin/trainer) and My Members with zero forbidden links",
+  "AdminLayout.tsx must render /admin/trainer and /admin/my-members NavLinks and exclude all forbidden admin navigation links"
 );
 
 // ==========================================
@@ -315,51 +383,71 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 7: Runtime Response Validator Contract (types.ts)
+// Invariant 7: Field-Level Runtime Validator Semantics (types.ts)
 // ==========================================
 const isTrainerDashboardDataBlock = extractFunctionBlock(typesContent, 'isTrainerDashboardData');
 let runtimeValidatorPass = false;
 
 if (isTrainerDashboardDataBlock) {
-  // Trainer checks
-  const trainerIdCheck = isTrainerDashboardDataBlock.includes('trainer.id') &&
-    isTrainerDashboardDataBlock.includes('Number.isInteger') &&
-    isTrainerDashboardDataBlock.includes('trainer.id <= 0');
-  const trainerNameCheck = isTrainerDashboardDataBlock.includes("typeof trainer.display_name !== 'string'") ||
-    isTrainerDashboardDataBlock.includes('typeof trainer.display_name !== "string"');
+  // Field-level trainer checks:
+  const trainerIdNumberCheck = /typeof\s+trainer\.id\s*!==\s*['"]number['"]/.test(isTrainerDashboardDataBlock);
+  const trainerIdIntegerCheck = /!Number\.isInteger\(\s*trainer\.id\s*\)/.test(isTrainerDashboardDataBlock);
+  const trainerIdPositiveCheck = /trainer\.id\s*<=\s*0/.test(isTrainerDashboardDataBlock);
+  const trainerNameCheck = /typeof\s+trainer\.display_name\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  const trainerValid = trainerIdNumberCheck && trainerIdIntegerCheck && trainerIdPositiveCheck && trainerNameCheck;
 
-  // Members checks
-  const membersTotalCheck = isTrainerDashboardDataBlock.includes('members.total') && isTrainerDashboardDataBlock.includes('members.total < 0');
-  const membersActiveCheck = isTrainerDashboardDataBlock.includes('members.active') && isTrainerDashboardDataBlock.includes('members.active < 0');
-  const membersInactiveCheck = isTrainerDashboardDataBlock.includes('members.inactive') && isTrainerDashboardDataBlock.includes('members.inactive < 0');
+  // Field-level members checks:
+  const checkMemberField = (fieldName) => {
+    const typeofCheck = new RegExp(`typeof\\s+members\\.${fieldName}\\s*!==\\s*['"]number['"]`).test(isTrainerDashboardDataBlock);
+    const integerCheck = new RegExp(`!Number\\.isInteger\\(\\s*members\\.${fieldName}\\s*\\)`).test(isTrainerDashboardDataBlock);
+    const boundsCheck = new RegExp(`members\\.${fieldName}\\s*<\\s*0`).test(isTrainerDashboardDataBlock);
+    return typeofCheck && integerCheck && boundsCheck;
+  };
+  const membersTotalValid = checkMemberField('total');
+  const membersActiveValid = checkMemberField('active');
+  const membersInactiveValid = checkMemberField('inactive');
+  const membersValid = membersTotalValid && membersActiveValid && membersInactiveValid;
 
-  // Training programs checks
-  const tpTotalCheck = isTrainerDashboardDataBlock.includes('tp.total') && isTrainerDashboardDataBlock.includes('tp.total < 0');
-  const tpDraftCheck = isTrainerDashboardDataBlock.includes('tp.draft') && isTrainerDashboardDataBlock.includes('tp.draft < 0');
-  const tpActiveCheck = isTrainerDashboardDataBlock.includes('tp.active') && isTrainerDashboardDataBlock.includes('tp.active < 0');
-  const tpArchivedCheck = isTrainerDashboardDataBlock.includes('tp.archived') && isTrainerDashboardDataBlock.includes('tp.archived < 0');
+  // Field-level training_programs checks:
+  const checkTpField = (fieldName) => {
+    const typeofCheck = new RegExp(`typeof\\s+tp\\.${fieldName}\\s*!==\\s*['"]number['"]`).test(isTrainerDashboardDataBlock);
+    const integerCheck = new RegExp(`!Number\\.isInteger\\(\\s*tp\\.${fieldName}\\s*\\)`).test(isTrainerDashboardDataBlock);
+    const boundsCheck = new RegExp(`tp\\.${fieldName}\\s*<\\s*0`).test(isTrainerDashboardDataBlock);
+    return typeofCheck && integerCheck && boundsCheck;
+  };
+  const tpTotalValid = checkTpField('total');
+  const tpDraftValid = checkTpField('draft');
+  const tpActiveValid = checkTpField('active');
+  const tpArchivedValid = checkTpField('archived');
+  const tpValid = tpTotalValid && tpDraftValid && tpActiveValid && tpArchivedValid;
 
-  // Recent members checks
-  const recentArrayCheck = isTrainerDashboardDataBlock.includes('Array.isArray(d.recent_members)');
-  const recentItemChecks = isTrainerDashboardDataBlock.includes('m.id') &&
-    isTrainerDashboardDataBlock.includes('m.uuid') &&
-    isTrainerDashboardDataBlock.includes('m.first_name') &&
-    isTrainerDashboardDataBlock.includes('m.last_name') &&
-    isTrainerDashboardDataBlock.includes('m.status') &&
-    isTrainerDashboardDataBlock.includes('m.updated_at');
+  // Field-level recent_members checks:
+  const recentArrayCheck = /Array\.isArray\(\s*d\.recent_members\s*\)/.test(isTrainerDashboardDataBlock);
+  const recentIdNumberCheck = /typeof\s+m\.id\s*!==\s*['"]number['"]/.test(isTrainerDashboardDataBlock);
+  const recentIdIntegerCheck = /!Number\.isInteger\(\s*m\.id\s*\)/.test(isTrainerDashboardDataBlock);
+  const recentIdPositiveCheck = /m\.id\s*<=\s*0/.test(isTrainerDashboardDataBlock);
+  const recentUuidCheck = /typeof\s+m\.uuid\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  const recentFirstNameCheck = /typeof\s+m\.first_name\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  const recentLastNameCheck = /typeof\s+m\.last_name\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  const recentUpdatedAtCheck = /typeof\s+m\.updated_at\s*!==\s*['"]string['"]/.test(isTrainerDashboardDataBlock);
+  
+  // Status check: must validate against both 'active' and 'inactive'
+  const recentStatusActiveCheck = /m\.status\s*!==\s*['"]active['"]/.test(isTrainerDashboardDataBlock);
+  const recentStatusInactiveCheck = /m\.status\s*!==\s*['"]inactive['"]/.test(isTrainerDashboardDataBlock);
+  const recentStatusValid = recentStatusActiveCheck && recentStatusInactiveCheck;
 
-  runtimeValidatorPass = Boolean(
-    trainerIdCheck && trainerNameCheck &&
-    membersTotalCheck && membersActiveCheck && membersInactiveCheck &&
-    tpTotalCheck && tpDraftCheck && tpActiveCheck && tpArchivedCheck &&
-    recentArrayCheck && recentItemChecks
-  );
+  const recentValid = recentArrayCheck &&
+    recentIdNumberCheck && recentIdIntegerCheck && recentIdPositiveCheck &&
+    recentUuidCheck && recentFirstNameCheck && recentLastNameCheck && recentUpdatedAtCheck &&
+    recentStatusValid;
+
+  runtimeValidatorPass = Boolean(trainerValid && membersValid && tpValid && recentValid);
 }
 
 reportInvariant(
   runtimeValidatorPass,
-  "Invariant 7: Runtime validator isTrainerDashboardData strictly verifies schema for trainer, members, training_programs, and recent_members",
-  "types.ts must implement comprehensive runtime validation with integer, boundary, string, and status checks"
+  "Invariant 7: Field-level runtime validator semantics strictly verified for trainer, members, training_programs, and recent_members",
+  "types.ts must implement individual field-level type, integer, non-negative, string, and enum checks"
 );
 
 // ==========================================
@@ -395,7 +483,6 @@ let invalidResponsePass = false;
 if (fetchFunctionBlock) {
   const validatorIfBlock = extractIfBlock(fetchFunctionBlock, /if\s*\(\s*isTrainerDashboardData\s*\(\s*response\s*\)\s*\)/);
   if (validatorIfBlock) {
-    // Check else branch after validator if block
     const ifEndIndex = fetchFunctionBlock.indexOf(validatorIfBlock) + validatorIfBlock.length;
     const elseSubstring = fetchFunctionBlock.substring(ifEndIndex, ifEndIndex + 200);
     const elseIfBlock = extractIfBlock(elseSubstring, /else/);
@@ -414,83 +501,124 @@ reportInvariant(
 );
 
 // ==========================================
-// Invariant 10: Stale / Unmount Safety Guard in Fetch Lifecycle
+// Invariant 10: Lifecycle-Isolated Stale / Unmount Safety Guards (Success, Catch, Finally, Cleanup)
 // ==========================================
 const useEffectBlocks = extractUseEffectBlocks(dashboardContent);
 const dashboardEffect = useEffectBlocks[0] || null;
 let staleGuardPass = false;
 
-if (dashboardEffect) {
+if (dashboardEffect && fetchFunctionBlock) {
   const hasSubscribedDecl = dashboardEffect.includes('let isSubscribed = true');
-  const hasCleanup = dashboardEffect.includes('return () =>') && dashboardEffect.includes('isSubscribed = false');
-  const hasResponseCheck = dashboardEffect.includes('if (!isSubscribed) return');
-  const hasFinallyCheck = dashboardEffect.includes('if (isSubscribed)') && dashboardEffect.includes('setLoading(false)');
+  
+  // Cleanup guard
+  const hasCleanup = /return\s*\(\s*\)\s*=>\s*\{\s*isSubscribed\s*=\s*false;\s*\}/.test(dashboardEffect) ||
+    /return\s*\(\s*\)\s*=>\s*\(\s*isSubscribed\s*=\s*false\s*\)/.test(dashboardEffect) ||
+    /isSubscribed\s*=\s*false/.test(dashboardEffect);
 
-  staleGuardPass = Boolean(hasSubscribedDecl && hasCleanup && hasResponseCheck && hasFinallyCheck);
+  const { tryBlock, catchBlock, finallyBlock } = extractTryCatchFinally(fetchFunctionBlock);
+
+  // Success path stale guard: must be located inside tryBlock right after await apiClient.get
+  const successStaleGuard = Boolean(
+    tryBlock &&
+    /await\s+apiClient\.get[\s\S]*?if\s*\(\s*!isSubscribed\s*\)\s*return\s*;/.test(tryBlock)
+  );
+
+  // Catch path stale guard: must be located inside catchBlock before error handling
+  const catchStaleGuard = Boolean(
+    catchBlock &&
+    /if\s*\(\s*!isSubscribed\s*\)\s*return\s*;/.test(catchBlock)
+  );
+
+  // Finally block stale guard: must wrap setLoading(false) in if (isSubscribed)
+  const finallyStaleGuard = Boolean(
+    finallyBlock &&
+    /if\s*\(\s*isSubscribed\s*\)\s*\{\s*setLoading\s*\(\s*false\s*\)\s*;\s*\}/.test(finallyBlock)
+  );
+
+  staleGuardPass = Boolean(hasSubscribedDecl && hasCleanup && successStaleGuard && catchStaleGuard && finallyStaleGuard);
 }
 
 reportInvariant(
   staleGuardPass,
-  "Invariant 10: Asynchronous fetch lifecycle implements comprehensive stale-response and unmount cancellation guards",
-  "useEffect must declare isSubscribed flag, guard post-await state updates and finally block, and provide cleanup reset"
+  "Invariant 10: Lifecycle-isolated stale-response guards enforced separately across Success, Catch, Finally, and Cleanup",
+  "useEffect and fetchDashboard must isolate stale guards for success await, catch entry, finally state update, and cleanup reset"
 );
 
 // ==========================================
-// Invariant 11: Deterministic Retry Mechanism
+// Invariant 11: Effect-Local Deterministic Retry Mechanism
 // ==========================================
 let retryPass = false;
 
-const hasRefreshKeyState = dashboardContent.includes('const [refreshKey, setRefreshKey] = useState(0)') ||
-  dashboardContent.includes('useState(0)') && dashboardContent.includes('refreshKey');
-
-const effectHasDependency = dashboardContent.includes('[refreshKey]');
-const hasRetryIncrement = dashboardContent.includes('setRefreshKey((k) => k + 1)') ||
-  dashboardContent.includes('setRefreshKey(k => k + 1)');
+const hasRefreshKeyState = /const\s*\[\s*refreshKey\s*,\s*setRefreshKey\s*\]\s*=\s*useState\s*\(\s*0\s*\)/.test(dashboardContent);
+const effectLocallyBound = /useEffect\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?\}\s*,\s*\[\s*refreshKey\s*\]\s*\)/.test(dashboardContent);
+const hasRetryIncrement = /setRefreshKey\s*\(\s*\(?\s*k\s*\)?\s*=>\s*k\s*\+\s*1\s*\)/.test(dashboardContent);
 const noFakeRetry = !dashboardContent.includes('setRefreshKey(refreshKey)');
 
-retryPass = Boolean(hasRefreshKeyState && effectHasDependency && hasRetryIncrement && noFakeRetry);
+retryPass = Boolean(hasRefreshKeyState && effectLocallyBound && hasRetryIncrement && noFakeRetry);
 
 reportInvariant(
   retryPass,
-  "Invariant 11: Deterministic retry mechanism triggers real re-fetch via refreshKey state increment",
-  "Retry handler must increment refreshKey state which is bound to the useEffect dependency array"
+  "Invariant 11: Effect-local deterministic retry mechanism triggers re-fetch via refreshKey state increment",
+  "Retry handler must functionally increment refreshKey which is locally bound as the sole dependency of the fetch useEffect"
 );
 
 // ==========================================
-// Invariant 12: Strict Error Cohesion & Raw Message Prohibition
+// Invariant 12: Strict Error Cohesion & Generic Controlled Fallbacks
 // ==========================================
 let errorCohesionPass = false;
 
-// Check that NO raw error.message is passed to setError
+// Check that NO raw or template error message is passed to setError
 const rawMessageLeaks = dashboardContent.match(/setError\s*\(\s*(?:err|error)\.message/g) || [];
-const templateMessageLeaks = dashboardContent.match(/setError\s*\(\s*`[^`]*\$\{(?:err|error)\.message\}/g) || [];
+const templateMessageLeaks = dashboardContent.match(/setError\s*\(\s*`[^`]*\$\{(?:err|error)(?:\.message)?\}/g) || [];
+const stringCastLeaks = dashboardContent.match(/setError\s*\(\s*String\s*\(\s*(?:err|error)/g) || [];
 
-const noRawMessageLeaks = (rawMessageLeaks.length === 0 && templateMessageLeaks.length === 0);
+const noRawMessageLeaks = (rawMessageLeaks.length === 0 && templateMessageLeaks.length === 0 && stringCastLeaks.length === 0);
 
-const hasProfileNotLinkedCheck = dashboardContent.includes("err.code === 'TRAINER_PROFILE_NOT_LINKED'") ||
-  dashboardContent.includes('err.code === "TRAINER_PROFILE_NOT_LINKED"');
-const hasForbiddenCheck = dashboardContent.includes('err.status === 403') || dashboardContent.includes("err.code === 'FORBIDDEN'");
-const hasValidationCheck = dashboardContent.includes('err.status === 422') || dashboardContent.includes("err.code === 'VALIDATION_ERROR'");
-const hasNotFoundCheck = dashboardContent.includes('err.status === 404') || dashboardContent.includes("err.code === 'NOT_FOUND'");
+const { catchBlock: dashboardCatchBlock } = extractTryCatchFinally(dashboardContent);
 
-errorCohesionPass = Boolean(noRawMessageLeaks && hasProfileNotLinkedCheck && hasForbiddenCheck && hasValidationCheck && hasNotFoundCheck);
+if (dashboardCatchBlock) {
+  const hasProfileNotLinkedCheck = /err\.code\s*===?\s*['"]TRAINER_PROFILE_NOT_LINKED['"]/.test(dashboardCatchBlock);
+  const hasForbiddenCheck = /err\.status\s*===?\s*403\s*\|\|\s*err\.code\s*===?\s*['"]FORBIDDEN['"]/.test(dashboardCatchBlock) ||
+    (dashboardCatchBlock.includes('err.status === 403') || dashboardCatchBlock.includes("err.code === 'FORBIDDEN'"));
+  const hasValidationCheck = /err\.status\s*===?\s*422\s*\|\|\s*err\.code\s*===?\s*['"]VALIDATION_ERROR['"]/.test(dashboardCatchBlock) ||
+    (dashboardCatchBlock.includes('err.status === 422') || dashboardCatchBlock.includes("err.code === 'VALIDATION_ERROR'"));
+  const hasNotFoundCheck = /err\.status\s*===?\s*404\s*\|\|\s*err\.code\s*===?\s*['"]NOT_FOUND['"]/.test(dashboardCatchBlock) ||
+    (dashboardCatchBlock.includes('err.status === 404') || dashboardCatchBlock.includes("err.code === 'NOT_FOUND'"));
+
+  // Controlled generic fallbacks
+  const hasApiErrorFallback = /else\s*\{\s*setError\s*\(\s*['"][^'"]+['"]\s*\)\s*;\s*\}/.test(dashboardCatchBlock);
+  const hasGenericErrorFallback = /else\s+if\s*\(\s*(?:err|error)\s+instanceof\s+Error\s*\)\s*\{\s*setError\s*\(\s*['"][^'"]+['"]\s*\)\s*;\s*\}/.test(dashboardCatchBlock);
+  const hasUnknownErrorFallback = /else\s*\{\s*setError\s*\(\s*['"][^'"]+['"]\s*\)\s*;\s*\}\s*$/.test(dashboardCatchBlock.trim()) ||
+    /setError\s*\(\s*['"][^'"]+['"]\s*\)\s*;/.test(dashboardCatchBlock);
+
+  errorCohesionPass = Boolean(
+    noRawMessageLeaks &&
+    hasProfileNotLinkedCheck &&
+    hasForbiddenCheck &&
+    hasValidationCheck &&
+    hasNotFoundCheck &&
+    hasApiErrorFallback &&
+    hasGenericErrorFallback &&
+    hasUnknownErrorFallback
+  );
+}
 
 reportInvariant(
   errorCohesionPass,
-  "Invariant 12: Error cohesion prohibits raw err.message leaks and enforces explicit ApiError code/status mapping",
-  "setError must not receive raw err.message; TRAINER_PROFILE_NOT_LINKED, 403/FORBIDDEN, 422, 404, and generic errors must use controlled messages"
+  "Invariant 12: Error cohesion prohibits raw err.message/casts and enforces explicit ApiError code/status mappings and safe fallbacks",
+  "setError must not receive raw err.message or string casts; ApiError, generic Error, and unknown errors must use controlled messages"
 );
 
 // ==========================================
-// Invariant 13: Privacy & Negative Field Leak Invariant
+// Invariant 13: Privacy & Negative Field Leak Invariant (Broadened)
 // ==========================================
-const forbiddenPropertyAccessRegex = /\.(phone|email|emergency_contact(_name|_phone)?|password(_hash)?)\b/i;
+const forbiddenPropertyAccessRegex = /\.(phone|email|emergency_contact(_name|_phone)?|notes?|password(_hash)?)\b/i;
 const leaksForbiddenProperty = forbiddenPropertyAccessRegex.test(dashboardContent);
 
 reportInvariant(
   !leaksForbiddenProperty,
-  "Invariant 13: Privacy invariant confirms zero access or rendering of phone, email, emergency contacts, or credentials in TrainerDashboard",
-  "TrainerDashboard component must not reference or render personal contact data or credentials"
+  "Invariant 13: Privacy invariant confirms zero access or rendering of phone, email, emergency contacts, notes, or credentials in TrainerDashboard",
+  "TrainerDashboard component must not reference or render personal contact data, notes, or credentials"
 );
 
 // ==========================================
