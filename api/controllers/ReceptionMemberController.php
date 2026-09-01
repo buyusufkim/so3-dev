@@ -409,6 +409,161 @@ class ReceptionMemberController
         }
     }
 
+    public function renew($id)
+    {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        if (!$adminId) {
+            Response::error('Oturum geçersiz.', 'UNAUTHORIZED', 401);
+            return;
+        }
+
+        if (!empty($_GET)) {
+            Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $rawBody = trim(file_get_contents('php://input'));
+        if ($rawBody === '') {
+            Response::error('Body zorunludur.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+        
+        $decoded = json_decode($rawBody, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+            return;
+        }
+
+        if (!is_array($decoded) || count($decoded) !== 2 || !isset($decoded['new_start_date']) || !isset($decoded['new_end_date'])) {
+            Response::error('Geçersiz alanlar. Sadece new_start_date ve new_end_date alanları kabul edilir.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $newStartDate = $decoded['new_start_date'];
+        $newEndDate = $decoded['new_end_date'];
+
+        if (!is_string($newStartDate) || !is_string($newEndDate) || $newStartDate === '' || $newEndDate === '') {
+            Response::error('Tarih değerleri boş olamaz ve string tipinde olmalıdır.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $startDateTime = \DateTime::createFromFormat('Y-m-d', $newStartDate);
+        $endDateTime = \DateTime::createFromFormat('Y-m-d', $newEndDate);
+
+        if (!$startDateTime || $startDateTime->format('Y-m-d') !== $newStartDate) {
+            Response::error('Geçersiz new_start_date formatı.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        if (!$endDateTime || $endDateTime->format('Y-m-d') !== $newEndDate) {
+            Response::error('Geçersiz new_end_date formatı.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        if ($endDateTime < $startDateTime) {
+            Response::error('Bitiş tarihi başlangıç tarihinden önce olamaz.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $db = Database::getInstance()->getConnection();
+
+        try {
+            $db->beginTransaction();
+
+            $stmt = $db->prepare("SELECT id, membership_start_date, membership_end_date, deleted_at FROM members WHERE id = :id FOR UPDATE");
+            $stmt->bindValue(':id', $id, \PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $member = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$member || !empty($member['deleted_at'])) {
+                $db->rollBack();
+                Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
+                return;
+            }
+
+            $previousStartDate = $member['membership_start_date'];
+            $previousEndDate = $member['membership_end_date'];
+
+            // update members
+            $updateStmt = $db->prepare("
+                UPDATE members 
+                SET membership_start_date = :new_start_date,
+                    membership_end_date = :new_end_date,
+                    updated_by = :admin_id
+                WHERE id = :id
+            ");
+            $updateStmt->bindValue(':new_start_date', $newStartDate);
+            $updateStmt->bindValue(':new_end_date', $newEndDate);
+            $updateStmt->bindValue(':admin_id', $adminId, \PDO::PARAM_INT);
+            $updateStmt->bindValue(':id', $id, \PDO::PARAM_INT);
+            $updateStmt->execute();
+
+            // create history
+            $renewalUuid = $this->generateUuid();
+            $insertStmt = $db->prepare("
+                INSERT INTO membership_renewals (uuid, member_id, previous_start_date, previous_end_date, new_start_date, new_end_date, renewed_by, created_at)
+                VALUES (:uuid, :member_id, :prev_start, :prev_end, :new_start, :new_end, :renewed_by, NOW())
+            ");
+            
+            $insertStmt->bindValue(':uuid', $renewalUuid);
+            $insertStmt->bindValue(':member_id', $id, \PDO::PARAM_INT);
+            $insertStmt->bindValue(':prev_start', $previousStartDate);
+            $insertStmt->bindValue(':prev_end', $previousEndDate);
+            $insertStmt->bindValue(':new_start', $newStartDate);
+            $insertStmt->bindValue(':new_end', $newEndDate);
+            $insertStmt->bindValue(':renewed_by', $adminId, \PDO::PARAM_INT);
+            $insertStmt->execute();
+
+            $renewalId = (int)$db->lastInsertId();
+
+            if ($renewalId <= 0) {
+                $db->rollBack();
+                Response::error('Yenileme kaydı oluşturulamadı.', 'INTERNAL_ERROR', 500);
+                return;
+            }
+
+            $fetchStmt = $db->prepare("SELECT created_at FROM membership_renewals WHERE id = :id");
+            $fetchStmt->bindValue(':id', $renewalId, \PDO::PARAM_INT);
+            $fetchStmt->execute();
+            $createdAt = $fetchStmt->fetchColumn();
+
+            $db->commit();
+
+            try {
+                \Core\AuditLogger::log(
+                    'reception.member.renew',
+                    $adminId,
+                    'membership_renewal',
+                    $renewalId,
+                    ['member_id' => $id]
+                );
+            } catch (\Exception $e) {
+                error_log("Audit log failed for renew $renewalId: " . $e->getMessage());
+            }
+
+            Response::json([
+                'renewal' => [
+                    'id' => $renewalId,
+                    'uuid' => $renewalUuid,
+                    'member_id' => $id,
+                    'previous_start_date' => $previousStartDate,
+                    'previous_end_date' => $previousEndDate,
+                    'new_start_date' => $newStartDate,
+                    'new_end_date' => $newEndDate,
+                    'created_at' => (string)$createdAt
+                ]
+            ], 201);
+
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log("ReceptionMemberController renew error: " . $e->getMessage());
+            Response::error('Yenileme işlemi sırasında beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
     private function generateUuid(): string 
     {
         $data = random_bytes(16);
