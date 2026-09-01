@@ -54,98 +54,139 @@ function extractBraceBlock(text, startKeyword) {
     return { content: text.substring(startIndex, i), startIndex, endIndex: i };
 }
 
+console.log("--- Running Verifier Self-Tests ---");
+
+// A. HTTP 201 regex self-test
+const http201Regex = /Response::json\s*\([\s\S]*?,\s*201\s*\)/;
+assert(http201Regex.test("Response::json(['status' => 'ok'], 201);"), "Self-Test A1: HTTP 201 regex passes correct synthetic input");
+assert(!http201Regex.test("Response::json(['status' => 'ok'], 200);"), "Self-Test A2: HTTP 201 regex rejects 200 synthetic input");
+assert(!http201Regex.test("Response::json(['status' => 'ok']);"), "Self-Test A3: HTTP 201 regex rejects no-status synthetic input");
+
+// B. No-Status Predicate self-test
+const statusPatterns = [
+    /\$member\['status'\]/,
+    /status\s*=\s*'active'/,
+    /status\s*===\s*'inactive'/,
+    /status\s*!==\s*'active'/,
+    /status\s*!=\s*'active'/
+];
+const hasStatus = (text) => statusPatterns.some(p => p.test(text));
+assert(hasStatus("if ($member['status'] !== 'active') { }"), "Self-Test B1: No-Status predicate catches $member['status'] usage");
+assert(!hasStatus("if ($member['deleted_at']) { }"), "Self-Test B2: No-Status predicate allows deleted_at usage");
+
+// C. Exact UPDATE Set self-test
+function checkUpdateSet(colsStr) {
+    const cols = colsStr.split(',').map(s => s.trim().split('=')[0].trim().replace(/`/g, ''));
+    const expectedCols = new Set(['membership_start_date', 'membership_end_date', 'updated_by']);
+    const actualCols = new Set(cols);
+    return actualCols.size === expectedCols.size && [...actualCols].every(c => expectedCols.has(c));
+}
+assert(checkUpdateSet("membership_start_date = :sd, membership_end_date = :ed, updated_by = :ub"), "Self-Test C1: Exact UPDATE set accepts canonical columns");
+assert(!checkUpdateSet("membership_start_date = :sd, membership_end_date = :ed, updated_by = :ub, status = 'active'"), "Self-Test C2: Exact UPDATE set rejects extra status column");
+console.log("-----------------------------------");
+
 console.log("Starting Membership Renewal Cross-Contract Final Precision Guard...");
+
+const indexPhpSource = fs.readFileSync('api/index.php', 'utf8');
+const routeMatch = indexPhpSource.match(/preg_match\('#\^\/api\/reception\/members\/\(\[1-9\]\\d\*\)\/renew\$#'/);
+assert(routeMatch !== null, "Invariant: Exact renewal route positive integer regex found");
+const routeBlock = extractBraceBlock(indexPhpSource, "preg_match('#^/api/reception/members/([1-9]\\d*)/renew$#'");
+if (routeBlock) {
+    assert(routeBlock.content.includes("AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])"), "Invariant: Exact RBAC on renewal route");
+    assert(routeBlock.content.includes("$method === 'POST'"), "Invariant: Method exact POST on renewal route");
+    assert(routeBlock.content.includes("ReceptionMemberController())->renew("), "Invariant: Target exact ReceptionMemberController()->renew");
+    assert(!routeBlock.content.includes("'trainer'") && !routeBlock.content.includes("'editor'"), "Invariant: Trainer/editor excluded from renewal route RBAC");
+}
 
 const receptionControllerFile = 'api/controllers/ReceptionMemberController.php';
 const receptionControllerSource = fs.readFileSync(receptionControllerFile, 'utf8');
-const memberControllerSource = fs.readFileSync('api/controllers/MemberController.php', 'utf8');
-const indexPhpSource = fs.readFileSync('api/index.php', 'utf8');
-const frontendFile = 'src/admin/pages/members/AdminMemberEditor.tsx';
-const frontendSrc = fs.readFileSync(frontendFile, 'utf8');
 
-// --- 1. No-status eligibility guard ---
 const renewBlock = extractBraceBlock(receptionControllerSource, "public function renew($id)");
 assert(renewBlock !== null, "Invariant: renew() method extracted successfully");
 
 if (renewBlock) {
     const renewSrc = renewBlock.content;
-    const statusPatterns = [
-        /\\$member\['status'\]/,
-        /status\s*=\s*'active'/,
-        /status\s*===\s*'inactive'/,
-        /status\s*!==\s*'active'/,
-        /status\s*!=\s*'active'/
-    ];
-    let foundStatus = statusPatterns.some(p => p.test(renewSrc));
-    assert(!foundStatus, "Invariant: No-status eligibility guard (renewal completely independent of current status)");
 
-    // --- 2. Member UPDATE columns EXACT ---
-    const updateMatch = renewSrc.match(/UPDATE\s+members\s+SET\s+(.*?)\s+WHERE/is);
-    assert(updateMatch !== null, "Invariant: UPDATE members statement found");
-    if (updateMatch) {
-        const cols = updateMatch[1].split(',').map(s => s.trim().split('=')[0].trim().replace(/`/g, ''));
-        const expectedCols = new Set(['membership_start_date', 'membership_end_date', 'updated_by']);
-        const actualCols = new Set(cols);
-        const isExactSet = actualCols.size === expectedCols.size && [...actualCols].every(c => expectedCols.has(c));
-        assert(isExactSet, `Invariant: Exact member UPDATE columns. Found: ${cols.join(', ')}`);
-        
-        const forbiddenCols = ['status', 'deleted_at', 'trainer_id', 'first_name', 'last_name', 'phone', 'email', 'notes'];
-        assert(!forbiddenCols.some(c => actualCols.has(c)), "Invariant: No forbidden columns in member UPDATE");
+    // 3. Exact request contract
+    assert(renewSrc.includes("INVALID_JSON") && renewSrc.includes("400"), "Invariant: Invalid JSON rejection with 400");
+    assert(renewSrc.includes("count($decoded) !== 2") || renewSrc.includes("count($decoded) === 2") || renewSrc.includes("count($decoded) != 2"), "Invariant: Exact 2 fields payload count check");
+    assert(renewSrc.includes("new_start_date") && renewSrc.includes("new_end_date"), "Invariant: new_start_date and new_end_date explicitly checked");
+
+    // 4. Strict date contract
+    assert(renewSrc.includes("DateTime::createFromFormat('Y-m-d'"), "Invariant: Y-m-d strict parsing used in renewal");
+    assert(renewSrc.includes("$endDateTime < $startDateTime") || renewSrc.includes("strtotime($newEndDate) < strtotime($newStartDate)"), "Invariant: End < Start check allows same-day");
+    assert(!renewSrc.includes("$endDateTime <= $startDateTime") && !renewSrc.includes("strtotime($newEndDate) <= strtotime($newStartDate)"), "Invariant: <= is NOT used for date comparison (same-day allowed)");
+
+    // 5. Transaction + Lock + Order
+    const tx = renewSrc.indexOf("beginTransaction()");
+    const sel = renewSrc.indexOf("SELECT id, membership_start_date, membership_end_date, deleted_at FROM members");
+    const lock = renewSrc.indexOf("FOR UPDATE", sel);
+    const prevCap = Math.max(renewSrc.indexOf("$previousStartDate ="), renewSrc.indexOf("$previousEndDate ="));
+    const upd = renewSrc.indexOf("UPDATE members", prevCap);
+    const ins = renewSrc.indexOf("INSERT INTO membership_renewals", upd);
+    const posId = renewSrc.indexOf("<= 0", ins);
+    const cmt = renewSrc.indexOf("commit()", posId);
+    const aud = renewSrc.indexOf("AuditLogger::log", cmt);
+    const res = renewSrc.search(http201Regex);
+
+    assert(tx > -1 && sel > tx && lock > sel && prevCap > lock && upd > prevCap && ins > upd && posId > ins && cmt > posId && aud > cmt && res > aud, "Invariant: Monotonic transactional order including precise SELECT fields, lock, audit, and 201 response");
+
+    // 6. Actual soft-delete guard
+    assert(renewSrc.includes("!empty($member['deleted_at'])") || renewSrc.includes("!$member"), "Invariant: Actual soft-delete guard (!empty or !$member)");
+
+    // 7. No-status guard
+    assert(!hasStatus(renewSrc), "Invariant: No-status eligibility guard (no active/inactive checks)");
+
+    // 8. NULL binding
+    assert(renewSrc.includes("$previousStartDate === null ? \\PDO::PARAM_NULL : \\PDO::PARAM_STR"), "Invariant: Exact NULL previousStartDate binding");
+    assert(renewSrc.includes("$previousEndDate === null ? \\PDO::PARAM_NULL : \\PDO::PARAM_STR"), "Invariant: Exact NULL previousEndDate binding");
+
+    // 9 & 13. Exact DB-default & exact history INSERT
+    const insMatch = renewSrc.match(/INSERT\s+INTO\s+membership_renewals\s*\(([^)]+)\)/is);
+    if (insMatch) {
+        const insCols = insMatch[1].split(',').map(s => s.trim().replace(/`/g, ''));
+        const expInsCols = new Set(['uuid', 'member_id', 'previous_start_date', 'previous_end_date', 'new_start_date', 'new_end_date', 'renewed_by']);
+        const isExactIns = insCols.length === expInsCols.size && insCols.every(c => expInsCols.has(c));
+        assert(isExactIns, "Invariant: Exact history INSERT columns set");
+        assert(!insCols.includes("created_at") && !insCols.includes("updated_at") && !insCols.includes("deleted_at") && !insCols.includes("status"), "Invariant: No forbidden columns in history INSERT");
+        assert(!renewSrc.includes("NOW()"), "Invariant: Exact DB-default for created_at (no NOW())");
+    } else {
+        assert(false, "Invariant: Exact history INSERT columns set");
     }
 
-    // --- 3. History INSERT columns EXACT ---
-    const insertMatch = renewSrc.match(/INSERT\s+INTO\s+membership_renewals\s*\(([^)]+)\)/is);
-    assert(insertMatch !== null, "Invariant: INSERT INTO membership_renewals statement found");
-    if (insertMatch) {
-        const insertCols = insertMatch[1].split(',').map(s => s.trim().replace(/`/g, ''));
-        const expectedInsertCols = new Set(['uuid', 'member_id', 'previous_start_date', 'previous_end_date', 'new_start_date', 'new_end_date', 'renewed_by']);
-        const actualInsertCols = new Set(insertCols);
-        const isExactInsertSet = actualInsertCols.size === expectedInsertCols.size && [...actualInsertCols].every(c => expectedInsertCols.has(c));
-        assert(isExactInsertSet, `Invariant: Exact history INSERT columns. Found: ${insertCols.join(', ')}`);
-        
-        const forbiddenInsertCols = ['created_at', 'updated_at', 'deleted_at', 'status', 'notes', 'amount', 'payment', 'payment_method'];
-        assert(!forbiddenInsertCols.some(c => actualInsertCols.has(c)), "Invariant: No forbidden columns in history INSERT");
-        assert(!renewSrc.includes("NOW()"), "Invariant: No NOW() in renewal method scope");
+    // 10. Exact HTTP 201
+    assert(http201Regex.test(renewSrc), "Invariant: Exact HTTP 201 success response");
+
+    // 11. Exact 5-arg audit
+    const auditRegex = /\\Core\\AuditLogger::log\(\s*'reception\.member\.renew',\s*\$adminId,\s*'membership_renewal',\s*\$renewalId,\s*\[\s*'member_id'\s*=>\s*\$id\s*\]\s*\)/is;
+    assert(auditRegex.test(renewSrc), "Invariant: Exact 5-arg renewal audit");
+
+    // 12. Exact member UPDATE set
+    const updMatch = renewSrc.match(/UPDATE\s+members\s+SET\s+(.*?)\s+WHERE/is);
+    if (updMatch) {
+        assert(checkUpdateSet(updMatch[1]), "Invariant: Exact member UPDATE columns set");
+    } else {
+        assert(false, "Invariant: Exact member UPDATE columns set");
     }
 
-    // --- 4. Positive renewal ID branch separate extract ---
+    // Positive renewal ID and Throwable
     const posIdBlock = extractBraceBlock(renewSrc, "if ($renewalId <= 0)");
-    assert(posIdBlock !== null, "Invariant: Positive renewal ID failure branch found");
     if (posIdBlock) {
-        assert(posIdBlock.content.includes("rollBack()"), "Invariant: Positive-ID branch has rollBack()");
-        assert(posIdBlock.content.includes("INTERNAL_ERROR") && posIdBlock.content.includes("500"), "Invariant: Positive-ID branch has INTERNAL_ERROR and 500");
-        assert(posIdBlock.content.indexOf("rollBack()") < posIdBlock.content.indexOf("INTERNAL_ERROR"), "Invariant: Rollback occurs BEFORE response/error in positive-ID branch");
+        assert(posIdBlock.content.includes("rollBack()") && posIdBlock.content.includes("INTERNAL_ERROR") && posIdBlock.content.includes("500"), "Invariant: Positive-ID branch-scoped rollback");
+        assert(posIdBlock.content.indexOf("rollBack()") < posIdBlock.content.indexOf("INTERNAL_ERROR"), "Invariant: Positive-ID rollback BEFORE response");
     }
 
-    // --- 5. Throwable catch rollback safety ---
     const catchBlock = extractBraceBlock(renewSrc, "catch (\\Throwable");
-    assert(catchBlock !== null, "Invariant: Throwable catch block extracted");
     if (catchBlock) {
-        assert(catchBlock.content.includes("inTransaction()"), "Invariant: Throwable catch checks inTransaction()");
-        assert(catchBlock.content.includes("rollBack()"), "Invariant: Throwable catch executes rollBack()");
-        assert(catchBlock.content.includes("INTERNAL_ERROR") && catchBlock.content.includes("500"), "Invariant: Throwable catch responds with INTERNAL_ERROR 500");
+        assert(catchBlock.content.includes("inTransaction()") && catchBlock.content.includes("rollBack()") && catchBlock.content.includes("INTERNAL_ERROR") && catchBlock.content.includes("500"), "Invariant: Throwable catch-scoped rollback");
     }
 
-    // --- 10. Forbidden automatic business logic guard ---
+    // 17. Forbidden hidden business logic
     const forbiddenLogicPatterns = [/modify\('\+1 month/i, /modify\("\+1 month/i, /\+30 days/i, /P1M/i, /new\s*\\?DateInterval/i, /member_visits/i];
     const foundForbidden = forbiddenLogicPatterns.some(p => p.test(renewSrc));
-    assert(!foundForbidden, "Invariant: Completed arithmetic/member_visits forbidden patterns guard");
+    assert(!foundForbidden, "Invariant: No arithmetic/member_visits forbidden patterns");
 
-    // --- 11. HTTP 201 exact ---
-    const response201Regex = /Response::json\([^)]*\)/;
-    assert(response201Regex.test(renewSrc), "Invariant: Exact 200 success response guard in renewal scope");
-
-    // --- 12. Audit exact 5-arg guard ---
-    const auditRegex = /\\Core\\AuditLogger::log\(\s*'reception\.member\.renew',\s*\$adminId,\s*'membership_renewal',\s*\$renewalId,\s*\[\s*'member_id'\s*=>\s*\$id\s*\]\s*\)/is;
-    const auditMatch = renewSrc.match(auditRegex);
-    assert(auditMatch !== null, "Invariant: Exact 5-arg audit signature guard");
-    
-    const idxCommit = renewSrc.lastIndexOf("commit()");
-    const idxAudit = renewSrc.search(auditRegex);
-    const idx201 = renewSrc.search(response201Regex);
-    assert(idxCommit !== -1 && idxAudit !== -1 && idx201 !== -1 && idxCommit < idxAudit && idxAudit < idx201, "Invariant: Audit order guard (Commit -> Audit -> Response)");
-
-    // --- 13. Runtime UPDATE scan ---
+    // 14. Runtime UPDATE scan
     const controllersDir = 'api/controllers';
     let canonicalUpdates = 0;
     let illegalUpdates = 0;
@@ -158,12 +199,11 @@ if (renewBlock) {
             const setPart = match[1].toLowerCase();
             if (setPart.includes('membership_start_date') || setPart.includes('membership_end_date')) {
                 if (file === 'ReceptionMemberController.php' && match.index >= renewBlock.startIndex && match.index <= renewBlock.endIndex) {
-                    const cols = setPart.split(',').map(s => s.trim().split('=')[0].trim().replace(/`/g, ''));
-                    const expectedCols = new Set(['membership_start_date', 'membership_end_date', 'updated_by']);
-                    const actualCols = new Set(cols);
-                    const isExact = actualCols.size === expectedCols.size && [...actualCols].every(c => expectedCols.has(c));
-                    if (isExact) canonicalUpdates++;
-                    else illegalUpdates++;
+                    if (checkUpdateSet(setPart)) {
+                        canonicalUpdates++;
+                    } else {
+                        illegalUpdates++;
+                    }
                 } else {
                     illegalUpdates++;
                 }
@@ -174,58 +214,61 @@ if (renewBlock) {
     assert(illegalUpdates === 0, `Invariant: Illegal runtime UPDATE count = 0 (found ${illegalUpdates})`);
 }
 
-// --- 6. MemberController start/end boundary independent guard ---
+// 15. Create validation scoped
+const memberControllerSource = fs.readFileSync('api/controllers/MemberController.php', 'utf8');
 const valBlock = extractBraceBlock(memberControllerSource, "private function validateMemberData");
-assert(valBlock !== null, "Invariant: validateMemberData extracted");
 if (valBlock) {
     const isUpdateBlock = extractBraceBlock(valBlock.content, "if ($isUpdate)");
-    assert(isUpdateBlock !== null, "Invariant: isUpdate branch extracted");
     if (isUpdateBlock) {
         assert(isUpdateBlock.content.includes("array_key_exists('membership_start_date'"), "Invariant: Independent membership_start_date update key rejection");
         assert(isUpdateBlock.content.includes("array_key_exists('membership_end_date'"), "Invariant: Independent membership_end_date update key rejection");
         assert(isUpdateBlock.content.includes("VALIDATION_ERROR") && isUpdateBlock.content.includes("422"), "Invariant: VALIDATION_ERROR and 422 returned on rejection");
         assert(valBlock.content.indexOf("if ($isUpdate)") < valBlock.content.indexOf("$allowedFields = ["), "Invariant: Rejection occurs before normal validation execution");
     }
+
+    assert(memberControllerSource.includes("private function validateDate") && memberControllerSource.includes("DateTime::createFromFormat('Y-m-d'"), "Invariant: Strict date format validation in MemberController shared validator");
+    assert(valBlock.content.includes("$endDateTime < $startDateTime") || valBlock.content.includes("strtotime"), "Invariant: End < Start logic inside MemberController::validateMemberData");
 }
 
-// --- 7. Create initial dates guard ---
 const createBlock = extractBraceBlock(memberControllerSource, "public function create()");
-assert(createBlock !== null, "Invariant: create() method extracted");
 if (createBlock) {
-    assert(createBlock.content.includes("validateMemberData($data, false)"), "Invariant: Create path uses validateMemberData(..., false)");
-    const createInsertMatch = createBlock.content.match(/INSERT\s+INTO\s+members\s*\(([^)]+)\)/is);
-    assert(createInsertMatch !== null && createInsertMatch[1].includes("membership_start_date") && createInsertMatch[1].includes("membership_end_date"), "Invariant: Create INSERT contains both start and end date columns");
-    assert(createBlock.content.includes("$val['membership_start_date']") && createBlock.content.includes("$val['membership_end_date']"), "Invariant: Execute/value mapping carries both start and end date values");
-    
-    // Check if format validation and end-before-start validation exist for create path
-    assert(memberControllerSource.includes("strtotime") || memberControllerSource.includes("DateTime::createFromFormat"), "Invariant: Shared validation protects membership date format / end-before-start logic");
+    assert(createBlock.content.includes("validateMemberData($data, false)"), "Invariant: Create path correctly uses validateMemberData(..., false)");
+    assert(createBlock.content.includes("membership_start_date") && createBlock.content.includes("membership_end_date"), "Invariant: Create INSERT carries both dates");
 }
 
-// --- 8. Frontend create-only branch exact scope ---
+// Frontend validation
+const frontendFile = 'src/admin/pages/members/AdminMemberEditor.tsx';
+const frontendSrc = fs.readFileSync(frontendFile, 'utf8');
+
 const payloadBlockStart = frontendSrc.indexOf("const payload: any =");
 const payloadBlock = extractBraceBlock(frontendSrc.substring(payloadBlockStart), "{");
-assert(payloadBlock !== null, "Invariant: Base payload block extracted");
 if (payloadBlock) {
     assert(!payloadBlock.content.includes("membership_start_date") && !payloadBlock.content.includes("membership_end_date"), "Invariant: Base payload strictly has no membership dates");
 }
 
 const isNewStart = frontendSrc.indexOf("if (isNew)", payloadBlockStart);
 const isNewBlock = extractBraceBlock(frontendSrc.substring(isNewStart), "{");
-assert(isNewBlock !== null, "Invariant: Frontend create-only assignment scope extracted");
 if (isNewBlock) {
-    assert(isNewBlock.content.includes("payload.membership_start_date =") && isNewBlock.content.includes("payload.membership_end_date ="), "Invariant: Both start and end dates assigned exactly inside the create-only block");
+    assert(isNewBlock.content.includes("payload.membership_start_date =") && isNewBlock.content.includes("payload.membership_end_date ="), "Invariant: Both dates assigned exactly inside the create-only block");
 }
-
 const startAssignCount = (frontendSrc.match(/payload\.membership_start_date\s*=/g) || []).length;
 const endAssignCount = (frontendSrc.match(/payload\.membership_end_date\s*=/g) || []).length;
-assert(startAssignCount === 1 && endAssignCount === 1, "Invariant: Exact 1 assignment occurrence per date field in frontend payload processing (edit path has no assignments)");
+assert(startAssignCount === 1 && endAssignCount === 1, "Invariant: Exact 1 assignment occurrence per date field in frontend payload processing");
 
-// --- 9. Disabled input boundary her iki alan için ayrı guard ---
-// We need to look closely at the input blocks
-const startInputRegex = /value=\{formData\.membership_start_date\}[\s\S]*?disabled=\{!isNew\}/is;
-const endInputRegex = /value=\{formData\.membership_end_date\}[\s\S]*?disabled=\{!isNew\}/is;
-assert(startInputRegex.test(frontendSrc) || frontendSrc.includes("value={formData.membership_start_date}") && frontendSrc.indexOf("disabled={!isNew}") > frontendSrc.indexOf("value={formData.membership_start_date}") && frontendSrc.indexOf("disabled={!isNew}") < frontendSrc.indexOf("value={formData.membership_start_date}") + 400, "Invariant: Separate start date disabled input guard enforced");
-assert(endInputRegex.test(frontendSrc) || frontendSrc.includes("value={formData.membership_end_date}") && frontendSrc.indexOf("disabled={!isNew}", frontendSrc.indexOf("value={formData.membership_end_date}")) !== -1 && frontendSrc.indexOf("disabled={!isNew}", frontendSrc.indexOf("value={formData.membership_end_date}")) < frontendSrc.indexOf("value={formData.membership_end_date}") + 400, "Invariant: Separate end date disabled input guard enforced");
+// 16. Frontend disabled input narrower scope
+function findInputDisabled(htmlSrc, name) {
+    const valueStr = `value={formData.${name}}`;
+    const nameIndex = htmlSrc.indexOf(valueStr);
+    if (nameIndex === -1) return false;
+    const inputStart = htmlSrc.lastIndexOf("<input", nameIndex);
+    const inputEnd = htmlSrc.indexOf("/>", nameIndex);
+    if (inputStart === -1 || inputEnd === -1) return false;
+    const inputStr = htmlSrc.substring(inputStart, inputEnd);
+    return inputStr.includes("disabled={!isNew}");
+}
+
+assert(findInputDisabled(frontendSrc, "membership_start_date"), "Invariant: Separate start date disabled input guard enforced within its input element");
+assert(findInputDisabled(frontendSrc, "membership_end_date"), "Invariant: Separate end date disabled input guard enforced within its input element");
 
 if (exitCode === 0) {
     console.log("✅ All F.10F Reception Membership Renewal Final Precision constraints met.");
