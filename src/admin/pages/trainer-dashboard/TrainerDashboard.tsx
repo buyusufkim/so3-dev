@@ -47,15 +47,19 @@ export function TrainerDashboard() {
         if (err instanceof ApiError) {
           if (err.code === 'TRAINER_PROFILE_NOT_LINKED') {
             setError('Aktif eğitmen profiliniz hesabınıza bağlanmamış.');
-          } else if (err.status === 403) {
+          } else if (err.status === 403 || err.code === 'FORBIDDEN') {
             setError('Bu alana erişim yetkiniz yok.');
+          } else if (err.status === 422 || err.code === 'VALIDATION_ERROR') {
+            setError('Dashboard isteği doğrulanamadı.');
+          } else if (err.status === 404 || err.code === 'NOT_FOUND') {
+            setError('Dashboard verileri bulunamadı.');
           } else {
-            setError(err.message || 'Dashboard verileri yüklenirken bir hata oluştu.');
+            setError('Dashboard verileri yüklenirken bir hata oluştu.');
           }
         } else if (err instanceof Error) {
-          setError(err.message);
+          setError('Dashboard verileri yüklenirken bir hata oluştu.');
         } else {
-          setError('Bilinmeyen bir hata oluştu.');
+          setError('Dashboard verileri yüklenirken bir hata oluştu.');
         }
       } finally {
         if (isSubscribed) {
