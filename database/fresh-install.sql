@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-035
+-- Generated from migrations 001-036
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -613,6 +613,26 @@ CREATE INDEX `idx_appointments_trainer_schedule` ON `appointments`(`trainer_id`,
 CREATE INDEX `idx_appointments_member_schedule` ON `appointments`(`member_id`, `status`, `starts_at`, `ends_at`);
 CREATE INDEX `idx_appointments_calendar` ON `appointments`(`starts_at`, `ends_at`, `status`);
 
+-- Migration: 036_create_appointment_reschedules.sql
+-- Description: Creates append-only history table for appointment time modifications.
+
+CREATE TABLE IF NOT EXISTS `appointment_reschedules` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `appointment_id` BIGINT UNSIGNED NOT NULL,
+    `previous_starts_at` DATETIME NOT NULL,
+    `previous_ends_at` DATETIME NOT NULL,
+    `new_starts_at` DATETIME NOT NULL,
+    `new_ends_at` DATETIME NOT NULL,
+    `rescheduled_by` INT NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_appointment_reschedules_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `fk_appointment_reschedules_rescheduled_by` FOREIGN KEY (`rescheduled_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_appointment_reschedules_appointment_created` ON `appointment_reschedules`(`appointment_id`, `created_at`);
+
+
 
 
 
@@ -946,6 +966,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('032_create_member_progress.sql', CURRENT_TIMESTAMP),
 ('033_create_member_visits.sql', CURRENT_TIMESTAMP),
 ('034_create_membership_renewals.sql', CURRENT_TIMESTAMP),
-('035_create_appointments.sql', CURRENT_TIMESTAMP);
+('035_create_appointments.sql', CURRENT_TIMESTAMP),
+('036_create_appointment_reschedules.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
