@@ -126,15 +126,65 @@ console.log("Starting deterministic verification...\n");
 console.log("--- Running Verifier Negative Self-Tests ---");
 
 // Helper predicates for self-tests and verifier assertions
-function checkRenewalPayloadPredicate(payloadCode) {
-  const forbidden = ["status", "membership_start_date", "membership_end_date", "payment", "price", "amount", "notes"];
-  for (const f of forbidden) {
-    const regex = new RegExp(`\\b${f}\\s*:`);
-    if (regex.test(payloadCode)) return false;
+function extractTopLevelKeys(objectCode) {
+  const trimmed = objectCode.trim();
+  let inner = trimmed;
+  if (inner.startsWith('{') && inner.endsWith('}')) {
+    inner = inner.slice(1, -1);
   }
-  const hasStart = /\bnew_start_date\s*:/.test(payloadCode);
-  const hasEnd = /\bnew_end_date\s*:/.test(payloadCode);
-  return hasStart && hasEnd;
+  const keys = [];
+  let depth = 0;
+  let inString = false;
+  let quoteChar = '';
+  let currentSegment = '';
+
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (inString) {
+      if (ch === '\\') {
+        i++;
+      } else if (ch === quoteChar) {
+        inString = false;
+      }
+      currentSegment += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      inString = true;
+      quoteChar = ch;
+      currentSegment += ch;
+      continue;
+    }
+    if (ch === '{' || ch === '[' || ch === '(') {
+      depth++;
+      currentSegment += ch;
+      continue;
+    }
+    if (ch === '}' || ch === ']' || ch === ')') {
+      depth--;
+      currentSegment += ch;
+      continue;
+    }
+    if (ch === ',' && depth === 0) {
+      const keyMatch = currentSegment.match(/^\s*['"]?([a-zA-Z0-9_$]+)['"]?\s*:/);
+      if (keyMatch) keys.push(keyMatch[1]);
+      currentSegment = '';
+      continue;
+    }
+    currentSegment += ch;
+  }
+  if (currentSegment.trim()) {
+    const keyMatch = currentSegment.match(/^\s*['"]?([a-zA-Z0-9_$]+)['"]?\s*:/);
+    if (keyMatch) keys.push(keyMatch[1]);
+  }
+  return keys;
+}
+
+function checkRenewalPayloadPredicate(payloadCode) {
+  const keys = extractTopLevelKeys(payloadCode);
+  if (keys.length !== 2) return false;
+  const sorted = [...keys].sort();
+  return sorted[0] === 'new_end_date' && sorted[1] === 'new_start_date';
 }
 
 function checkUnlockOrderingPredicate(code) {
@@ -142,6 +192,71 @@ function checkUnlockOrderingPredicate(code) {
   const unlockIdx = code.indexOf("mutationLockRef.current = false");
   if (fetchIdx === -1 || unlockIdx === -1) return false;
   return fetchIdx < unlockIdx;
+}
+
+function checkAllReconciliationPathsOrderingPredicate(handlerSource) {
+  const returns = [-1];
+  let rIdx = 0;
+  while ((rIdx = handlerSource.indexOf("return;", rIdx)) !== -1) {
+    returns.push(rIdx);
+    rIdx += "return;".length;
+  }
+  returns.push(handlerSource.length);
+
+  let occCount = 0;
+  for (let s = 0; s < returns.length - 1; s++) {
+    const start = returns[s] + (s === 0 ? 1 : "return;".length);
+    const end = returns[s + 1] + (s + 1 === returns.length - 1 ? 0 : "return;".length);
+    const branchCode = handlerSource.slice(start, end);
+    if (branchCode.includes("await fetchOccupancy()")) {
+      occCount++;
+      const fIdx = branchCode.indexOf("await fetchOccupancy()");
+      const earlyUnlock = branchCode.lastIndexOf("mutationLockRef.current = false", fIdx);
+      if (earlyUnlock !== -1) return false;
+      const afterFetch = branchCode.slice(fIdx);
+      const aIdx = afterFetch.indexOf("setActiveMutation(null)");
+      const uIdx = afterFetch.indexOf("mutationLockRef.current = false");
+      if (aIdx === -1 || uIdx === -1) return false;
+      if (aIdx >= uIdx) return false;
+    }
+  }
+  return occCount >= 1;
+}
+
+function checkBackendRouteBlockPredicate(blockContent, expectedMethod, expectedControllerMethod) {
+  if (!blockContent) return false;
+  const rbacMatch = blockContent.match(/AuthMiddleware::hasRole\s*\(\s*\[([^\]]+)\]\s*\)/);
+  if (!rbacMatch) return false;
+  const roles = rbacMatch[1].split(",").map(s => s.trim().replace(/['"]/g, "")).sort();
+  const expectedRoles = ["admin", "reception", "super_admin"];
+  if (roles.length !== 3 || roles[0] !== expectedRoles[0] || roles[1] !== expectedRoles[1] || roles[2] !== expectedRoles[2]) {
+    return false;
+  }
+  if (blockContent.includes("'trainer'") || blockContent.includes('"trainer"') ||
+      blockContent.includes("'editor'") || blockContent.includes('"editor"')) {
+    return false;
+  }
+  const methodRegex = new RegExp(`\\$method\\s*===\\s*['"]${expectedMethod}['"]`);
+  if (!methodRegex.test(blockContent)) return false;
+
+  const otherMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"].filter(m => m !== expectedMethod);
+  for (const om of otherMethods) {
+    if (new RegExp(`\\$method\\s*===\\s*['"]${om}['"]`).test(blockContent)) return false;
+  }
+  if (!blockContent.includes(`->${expectedControllerMethod}`)) return false;
+  if (!blockContent.includes("ReceptionMemberController")) return false;
+  return true;
+}
+
+function checkRenewalResponseTypePredicate(interfaceBody) {
+  const renewalObjBlock = extractBraceBlock(interfaceBody, "renewal:");
+  if (!renewalObjBlock) return false;
+  const fieldMatches = [...renewalObjBlock.body.matchAll(/^\s*([a-zA-Z0-9_$]+)\s*\??\s*:/gm)];
+  const extractedFields = fieldMatches.map(m => m[1]).sort();
+  const expectedFields = [
+    "created_at", "id", "member_id", "new_end_date", "new_start_date", "previous_end_date", "previous_start_date", "uuid"
+  ];
+  return extractedFields.length === 8 && JSON.stringify(extractedFields) === JSON.stringify(expectedFields);
 }
 
 function checkRenewalReconciliationPredicate(code) {
@@ -164,7 +279,7 @@ function checkApiSurfacePredicate(apiList) {
   return true;
 }
 
-// Self-Test A: Renewal payload self-test
+// Self-Test A: Renewal payload self-test (exact 2-key set: new_start_date, new_end_date)
 reportInvariant(
   checkRenewalPayloadPredicate("{ new_start_date: trimmedStart, new_end_date: trimmedEnd }") === true,
   "Self-Test A1: Renewal payload predicate passes canonical payload"
@@ -177,6 +292,14 @@ reportInvariant(
   checkRenewalPayloadPredicate("{ new_start_date: trimmedStart, new_end_date: trimmedEnd, price: 1000 }") === false,
   "Self-Test A3: Renewal payload predicate rejects extra payment field"
 );
+reportInvariant(
+  checkRenewalPayloadPredicate("{ new_start_date: trimmedStart, new_end_date: trimmedEnd, foo: 'bar' }") === false,
+  "Self-Test A4: Renewal payload predicate rejects unknown extra field (foo)"
+);
+reportInvariant(
+  checkRenewalPayloadPredicate("{ new_start_date: trimmedStart }") === false,
+  "Self-Test A5: Renewal payload predicate rejects payload with only start date"
+);
 
 // Self-Test B: Unlock ordering self-test
 reportInvariant(
@@ -186,6 +309,50 @@ reportInvariant(
 reportInvariant(
   checkUnlockOrderingPredicate("mutationLockRef.current = false; await fetchOccupancy();") === false,
   "Self-Test B2: Unlock ordering predicate rejects premature unlock before refresh"
+);
+
+const syntheticValidHandler = `
+  if (conflict) {
+    await fetchOccupancy();
+    setActiveMutation(null);
+    mutationLockRef.current = false;
+    return;
+  }
+  if (malformed) {
+    await fetchOccupancy();
+    setActiveMutation(null);
+    mutationLockRef.current = false;
+    return;
+  }
+  await fetchOccupancy();
+  setActiveMutation(null);
+  mutationLockRef.current = false;
+`;
+reportInvariant(
+  checkAllReconciliationPathsOrderingPredicate(syntheticValidHandler) === true,
+  "Self-Test B3: Multi-path ordering predicate passes all-valid-paths handler"
+);
+
+const syntheticBadHandler = `
+  if (conflict) {
+    await fetchOccupancy();
+    setActiveMutation(null);
+    mutationLockRef.current = false;
+    return;
+  }
+  if (malformed) {
+    mutationLockRef.current = false;
+    await fetchOccupancy();
+    setActiveMutation(null);
+    return;
+  }
+  await fetchOccupancy();
+  setActiveMutation(null);
+  mutationLockRef.current = false;
+`;
+reportInvariant(
+  checkAllReconciliationPathsOrderingPredicate(syntheticBadHandler) === false,
+  "Self-Test B4: Multi-path ordering predicate rejects handler with one valid branch and one premature-unlock branch"
 );
 
 // Self-Test C: Renewal reconciliation self-test
@@ -216,6 +383,110 @@ reportInvariant(
 reportInvariant(
   checkApiSurfacePredicate(["/api/reception/occupancy", "/api/admin/members"]) === false,
   "Self-Test E2: API surface predicate rejects /api/admin/members"
+);
+
+// Self-Test F: Backend route block predicate self-test
+const canonicalRouteBlock = `
+    if (preg_match('#^/api/reception/members$#', $requestUri)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/ReceptionMemberController.php';
+            (new \\Controllers\\ReceptionMemberController())->index();
+            $matched = true;
+        }
+    }
+`;
+reportInvariant(
+  checkBackendRouteBlockPredicate(canonicalRouteBlock, 'GET', 'index()') === true,
+  "Self-Test F1: Backend route predicate passes canonical GET /api/reception/members route block"
+);
+
+const unauthorizedRoleRouteBlock = `
+    if (preg_match('#^/api/reception/members$#', $requestUri)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception', 'trainer']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/ReceptionMemberController.php';
+            (new \\Controllers\\ReceptionMemberController())->index();
+            $matched = true;
+        }
+    }
+`;
+reportInvariant(
+  checkBackendRouteBlockPredicate(unauthorizedRoleRouteBlock, 'GET', 'index()') === false,
+  "Self-Test F2: Backend route predicate rejects route block with unauthorized role 'trainer'"
+);
+
+const wrongMethodRouteBlock = `
+    if (preg_match('#^/api/reception/members$#', $requestUri)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'POST') {
+            require_once __DIR__ . '/controllers/ReceptionMemberController.php';
+            (new \\Controllers\\ReceptionMemberController())->index();
+            $matched = true;
+        }
+    }
+`;
+reportInvariant(
+  checkBackendRouteBlockPredicate(wrongMethodRouteBlock, 'GET', 'index()') === false,
+  "Self-Test F3: Backend route predicate rejects route block with wrong HTTP method"
+);
+
+// Self-Test G: Renewal response type exactness self-test
+const canonicalTypeBlock = `
+export interface ReceptionRenewalResponse {
+  renewal: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    previous_start_date: string | null;
+    previous_end_date: string | null;
+    new_start_date: string;
+    new_end_date: string;
+    created_at: string;
+  };
+}
+`;
+reportInvariant(
+  checkRenewalResponseTypePredicate(canonicalTypeBlock) === true,
+  "Self-Test G1: Type field-set predicate passes exact 8-field renewal type"
+);
+
+const extraFieldTypeBlock = `
+export interface ReceptionRenewalResponse {
+  renewal: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    previous_start_date: string | null;
+    previous_end_date: string | null;
+    new_start_date: string;
+    new_end_date: string;
+    created_at: string;
+    extra_field: string;
+  };
+}
+`;
+reportInvariant(
+  checkRenewalResponseTypePredicate(extraFieldTypeBlock) === false,
+  "Self-Test G2: Type field-set predicate rejects renewal type with extra field"
+);
+
+const missingFieldTypeBlock = `
+export interface ReceptionRenewalResponse {
+  renewal: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    previous_start_date: string | null;
+    previous_end_date: string | null;
+    new_start_date: string;
+    new_end_date: string;
+  };
+}
+`;
+reportInvariant(
+  checkRenewalResponseTypePredicate(missingFieldTypeBlock) === false,
+  "Self-Test G3: Type field-set predicate rejects renewal type with missing field"
 );
 
 console.log("--- Negative Self-Tests Completed ---\n");
@@ -631,7 +902,7 @@ reportInvariant(
 );
 
 // =============================================================================
-// Section 11: Check-In Controlled Errors
+// Section 11: Check-In Controlled Errors & Conflict Reconciliation
 // =============================================================================
 reportInvariant(checkInContent.includes("MEMBER_INACTIVE"), "Check-in errors: Handles MEMBER_INACTIVE");
 reportInvariant(checkInContent.includes("MEMBERSHIP_EXPIRED"), "Check-in errors: Handles MEMBERSHIP_EXPIRED");
@@ -641,13 +912,35 @@ reportInvariant(checkInContent.includes("err.status === 403"), "Check-in errors:
 reportInvariant(checkInContent.includes("err.status === 422"), "Check-in errors: Handles 422 Unprocessable");
 reportInvariant(!checkInContent.includes("message: err.message"), "Check-in errors: Raw err.message is never rendered");
 
-// In check-in conflict, fetchOccupancy is triggered
-const alreadyCheckedInIndex = checkInContent.indexOf("MEMBER_ALREADY_CHECKED_IN");
-const refreshAfterConflict = checkInContent.indexOf("await fetchOccupancy()", alreadyCheckedInIndex);
-reportInvariant(
-  alreadyCheckedInIndex !== -1 && refreshAfterConflict !== -1,
-  "Check-in errors: MEMBER_ALREADY_CHECKED_IN conflict triggers occupancy reconciliation"
-);
+// In check-in conflict, fetchOccupancy is triggered within catch block
+const checkInCatchIdx = checkInContent.indexOf("catch (err: unknown)");
+const checkInCatchBlock = checkInCatchIdx !== -1 ? extractBraceBlock(checkInContent.slice(checkInCatchIdx), "catch") : null;
+reportInvariant(checkInCatchBlock !== null, "Check-in errors: Extracted handleCheckIn catch block using balanced extraction");
+
+if (checkInCatchBlock) {
+  const alreadyCheckedInBranch = extractBraceBlock(checkInCatchBlock.content, "MEMBER_ALREADY_CHECKED_IN");
+  reportInvariant(
+    alreadyCheckedInBranch !== null && alreadyCheckedInBranch.content.includes("shouldRefreshOccupancy = true"),
+    "Check-in errors: MEMBER_ALREADY_CHECKED_IN branch sets shouldRefreshOccupancy = true"
+  );
+
+  const checkInReconcileBlock = extractBraceBlock(checkInCatchBlock.content, "if (shouldRefreshOccupancy)");
+  reportInvariant(
+    checkInReconcileBlock !== null && checkInReconcileBlock.content.includes("await fetchOccupancy()"),
+    "Check-in errors: Catch block shouldRefreshOccupancy path calls await fetchOccupancy()"
+  );
+
+  const abortCheckEnd = checkInCatchBlock.content.indexOf("return;") + "return;".length;
+  const afterAbortReturn = checkInCatchBlock.content.slice(abortCheckEnd);
+
+  const conflictFetchIdx = afterAbortReturn.indexOf("await fetchOccupancy()");
+  const conflictUnlockIdx = afterAbortReturn.indexOf("mutationLockRef.current = false", conflictFetchIdx);
+  const conflictEarlyUnlock = afterAbortReturn.slice(0, conflictFetchIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    conflictFetchIdx !== -1 && conflictUnlockIdx !== -1 && conflictEarlyUnlock === -1,
+    "Check-in errors: Conflict reconciliation releases mutation lock strictly after fetchOccupancy"
+  );
+}
 
 // =============================================================================
 // Section 12: Check-Out Exact Frontend Contract
@@ -714,7 +1007,7 @@ reportInvariant(
 );
 
 // =============================================================================
-// Section 14: Checkout Controlled Errors
+// Section 14: Checkout Controlled Errors & Conflict Reconciliation
 // =============================================================================
 reportInvariant(checkOutContent.includes("MEMBER_NOT_CHECKED_IN"), "Checkout errors: Handles MEMBER_NOT_CHECKED_IN");
 reportInvariant(checkOutContent.includes("err.status === 404"), "Checkout errors: Handles 404 Not Found");
@@ -722,12 +1015,35 @@ reportInvariant(checkOutContent.includes("err.status === 403"), "Checkout errors
 reportInvariant(checkOutContent.includes("err.status === 422"), "Checkout errors: Handles 422 Unprocessable");
 reportInvariant(!checkOutContent.includes("message: err.message"), "Checkout errors: Raw err.message is never rendered");
 
-const notCheckedInIndex = checkOutContent.indexOf("MEMBER_NOT_CHECKED_IN");
-const refreshAfterCheckoutConflict = checkOutContent.indexOf("await fetchOccupancy()", notCheckedInIndex);
-reportInvariant(
-  notCheckedInIndex !== -1 && refreshAfterCheckoutConflict !== -1,
-  "Checkout errors: MEMBER_NOT_CHECKED_IN conflict triggers occupancy reconciliation"
-);
+// In checkout conflict, fetchOccupancy is triggered within catch block
+const checkOutCatchIdx = checkOutContent.indexOf("catch (err: unknown)");
+const checkOutCatchBlock = checkOutCatchIdx !== -1 ? extractBraceBlock(checkOutContent.slice(checkOutCatchIdx), "catch") : null;
+reportInvariant(checkOutCatchBlock !== null, "Checkout errors: Extracted handleCheckOut catch block using balanced extraction");
+
+if (checkOutCatchBlock) {
+  const notCheckedInBranch = extractBraceBlock(checkOutCatchBlock.content, "MEMBER_NOT_CHECKED_IN");
+  reportInvariant(
+    notCheckedInBranch !== null && notCheckedInBranch.content.includes("shouldRefreshOccupancy = true"),
+    "Checkout errors: MEMBER_NOT_CHECKED_IN branch sets shouldRefreshOccupancy = true"
+  );
+
+  const checkOutReconcileBlock = extractBraceBlock(checkOutCatchBlock.content, "if (shouldRefreshOccupancy)");
+  reportInvariant(
+    checkOutReconcileBlock !== null && checkOutReconcileBlock.content.includes("await fetchOccupancy()"),
+    "Checkout errors: Catch block shouldRefreshOccupancy path calls await fetchOccupancy()"
+  );
+
+  const abortCheckEnd = checkOutCatchBlock.content.indexOf("return;") + "return;".length;
+  const afterAbortReturn = checkOutCatchBlock.content.slice(abortCheckEnd);
+
+  const conflictFetchIdx = afterAbortReturn.indexOf("await fetchOccupancy()");
+  const conflictUnlockIdx = afterAbortReturn.indexOf("mutationLockRef.current = false", conflictFetchIdx);
+  const conflictEarlyUnlock = afterAbortReturn.slice(0, conflictFetchIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    conflictFetchIdx !== -1 && conflictUnlockIdx !== -1 && conflictEarlyUnlock === -1,
+    "Checkout errors: Conflict reconciliation releases mutation lock strictly after fetchOccupancy"
+  );
+}
 
 // =============================================================================
 // Section 15: Shared Synchronous Mutation Lock
@@ -773,7 +1089,7 @@ reportInvariant(
 );
 
 // =============================================================================
-// Section 16: Check-In/Out Reconciliation-Before-Unlock
+// Section 16: Check-In/Out Reconciliation-Before-Unlock (All Paths Scoped)
 // =============================================================================
 function verifyReconciliationBeforeUnlock(handlerContent, handlerName) {
   // Find success block
@@ -790,6 +1106,72 @@ reportInvariant(
   verifyReconciliationBeforeUnlock(checkOutContent, "handleCheckOut"),
   "Reconciliation order: handleCheckOut awaits fetchOccupancy before releasing mutationLockRef"
 );
+
+// Comprehensive multi-path ordering across all reconciliation branches
+reportInvariant(
+  checkAllReconciliationPathsOrderingPredicate(checkInContent),
+  "Reconciliation order: handleCheckIn satisfies strict ordering across all reconciliation branches"
+);
+reportInvariant(
+  checkAllReconciliationPathsOrderingPredicate(checkOutContent),
+  "Reconciliation order: handleCheckOut satisfies strict ordering across all reconciliation branches"
+);
+
+// Explicit malformed-success path verification for handleCheckIn
+const checkInMalformedBlock = extractBraceBlock(checkInContent, "if (contractValidationFailed)");
+reportInvariant(checkInMalformedBlock !== null, "Reconciliation order: handleCheckIn has contractValidationFailed block");
+if (checkInMalformedBlock) {
+  const fIdx = checkInMalformedBlock.content.indexOf("await fetchOccupancy()");
+  const aIdx = checkInMalformedBlock.content.indexOf("setActiveMutation(null)");
+  const uIdx = checkInMalformedBlock.content.indexOf("mutationLockRef.current = false");
+  const earlyUnlock = checkInMalformedBlock.content.slice(0, fIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    fIdx !== -1 && aIdx !== -1 && uIdx !== -1 && fIdx < aIdx && aIdx < uIdx && earlyUnlock === -1,
+    "Reconciliation order: handleCheckIn malformed-success path orders fetchOccupancy -> setActiveMutation(null) -> unlock"
+  );
+}
+
+// Explicit normal success path verification for handleCheckIn
+if (checkInMalformedBlock) {
+  const malformedEnd = checkInContent.indexOf(checkInMalformedBlock.content) + checkInMalformedBlock.content.length;
+  const normalSuccessCode = checkInContent.slice(malformedEnd);
+  const fIdx = normalSuccessCode.indexOf("await fetchOccupancy()");
+  const aIdx = normalSuccessCode.indexOf("setActiveMutation(null)");
+  const uIdx = normalSuccessCode.indexOf("mutationLockRef.current = false");
+  const earlyUnlock = normalSuccessCode.slice(0, fIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    fIdx !== -1 && aIdx !== -1 && uIdx !== -1 && fIdx < aIdx && aIdx < uIdx && earlyUnlock === -1,
+    "Reconciliation order: handleCheckIn normal success path orders fetchOccupancy -> setActiveMutation(null) -> unlock"
+  );
+}
+
+// Explicit malformed-success path verification for handleCheckOut
+const checkOutMalformedBlock = extractBraceBlock(checkOutContent, "if (contractValidationFailed)");
+reportInvariant(checkOutMalformedBlock !== null, "Reconciliation order: handleCheckOut has contractValidationFailed block");
+if (checkOutMalformedBlock) {
+  const fIdx = checkOutMalformedBlock.content.indexOf("await fetchOccupancy()");
+  const aIdx = checkOutMalformedBlock.content.indexOf("setActiveMutation(null)");
+  const uIdx = checkOutMalformedBlock.content.indexOf("mutationLockRef.current = false");
+  const earlyUnlock = checkOutMalformedBlock.content.slice(0, fIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    fIdx !== -1 && aIdx !== -1 && uIdx !== -1 && fIdx < aIdx && aIdx < uIdx && earlyUnlock === -1,
+    "Reconciliation order: handleCheckOut malformed-success path orders fetchOccupancy -> setActiveMutation(null) -> unlock"
+  );
+}
+
+// Explicit normal success path verification for handleCheckOut
+if (checkOutMalformedBlock) {
+  const malformedEnd = checkOutContent.indexOf(checkOutMalformedBlock.content) + checkOutMalformedBlock.content.length;
+  const normalSuccessCode = checkOutContent.slice(malformedEnd);
+  const fIdx = normalSuccessCode.indexOf("await fetchOccupancy()");
+  const aIdx = normalSuccessCode.indexOf("setActiveMutation(null)");
+  const uIdx = normalSuccessCode.indexOf("mutationLockRef.current = false");
+  const earlyUnlock = normalSuccessCode.slice(0, fIdx).indexOf("mutationLockRef.current = false");
+  reportInvariant(
+    fIdx !== -1 && aIdx !== -1 && uIdx !== -1 && fIdx < aIdx && aIdx < uIdx && earlyUnlock === -1,
+    "Reconciliation order: handleCheckOut normal success path orders fetchOccupancy -> setActiveMutation(null) -> unlock"
+  );
+}
 
 // =============================================================================
 // Section 17: Renewal Exact POST Contract
@@ -911,6 +1293,39 @@ reportInvariant(
   "Renewal eligibility: Required neutral disclaimer text is present"
 );
 
+// Extract 'Üyeliği Yenile' button JSX block
+const renewButtonTextIdx = dashSource.indexOf("Üyeliği Yenile");
+const renewButtonStart = dashSource.lastIndexOf("<button", renewButtonTextIdx);
+const renewButtonEnd = dashSource.indexOf("</button>", renewButtonTextIdx);
+const renewButtonJsx = renewButtonStart !== -1 && renewButtonEnd !== -1
+  ? dashSource.slice(renewButtonStart, renewButtonEnd + "</button>".length)
+  : "";
+
+reportInvariant(
+  renewButtonStart !== -1 && renewButtonEnd !== -1,
+  "Renewal eligibility: 'Üyeliği Yenile' button JSX element extracted"
+);
+
+const mapIdx = dashSource.indexOf("searchResults.map");
+reportInvariant(
+  mapIdx !== -1 && mapIdx < renewButtonStart,
+  "Renewal eligibility: 'Üyeliği Yenile' button is inside search results card iteration"
+);
+
+const disabledAttrMatch = renewButtonJsx.match(/disabled=\{([^}]+)\}/);
+reportInvariant(
+  disabledAttrMatch !== null && disabledAttrMatch[1].trim() === "activeMutation !== null",
+  "Renewal eligibility: Button disabled attribute depends strictly on shared activeMutation state",
+  `Found: ${disabledAttrMatch ? disabledAttrMatch[1] : 'null'}`
+);
+
+reportInvariant(
+  !renewButtonJsx.includes("status") &&
+  !renewButtonJsx.includes("hasOpenVisit") &&
+  !renewButtonJsx.includes("membership_end_date"),
+  "Renewal eligibility: Button element has no dependency on member.status, hasOpenVisit, or membership_end_date"
+);
+
 // =============================================================================
 // Section 21: Renewal Reconciliation Boundary
 // =============================================================================
@@ -942,22 +1357,56 @@ reportInvariant(renewContent.includes("err.status === 404"), "Renewal error: Han
 reportInvariant(renewContent.includes("err.status === 403"), "Renewal error: Handles 403 safe mapping");
 reportInvariant(renewContent.includes("err.status === 422"), "Renewal error: Handles 422 safe mapping");
 
-// Form values not cleared on error
-const catchBlockMatch = renewContent.match(/catch\s*\([^)]*\)\s*\{([\s\S]*?)(?:return|\})/);
-if (catchBlockMatch) {
-  const catchContent = catchBlockMatch[1];
+// Extract renewal API error catch block using balanced extraction
+const renewPostIdx = renewContent.indexOf("apiClient.post");
+const renewCatchIdx = renewContent.indexOf("catch", renewPostIdx);
+const renewalCatchBlock = renewCatchIdx !== -1 ? extractBraceBlock(renewContent.slice(renewCatchIdx), "catch") : null;
+
+reportInvariant(
+  renewalCatchBlock !== null,
+  "Renewal error: Extracted handleRenewSubmit catch block using balanced extraction"
+);
+
+if (renewalCatchBlock) {
+  const catchContent = renewalCatchBlock.content;
   reportInvariant(
-    !catchContent.includes("setRenewalStartDate(\"\")") &&
-    !catchContent.includes("setRenewalEndDate(\"\")"),
-    "Renewal error: Form dates preserved on error"
+    catchContent.includes("err.status === 404") && catchContent.includes("Üye bulunamadı."),
+    "Renewal error: Handles 404 safe mapping with Turkish message"
+  );
+  reportInvariant(
+    catchContent.includes("err.status === 403") && catchContent.includes("Bu işlem için yetkiniz yok."),
+    "Renewal error: Handles 403 safe mapping with Turkish message"
+  );
+  reportInvariant(
+    catchContent.includes("err.status === 422") && catchContent.includes("Tarih bilgileri geçersiz"),
+    "Renewal error: Handles 422 safe mapping with Turkish message"
+  );
+  reportInvariant(
+    catchContent.includes("Üyelik yenileme işlemi tamamlanamadı."),
+    "Renewal error: Fallback message present"
+  );
+  reportInvariant(
+    !catchContent.includes("setRenewalStartDate") &&
+    !catchContent.includes("setRenewalEndDate"),
+    "Renewal error: Form dates preserved on error (no reset)"
   );
   reportInvariant(
     !catchContent.includes("setRenewalModalMember(null)"),
     "Renewal error: Modal not closed on non-2xx error"
   );
   reportInvariant(
-    !catchContent.includes("apiClient.post"),
+    !catchContent.includes("apiClient.post") && !catchContent.includes("handleRenewSubmit"),
     "Renewal error: No automatic retry loop"
+  );
+  reportInvariant(
+    catchContent.includes("setRenewalFormError(errMsg)"),
+    "Renewal error: Error message set to form error state"
+  );
+  const unlockInCatch = catchContent.lastIndexOf("mutationLockRef.current = false");
+  const returnInCatch = catchContent.lastIndexOf("return;");
+  reportInvariant(
+    unlockInCatch !== -1 && returnInCatch !== -1 && unlockInCatch < returnInCatch,
+    "Renewal error: Mutation lock released before return in catch block"
   );
 }
 
@@ -1055,37 +1504,36 @@ if (renewalInterfaceBlock) {
   reportInvariant(rContent.includes("new_start_date: string;"), "Type contract: Renewal type contains new_start_date");
   reportInvariant(rContent.includes("new_end_date: string;"), "Type contract: Renewal type contains new_end_date");
   reportInvariant(rContent.includes("created_at: string;"), "Type contract: Renewal type contains created_at");
+  reportInvariant(
+    checkRenewalResponseTypePredicate(renewalInterfaceBlock.body),
+    "Type contract: Renewal response renewal object field-set strictly matches exact 8 fields (no missing, no extra)"
+  );
 }
 
 // =============================================================================
-// Section 28: Backend/Frontend Endpoint Parity
+// Section 28: Backend/Frontend Endpoint Parity (Per-Route Scoped)
 // =============================================================================
-reportInvariant(
-  apiIndexSource.includes("preg_match('#^/api/reception/members$#'"),
-  "Endpoint parity: Backend defines GET /api/reception/members"
-);
-reportInvariant(
-  apiIndexSource.includes("preg_match('#^/api/reception/occupancy$#'"),
-  "Endpoint parity: Backend defines GET /api/reception/occupancy"
-);
-reportInvariant(
-  apiIndexSource.includes("preg_match('#^/api/reception/members/([1-9]\\d*)/check-in$#'"),
-  "Endpoint parity: Backend defines POST /api/reception/members/{id}/check-in"
-);
-reportInvariant(
-  apiIndexSource.includes("preg_match('#^/api/reception/members/([1-9]\\d*)/check-out$#'"),
-  "Endpoint parity: Backend defines POST /api/reception/members/{id}/check-out"
-);
-reportInvariant(
-  apiIndexSource.includes("preg_match('#^/api/reception/members/([1-9]\\d*)/renew$#'"),
-  "Endpoint parity: Backend defines POST /api/reception/members/{id}/renew"
-);
+const routeConfigs = [
+  { path: "/api/reception/members", pattern: "preg_match('#^/api/reception/members$#'", method: "GET", action: "index()" },
+  { path: "/api/reception/occupancy", pattern: "preg_match('#^/api/reception/occupancy$#'", method: "GET", action: "occupancy()" },
+  { path: "/api/reception/members/{id}/check-in", pattern: "preg_match('#^/api/reception/members/([1-9]\\d*)/check-in$#'", method: "POST", action: "checkIn(" },
+  { path: "/api/reception/members/{id}/check-out", pattern: "preg_match('#^/api/reception/members/([1-9]\\d*)/check-out$#'", method: "POST", action: "checkOut(" },
+  { path: "/api/reception/members/{id}/renew", pattern: "preg_match('#^/api/reception/members/([1-9]\\d*)/renew$#'", method: "POST", action: "renew(" }
+];
 
-// Role check for reception routes
-reportInvariant(
-  apiIndexSource.includes("AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])"),
-  "Endpoint parity: Backend reception routes guarded by ['super_admin', 'admin', 'reception']"
-);
+for (const rc of routeConfigs) {
+  const routeBlock = extractBraceBlock(apiIndexSource, rc.pattern);
+  reportInvariant(
+    routeBlock !== null,
+    `Endpoint parity: Route block for ${rc.path} extracted from api/index.php`
+  );
+  if (routeBlock) {
+    reportInvariant(
+      checkBackendRouteBlockPredicate(routeBlock.content, rc.method, rc.action),
+      `Endpoint parity: Route ${rc.path} enforces exact RBAC ['super_admin', 'admin', 'reception'], HTTP method ${rc.method}, and ${rc.action}`
+    );
+  }
+}
 
 // =============================================================================
 // Section 29: Existing Backend Renewal Guard Remains Present
