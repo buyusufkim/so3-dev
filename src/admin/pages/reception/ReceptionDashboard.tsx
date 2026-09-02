@@ -137,6 +137,7 @@ export function ReceptionDashboard() {
   const occupancyAbortRef = useRef<AbortController | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchTimeoutRef = useRef<number | null>(null);
+  const searchGenerationRef = useRef<number>(0);
 
   const fetchOccupancy = useCallback(async () => {
     if (occupancyAbortRef.current) {
@@ -184,10 +185,7 @@ export function ReceptionDashboard() {
     };
   }, [fetchOccupancy]);
 
-  const performSearch = useCallback(async (q: string) => {
-    if (searchAbortRef.current) {
-      searchAbortRef.current.abort();
-    }
+  const performSearch = useCallback(async (q: string, generation: number) => {
     const abortController = new AbortController();
     searchAbortRef.current = abortController;
 
@@ -200,9 +198,12 @@ export function ReceptionDashboard() {
         signal: abortController.signal
       });
       const validated = validateSearchResponse(response);
+      
+      if (abortController.signal.aborted || searchGenerationRef.current !== generation) return;
+
       setSearchResults(validated.items);
     } catch (err: unknown) {
-      if (abortController.signal.aborted) return;
+      if (abortController.signal.aborted || searchGenerationRef.current !== generation) return;
       
       let errMsg = "Arama sonuçları alınamadı.";
       if (err instanceof ApiError) {
@@ -221,13 +222,19 @@ export function ReceptionDashboard() {
       setSearchError(errMsg);
       setSearchResults(null);
     } finally {
-      if (!abortController.signal.aborted) {
+      if (!abortController.signal.aborted && searchGenerationRef.current === generation) {
         setSearchLoading(false);
       }
     }
   }, []);
 
   useEffect(() => {
+    const currentGeneration = ++searchGenerationRef.current;
+    
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+
     const trimmed = searchQuery.trim();
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -238,7 +245,6 @@ export function ReceptionDashboard() {
       setSearchError(null);
       setLocalValidationError(null);
       setSearchLoading(false);
-      if (searchAbortRef.current) searchAbortRef.current.abort();
       return;
     }
 
@@ -247,18 +253,18 @@ export function ReceptionDashboard() {
       setSearchError(null);
       setSearchLoading(false);
       setLocalValidationError("Arama terimi çok uzun.");
-      if (searchAbortRef.current) searchAbortRef.current.abort();
       return;
     }
 
     setLocalValidationError(null);
 
     searchTimeoutRef.current = window.setTimeout(() => {
-      performSearch(trimmed);
+      performSearch(trimmed, currentGeneration);
     }, 350);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      if (searchAbortRef.current) searchAbortRef.current.abort();
     };
   }, [searchQuery, performSearch]);
 
@@ -349,7 +355,7 @@ export function ReceptionDashboard() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
             <input
               type="text"
-              placeholder="İsim, soyisim, telefon veya ID..."
+              placeholder="İsim, soyisim, telefon veya UUID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors"
