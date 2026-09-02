@@ -6,9 +6,10 @@ import {
   ReceptionOccupancyItem, 
   ReceptionMemberSearchItem,
   ReceptionCheckInResponse,
-  ReceptionCheckOutResponse
+  ReceptionCheckOutResponse,
+  ReceptionRenewalResponse
 } from "./types";
-import { Search, RotateCcw, AlertTriangle, Users } from "lucide-react";
+import { Search, RotateCcw, AlertTriangle, Users, X } from "lucide-react";
 
 // Runtime Validators
 
@@ -139,6 +140,48 @@ function validateCheckOutResponse(data: any): ReceptionCheckOutResponse {
   };
 }
 
+function validateRenewalResponse(data: any): ReceptionRenewalResponse {
+  if (!data || typeof data !== 'object') throw new Error('Invalid renewal response');
+  const renewal = data.renewal;
+  if (!renewal || typeof renewal !== 'object') throw new Error('Invalid renewal object');
+  if (typeof renewal.id !== 'number' || renewal.id <= 0 || !Number.isInteger(renewal.id)) throw new Error('Invalid renewal id');
+  if (typeof renewal.uuid !== 'string' || renewal.uuid === '') throw new Error('Invalid renewal uuid');
+  if (typeof renewal.member_id !== 'number' || renewal.member_id <= 0 || !Number.isInteger(renewal.member_id)) throw new Error('Invalid renewal member_id');
+  if (renewal.previous_start_date !== null && typeof renewal.previous_start_date !== 'string') throw new Error('Invalid previous_start_date');
+  if (renewal.previous_end_date !== null && typeof renewal.previous_end_date !== 'string') throw new Error('Invalid previous_end_date');
+  if (typeof renewal.new_start_date !== 'string' || renewal.new_start_date === '') throw new Error('Invalid new_start_date');
+  if (typeof renewal.new_end_date !== 'string' || renewal.new_end_date === '') throw new Error('Invalid new_end_date');
+  if (typeof renewal.created_at !== 'string' || renewal.created_at === '') throw new Error('Invalid created_at');
+
+  return {
+    renewal: {
+      id: renewal.id,
+      uuid: renewal.uuid,
+      member_id: renewal.member_id,
+      previous_start_date: renewal.previous_start_date,
+      previous_end_date: renewal.previous_end_date,
+      new_start_date: renewal.new_start_date,
+      new_end_date: renewal.new_end_date,
+      created_at: renewal.created_at
+    }
+  };
+}
+
+function isValidDateString(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  const d = new Date(year, month - 1, day);
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
+
 // Format date helper
 function formatDateTime(dateStr: string) {
   try {
@@ -176,8 +219,13 @@ export function ReceptionDashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [localValidationError, setLocalValidationError] = useState<string | null>(null);
 
-  const [activeMutation, setActiveMutation] = useState<{ memberId: number; kind: 'check-in' | 'check-out' } | null>(null);
+  const [activeMutation, setActiveMutation] = useState<{ memberId: number; kind: 'check-in' | 'check-out' | 'renew' } | null>(null);
   const [mutationFeedback, setMutationFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const [renewalModalMember, setRenewalModalMember] = useState<ReceptionMemberSearchItem | null>(null);
+  const [renewalStartDate, setRenewalStartDate] = useState("");
+  const [renewalEndDate, setRenewalEndDate] = useState("");
+  const [renewalFormError, setRenewalFormError] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
   const mutationLockRef = useRef(false);
@@ -323,6 +371,25 @@ export function ReceptionDashboard() {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       if (searchAbortRef.current) searchAbortRef.current.abort();
     };
+  }, [searchQuery, performSearch]);
+
+  const reconcileSearch = useCallback(async () => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2 || trimmed.length > 80) {
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+
+    const nextGeneration = ++searchGenerationRef.current;
+    await performSearch(trimmed, nextGeneration);
   }, [searchQuery, performSearch]);
 
   const handleCheckIn = useCallback(async (memberId: number) => {
@@ -547,6 +614,161 @@ export function ReceptionDashboard() {
     }
   }, [fetchOccupancy]);
 
+  const handleOpenRenewalModal = useCallback((member: ReceptionMemberSearchItem) => {
+    setRenewalModalMember(member);
+    setRenewalStartDate("");
+    setRenewalEndDate("");
+    setRenewalFormError(null);
+  }, []);
+
+  const handleCloseRenewalModal = useCallback(() => {
+    if (activeMutation?.kind === 'renew') return;
+    setRenewalModalMember(null);
+    setRenewalStartDate("");
+    setRenewalEndDate("");
+    setRenewalFormError(null);
+  }, [activeMutation]);
+
+  const handleRenewSubmit = useCallback(async () => {
+    if (mutationLockRef.current) return;
+    mutationLockRef.current = true;
+
+    if (!renewalModalMember) {
+      mutationLockRef.current = false;
+      return;
+    }
+
+    const memberId = renewalModalMember.id;
+    const trimmedStart = renewalStartDate.trim();
+    const trimmedEnd = renewalEndDate.trim();
+
+    if (!trimmedStart || !trimmedEnd) {
+      setRenewalFormError("Yeni başlangıç ve bitiş tarihlerini seçin.");
+      mutationLockRef.current = false;
+      return;
+    }
+
+    if (!isValidDateString(trimmedStart) || !isValidDateString(trimmedEnd)) {
+      setRenewalFormError("Geçerli tarih bilgileri girin.");
+      mutationLockRef.current = false;
+      return;
+    }
+
+    if (trimmedEnd < trimmedStart) {
+      setRenewalFormError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+      mutationLockRef.current = false;
+      return;
+    }
+
+    setRenewalFormError(null);
+
+    if (mutationAbortRef.current) {
+      mutationAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    mutationAbortRef.current = abortController;
+
+    setActiveMutation({ memberId, kind: 'renew' });
+    setMutationFeedback(null);
+
+    let rawResponse: any;
+
+    try {
+      rawResponse = await apiClient.post(
+        `/api/reception/members/${memberId}/renew`,
+        {
+          new_start_date: trimmedStart,
+          new_end_date: trimmedEnd
+        },
+        { signal: abortController.signal }
+      );
+    } catch (err: unknown) {
+      if (abortController.signal.aborted || !isMountedRef.current) {
+        mutationLockRef.current = false;
+        return;
+      }
+
+      let errMsg = "Üyelik yenileme işlemi tamamlanamadı.";
+
+      if (err instanceof ApiError) {
+        if (err.status === 404) {
+          errMsg = "Üye bulunamadı.";
+        } else if (err.status === 403) {
+          errMsg = "Bu işlem için yetkiniz yok.";
+        } else if (err.status === 422) {
+          errMsg = "Tarih bilgileri geçersiz. Başlangıç ve bitiş tarihlerini kontrol edin.";
+        } else {
+          errMsg = "Üyelik yenileme işlemi tamamlanamadı.";
+        }
+      }
+
+      setRenewalFormError(errMsg);
+      if (isMountedRef.current) {
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
+      return;
+    }
+
+    // Validate contract & member_id & submitted date consistency
+    let contractValidationFailed = false;
+    try {
+      const validated = validateRenewalResponse(rawResponse);
+      if (
+        validated.renewal.member_id !== memberId ||
+        validated.renewal.new_start_date !== trimmedStart ||
+        validated.renewal.new_end_date !== trimmedEnd
+      ) {
+        contractValidationFailed = true;
+      }
+    } catch {
+      contractValidationFailed = true;
+    }
+
+    if (abortController.signal.aborted || !isMountedRef.current) {
+      mutationLockRef.current = false;
+      return;
+    }
+
+    if (contractValidationFailed) {
+      setMutationFeedback({
+        type: 'error',
+        message: "İşlem sonucu doğrulanamadı. Üye bilgileri yenileniyor."
+      });
+      try {
+        await reconcileSearch();
+      } catch {
+        // reconcileSearch handles its own error
+      } finally {
+        if (isMountedRef.current) {
+          setRenewalModalMember(null);
+          setRenewalStartDate("");
+          setRenewalEndDate("");
+          setRenewalFormError(null);
+          setActiveMutation(null);
+        }
+        mutationLockRef.current = false;
+      }
+      return;
+    }
+
+    setMutationFeedback({ type: 'success', message: "Üyelik tarihleri yenilendi." });
+    try {
+      await reconcileSearch();
+    } catch {
+      // reconcileSearch handles its own error
+    } finally {
+      if (isMountedRef.current) {
+        setRenewalModalMember(null);
+        setRenewalStartDate("");
+        setRenewalEndDate("");
+        setRenewalFormError(null);
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
+    }
+  }, [renewalModalMember, renewalStartDate, renewalEndDate, reconcileSearch]);
+
   const openMemberIds = new Set(occupancy?.items.map((item) => item.member.id) ?? []);
 
   return (
@@ -726,6 +948,15 @@ export function ReceptionDashboard() {
                           </div>
 
                           <div className="flex items-center space-x-2 shrink-0 ml-4">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRenewalModal(member)}
+                              disabled={activeMutation !== null}
+                              className="px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50 whitespace-nowrap"
+                            >
+                              Üyeliği Yenile
+                            </button>
+
                             {hasOpenVisit ? (
                               <button
                                 type="button"
@@ -784,6 +1015,109 @@ export function ReceptionDashboard() {
         </div>
 
       </div>
+
+      {/* Renewal Modal */}
+      {renewalModalMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Üyeliği Yenile</h3>
+                <p className="text-sm text-white/50">
+                  {renewalModalMember.first_name} {renewalModalMember.last_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseRenewalModal}
+                disabled={activeMutation?.kind === 'renew'}
+                className="text-white/40 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-white/5 rounded-xl p-3 text-xs space-y-1.5 border border-white/5">
+              <div className="text-white/60 flex justify-between">
+                <span>Mevcut Başlangıç:</span>
+                <span className="text-white font-medium">
+                  {renewalModalMember.membership_start_date ? formatDate(renewalModalMember.membership_start_date) : '-'}
+                </span>
+              </div>
+              <div className="text-white/60 flex justify-between">
+                <span>Mevcut Bitiş:</span>
+                <span className="text-white font-medium">
+                  {renewalModalMember.membership_end_date ? formatDate(renewalModalMember.membership_end_date) : 'Bitiş tarihi tanımlı değil'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1.5">
+                  Yeni başlangıç tarihi
+                </label>
+                <input
+                  type="date"
+                  value={renewalStartDate}
+                  onChange={(e) => setRenewalStartDate(e.target.value)}
+                  disabled={activeMutation?.kind === 'renew'}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors text-sm disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1.5">
+                  Yeni bitiş tarihi
+                </label>
+                <input
+                  type="date"
+                  value={renewalEndDate}
+                  onChange={(e) => setRenewalEndDate(e.target.value)}
+                  disabled={activeMutation?.kind === 'renew'}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors text-sm disabled:opacity-50"
+                />
+              </div>
+
+              <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300">
+                Bu işlem yalnız üyelik tarihlerini günceller; üye durumunu otomatik olarak aktif hale getirmez.
+              </div>
+
+              {renewalFormError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400">
+                  {renewalFormError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={handleCloseRenewalModal}
+                disabled={activeMutation?.kind === 'renew'}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium text-white/80 transition-colors disabled:opacity-50"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleRenewSubmit}
+                disabled={activeMutation !== null}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500/30 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center space-x-2"
+              >
+                {activeMutation?.kind === 'renew' ? (
+                  <>
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                    <span>Yenileniyor...</span>
+                  </>
+                ) : (
+                  <span>Yenile</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

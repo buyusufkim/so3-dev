@@ -60,3 +60,17 @@ export interface ReceptionCheckOutVisit {
 export interface ReceptionCheckOutResponse {
   visit: ReceptionCheckOutVisit;
 }
+
+export interface ReceptionRenewalResponse {
+  renewal: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    previous_start_date: string | null;
+    previous_end_date: string | null;
+    new_start_date: string;
+    new_end_date: string;
+    created_at: string;
+  };
+}
+
