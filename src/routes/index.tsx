@@ -33,7 +33,7 @@ const TrainerTrainingProgramEditor = lazy(() => import("../admin/pages/trainer-t
 const TrainerMemberDetail = lazy(() => import("../admin/pages/trainer-members/TrainerMemberDetail").then(m => ({ default: m.TrainerMemberDetail })));
 const TrainerMemberProgressPage = lazy(() => import("../admin/pages/trainer-member-progress/TrainerMemberProgressPage").then(m => ({ default: m.TrainerMemberProgressPage })));
 const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/TrainerDashboard").then(m => ({ default: m.TrainerDashboard })));
-const ReceptionPlaceholder = lazy(() => import("../admin/pages/Placeholders").then(m => ({ default: m.ReceptionPlaceholder })));
+const ReceptionDashboard = lazy(() => import("../admin/pages/reception/ReceptionDashboard").then(m => ({ default: m.ReceptionDashboard })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -211,7 +211,7 @@ const router = createBrowserRouter([
       },
       {
         path: "reception",
-        element: <AdminSuspense><ReceptionPlaceholder /></AdminSuspense>,
+        element: <AdminSuspense><ReceptionDashboard /></AdminSuspense>,
       },
     ]
   }
