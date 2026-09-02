@@ -4,7 +4,9 @@ import {
   ReceptionOccupancyResponse, 
   ReceptionSearchResponse, 
   ReceptionOccupancyItem, 
-  ReceptionMemberSearchItem 
+  ReceptionMemberSearchItem,
+  ReceptionCheckInResponse,
+  ReceptionCheckOutResponse
 } from "./types";
 import { Search, RotateCcw, AlertTriangle, Users } from "lucide-react";
 
@@ -97,6 +99,46 @@ function validateSearchResponse(data: any): ReceptionSearchResponse {
   return { items };
 }
 
+function validateCheckInResponse(data: any): ReceptionCheckInResponse {
+  if (!data || typeof data !== 'object') throw new Error('Invalid check-in response');
+  const visit = data.visit;
+  if (!visit || typeof visit !== 'object') throw new Error('Invalid check-in visit object');
+  if (typeof visit.id !== 'number' || visit.id <= 0 || !Number.isInteger(visit.id)) throw new Error('Invalid check-in visit id');
+  if (typeof visit.uuid !== 'string' || visit.uuid === '') throw new Error('Invalid check-in visit uuid');
+  if (typeof visit.member_id !== 'number' || visit.member_id <= 0 || !Number.isInteger(visit.member_id)) throw new Error('Invalid check-in member_id');
+  if (typeof visit.checked_in_at !== 'string' || visit.checked_in_at === '') throw new Error('Invalid check-in checked_in_at');
+
+  return {
+    visit: {
+      id: visit.id,
+      uuid: visit.uuid,
+      member_id: visit.member_id,
+      checked_in_at: visit.checked_in_at
+    }
+  };
+}
+
+function validateCheckOutResponse(data: any): ReceptionCheckOutResponse {
+  if (!data || typeof data !== 'object') throw new Error('Invalid check-out response');
+  const visit = data.visit;
+  if (!visit || typeof visit !== 'object') throw new Error('Invalid check-out visit object');
+  if (typeof visit.id !== 'number' || visit.id <= 0 || !Number.isInteger(visit.id)) throw new Error('Invalid check-out visit id');
+  if (typeof visit.uuid !== 'string' || visit.uuid === '') throw new Error('Invalid check-out visit uuid');
+  if (typeof visit.member_id !== 'number' || visit.member_id <= 0 || !Number.isInteger(visit.member_id)) throw new Error('Invalid check-out member_id');
+  if (typeof visit.checked_in_at !== 'string' || visit.checked_in_at === '') throw new Error('Invalid check-out checked_in_at');
+  if (typeof visit.checked_out_at !== 'string' || visit.checked_out_at === '') throw new Error('Invalid check-out checked_out_at');
+
+  return {
+    visit: {
+      id: visit.id,
+      uuid: visit.uuid,
+      member_id: visit.member_id,
+      checked_in_at: visit.checked_in_at,
+      checked_out_at: visit.checked_out_at
+    }
+  };
+}
+
 // Format date helper
 function formatDateTime(dateStr: string) {
   try {
@@ -134,10 +176,23 @@ export function ReceptionDashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [localValidationError, setLocalValidationError] = useState<string | null>(null);
 
+  const [activeMutation, setActiveMutation] = useState<{ memberId: number; kind: 'check-in' | 'check-out' } | null>(null);
+  const [mutationFeedback, setMutationFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const isMountedRef = useRef(true);
+  const mutationAbortRef = useRef<AbortController | null>(null);
   const occupancyAbortRef = useRef<AbortController | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchTimeoutRef = useRef<number | null>(null);
   const searchGenerationRef = useRef<number>(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (mutationAbortRef.current) mutationAbortRef.current.abort();
+    };
+  }, []);
 
   const fetchOccupancy = useCallback(async () => {
     if (occupancyAbortRef.current) {
@@ -268,6 +323,160 @@ export function ReceptionDashboard() {
     };
   }, [searchQuery, performSearch]);
 
+  const handleCheckIn = useCallback(async (memberId: number) => {
+    if (activeMutation) return;
+
+    if (mutationAbortRef.current) {
+      mutationAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    mutationAbortRef.current = abortController;
+
+    setActiveMutation({ memberId, kind: 'check-in' });
+    setMutationFeedback(null);
+
+    let rawResponse: any;
+    let contractValidationFailed = false;
+
+    try {
+      rawResponse = await apiClient.post(
+        `/api/reception/members/${memberId}/check-in`,
+        {},
+        { signal: abortController.signal }
+      );
+    } catch (err: unknown) {
+      if (abortController.signal.aborted || !isMountedRef.current) return;
+
+      let errMsg = "Giriş işlemi tamamlanamadı.";
+      let shouldRefreshOccupancy = false;
+
+      if (err instanceof ApiError) {
+        if (err.code === 'MEMBER_INACTIVE') {
+          errMsg = "Üye pasif durumda. Giriş yapılamaz.";
+        } else if (err.code === 'MEMBERSHIP_EXPIRED') {
+          errMsg = "Üyelik süresi dolmuş. Giriş yapılamaz.";
+        } else if (err.code === 'MEMBER_ALREADY_CHECKED_IN') {
+          errMsg = "Üyenin zaten açık bir girişi bulunuyor.";
+          shouldRefreshOccupancy = true;
+        } else if (err.status === 404) {
+          errMsg = "Üye bulunamadı.";
+        } else if (err.status === 403) {
+          errMsg = "Bu işlem için yetkiniz yok.";
+        } else if (err.status === 422) {
+          errMsg = "Giriş isteği geçersiz.";
+        } else {
+          errMsg = "Giriş işlemi tamamlanamadı.";
+        }
+      }
+
+      setMutationFeedback({ type: 'error', message: errMsg });
+      setActiveMutation(null);
+
+      if (shouldRefreshOccupancy) {
+        fetchOccupancy();
+      }
+      return;
+    }
+
+    try {
+      validateCheckInResponse(rawResponse);
+    } catch {
+      contractValidationFailed = true;
+    }
+
+    if (!isMountedRef.current) return;
+
+    if (contractValidationFailed) {
+      setMutationFeedback({
+        type: 'error',
+        message: "İşlem sonucu doğrulanamadı. Salon durumu yenileniyor."
+      });
+      setActiveMutation(null);
+      fetchOccupancy();
+      return;
+    }
+
+    setMutationFeedback({ type: 'success', message: "Giriş kaydedildi." });
+    setActiveMutation(null);
+    fetchOccupancy();
+  }, [activeMutation, fetchOccupancy]);
+
+  const handleCheckOut = useCallback(async (memberId: number) => {
+    if (activeMutation) return;
+
+    if (mutationAbortRef.current) {
+      mutationAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    mutationAbortRef.current = abortController;
+
+    setActiveMutation({ memberId, kind: 'check-out' });
+    setMutationFeedback(null);
+
+    let rawResponse: any;
+    let contractValidationFailed = false;
+
+    try {
+      rawResponse = await apiClient.post(
+        `/api/reception/members/${memberId}/check-out`,
+        {},
+        { signal: abortController.signal }
+      );
+    } catch (err: unknown) {
+      if (abortController.signal.aborted || !isMountedRef.current) return;
+
+      let errMsg = "Çıkış işlemi tamamlanamadı.";
+      let shouldRefreshOccupancy = false;
+
+      if (err instanceof ApiError) {
+        if (err.code === 'MEMBER_NOT_CHECKED_IN') {
+          errMsg = "Üyenin açık bir girişi bulunmuyor.";
+          shouldRefreshOccupancy = true;
+        } else if (err.status === 404) {
+          errMsg = "Üye bulunamadı.";
+        } else if (err.status === 403) {
+          errMsg = "Bu işlem için yetkiniz yok.";
+        } else if (err.status === 422) {
+          errMsg = "Çıkış isteği geçersiz.";
+        } else {
+          errMsg = "Çıkış işlemi tamamlanamadı.";
+        }
+      }
+
+      setMutationFeedback({ type: 'error', message: errMsg });
+      setActiveMutation(null);
+
+      if (shouldRefreshOccupancy) {
+        fetchOccupancy();
+      }
+      return;
+    }
+
+    try {
+      validateCheckOutResponse(rawResponse);
+    } catch {
+      contractValidationFailed = true;
+    }
+
+    if (!isMountedRef.current) return;
+
+    if (contractValidationFailed) {
+      setMutationFeedback({
+        type: 'error',
+        message: "İşlem sonucu doğrulanamadı. Salon durumu yenileniyor."
+      });
+      setActiveMutation(null);
+      fetchOccupancy();
+      return;
+    }
+
+    setMutationFeedback({ type: 'success', message: "Çıkış kaydedildi." });
+    setActiveMutation(null);
+    fetchOccupancy();
+  }, [activeMutation, fetchOccupancy]);
+
+  const openMemberIds = new Set(occupancy?.items.map((item) => item.member.id) ?? []);
+
   return (
     <div className="space-y-8">
       {/* Metrics Header */}
@@ -297,6 +506,24 @@ export function ReceptionDashboard() {
         </div>
       </div>
 
+      {/* Mutation Feedback */}
+      {mutationFeedback && (
+        <div className={`p-4 rounded-xl text-sm border flex items-center justify-between ${
+          mutationFeedback.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          <span>{mutationFeedback.message}</span>
+          <button
+            type="button"
+            onClick={() => setMutationFeedback(null)}
+            className="text-white/40 hover:text-white text-xs font-medium ml-4 transition-colors"
+          >
+            Kapat
+          </button>
+        </div>
+      )}
+
       {/* Main Content Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
@@ -323,23 +550,44 @@ export function ReceptionDashboard() {
               <div className="p-8 text-center text-white/50">Şu anda içeride görünen üye yok.</div>
             ) : (
               <div className="divide-y divide-white/10">
-                {occupancy?.items.map((item) => (
-                  <div key={item.visit.id} className="p-4 flex items-start justify-between hover:bg-white/5 transition-colors">
-                    <div>
-                      <div className="font-medium text-white">
-                        {item.member.first_name} {item.member.last_name}
+                {occupancy?.items.map((item) => {
+                  const isThisMemberMutating = activeMutation?.memberId === item.member.id;
+
+                  return (
+                    <div key={item.visit.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                      <div>
+                        <div className="font-medium text-white">
+                          {item.member.first_name} {item.member.last_name}
+                        </div>
+                        <div className="text-sm text-white/50 mt-1">
+                          Giriş: {formatDateTime(item.visit.checked_in_at)}
+                        </div>
                       </div>
-                      <div className="text-sm text-white/50 mt-1">
-                        Giriş: {formatDateTime(item.visit.checked_in_at)}
+                      <div className="flex items-center space-x-3">
+                        {item.is_stale && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 text-xs border border-amber-500/20 whitespace-nowrap">
+                            Önceki günden açık giriş
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleCheckOut(item.member.id)}
+                          disabled={activeMutation !== null}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50 flex items-center space-x-1.5 whitespace-nowrap"
+                        >
+                          {isThisMemberMutating && activeMutation?.kind === 'check-out' ? (
+                            <>
+                              <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Çıkış yapılıyor...</span>
+                            </>
+                          ) : (
+                            <span>Çıkış Yap</span>
+                          )}
+                        </button>
                       </div>
                     </div>
-                    {item.is_stale && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 text-xs border border-amber-500/20 whitespace-nowrap">
-                        Önceki günden açık giriş
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -376,31 +624,85 @@ export function ReceptionDashboard() {
                 <div className="p-8 text-center text-white/50">Sonuç bulunamadı.</div>
               ) : (
                 <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto">
-                  {searchResults.map((member) => (
-                    <div key={member.id} className="p-4 hover:bg-white/5 transition-colors">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-medium text-white">
-                          {member.first_name} {member.last_name}
+                  {searchResults.map((member) => {
+                    const hasOpenVisit = openMemberIds.has(member.id);
+                    const isThisMemberMutating = activeMutation?.memberId === member.id;
+
+                    return (
+                      <div key={member.id} className="p-4 hover:bg-white/5 transition-colors">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-medium text-white">
+                            {member.first_name} {member.last_name}
+                          </div>
+                          <span className={`px-2 py-1 rounded-md text-xs border ${
+                            member.status === 'active' 
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                              : 'bg-white/5 text-white/50 border-white/10'
+                          }`}>
+                            {member.status === 'active' ? 'Aktif' : 'Pasif'}
+                          </span>
                         </div>
-                        <span className={`px-2 py-1 rounded-md text-xs border ${
-                          member.status === 'active' 
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                            : 'bg-white/5 text-white/50 border-white/10'
-                        }`}>
-                          {member.status === 'active' ? 'Aktif' : 'Pasif'}
-                        </span>
+                        <div className="flex items-end justify-between mt-3 pt-2 border-t border-white/5">
+                          <div className="space-y-1 text-sm text-white/50">
+                            {member.phone && <div>Telefon: {member.phone}</div>}
+                            <div>
+                              Başlangıç: {member.membership_start_date ? formatDate(member.membership_start_date) : '-'}
+                            </div>
+                            <div>
+                              Bitiş: {member.membership_end_date ? formatDate(member.membership_end_date) : 'Bitiş tarihi tanımlı değil'}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0 ml-4">
+                            {hasOpenVisit ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCheckOut(member.id)}
+                                disabled={activeMutation !== null}
+                                className="px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50 flex items-center space-x-1.5 whitespace-nowrap"
+                              >
+                                {isThisMemberMutating && activeMutation?.kind === 'check-out' ? (
+                                  <>
+                                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Çıkış yapılıyor...</span>
+                                  </>
+                                ) : (
+                                  <span>Çıkış Yap</span>
+                                )}
+                              </button>
+                            ) : member.status === 'inactive' ? (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-white/40">Pasif üye</span>
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs font-medium text-white/30 cursor-not-allowed whitespace-nowrap"
+                                >
+                                  Giriş Yap
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleCheckIn(member.id)}
+                                disabled={activeMutation !== null}
+                                className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-xs font-medium text-emerald-400 transition-colors disabled:opacity-50 flex items-center space-x-1.5 whitespace-nowrap"
+                              >
+                                {isThisMemberMutating && activeMutation?.kind === 'check-in' ? (
+                                  <>
+                                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Giriş yapılıyor...</span>
+                                  </>
+                                ) : (
+                                  <span>Giriş Yap</span>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1 text-sm text-white/50">
-                        {member.phone && <div>Telefon: {member.phone}</div>}
-                        <div>
-                          Başlangıç: {member.membership_start_date ? formatDate(member.membership_start_date) : '-'}
-                        </div>
-                        <div>
-                          Bitiş: {member.membership_end_date ? formatDate(member.membership_end_date) : 'Bitiş tarihi tanımlı değil'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )
             ) : (

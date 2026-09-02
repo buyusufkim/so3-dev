@@ -37,3 +37,26 @@ export interface ReceptionMemberSearchItem {
 export interface ReceptionSearchResponse {
   items: ReceptionMemberSearchItem[];
 }
+
+export interface ReceptionCheckInVisit {
+  id: number;
+  uuid: string;
+  member_id: number;
+  checked_in_at: string;
+}
+
+export interface ReceptionCheckInResponse {
+  visit: ReceptionCheckInVisit;
+}
+
+export interface ReceptionCheckOutVisit {
+  id: number;
+  uuid: string;
+  member_id: number;
+  checked_in_at: string;
+  checked_out_at: string;
+}
+
+export interface ReceptionCheckOutResponse {
+  visit: ReceptionCheckOutVisit;
+}
