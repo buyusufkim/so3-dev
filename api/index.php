@@ -100,6 +100,24 @@ $routes = [
         },
         '/api/public/trainers' => function() {
             (new \Controllers\TrainerController())->publicIndex();
+        },
+        '/api/admin/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getAdminAppointments();
+        },
+        '/api/reception/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getReceptionAppointments();
+        },
+        '/api/trainer/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['trainer']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getTrainerAppointments();
         }
     ],
     'POST' => [
@@ -135,6 +153,24 @@ $routes = [
         '/api/admin/members' => function() {
             AuthMiddleware::handle();
             (new \Controllers\MemberController())->create();
+        },
+        '/api/admin/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->createAdminAppointment();
+        },
+        '/api/reception/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->createReceptionAppointment();
+        },
+        '/api/trainer/appointments' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['trainer']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->createTrainerAppointment();
         }
     ]
 ];
