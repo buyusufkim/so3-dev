@@ -180,6 +180,7 @@ export function ReceptionDashboard() {
   const [mutationFeedback, setMutationFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const isMountedRef = useRef(true);
+  const mutationLockRef = useRef(false);
   const mutationAbortRef = useRef<AbortController | null>(null);
   const occupancyAbortRef = useRef<AbortController | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
@@ -191,6 +192,7 @@ export function ReceptionDashboard() {
     return () => {
       isMountedRef.current = false;
       if (mutationAbortRef.current) mutationAbortRef.current.abort();
+      mutationLockRef.current = false;
     };
   }, []);
 
@@ -324,7 +326,8 @@ export function ReceptionDashboard() {
   }, [searchQuery, performSearch]);
 
   const handleCheckIn = useCallback(async (memberId: number) => {
-    if (activeMutation) return;
+    if (mutationLockRef.current) return;
+    mutationLockRef.current = true;
 
     if (mutationAbortRef.current) {
       mutationAbortRef.current.abort();
@@ -336,7 +339,6 @@ export function ReceptionDashboard() {
     setMutationFeedback(null);
 
     let rawResponse: any;
-    let contractValidationFailed = false;
 
     try {
       rawResponse = await apiClient.post(
@@ -345,7 +347,10 @@ export function ReceptionDashboard() {
         { signal: abortController.signal }
       );
     } catch (err: unknown) {
-      if (abortController.signal.aborted || !isMountedRef.current) return;
+      if (abortController.signal.aborted || !isMountedRef.current) {
+        mutationLockRef.current = false;
+        return;
+      }
 
       let errMsg = "Giriş işlemi tamamlanamadı.";
       let shouldRefreshOccupancy = false;
@@ -370,39 +375,72 @@ export function ReceptionDashboard() {
       }
 
       setMutationFeedback({ type: 'error', message: errMsg });
-      setActiveMutation(null);
 
       if (shouldRefreshOccupancy) {
-        fetchOccupancy();
+        try {
+          await fetchOccupancy();
+        } catch {
+          // fetchOccupancy handles its own error
+        }
       }
+
+      if (isMountedRef.current) {
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
       return;
     }
 
+    // Validate contract & member_id consistency
+    let contractValidationFailed = false;
     try {
-      validateCheckInResponse(rawResponse);
+      const validated = validateCheckInResponse(rawResponse);
+      if (validated.visit.member_id !== memberId) {
+        contractValidationFailed = true;
+      }
     } catch {
       contractValidationFailed = true;
     }
 
-    if (!isMountedRef.current) return;
+    if (abortController.signal.aborted || !isMountedRef.current) {
+      mutationLockRef.current = false;
+      return;
+    }
 
     if (contractValidationFailed) {
       setMutationFeedback({
         type: 'error',
         message: "İşlem sonucu doğrulanamadı. Salon durumu yenileniyor."
       });
-      setActiveMutation(null);
-      fetchOccupancy();
+      try {
+        await fetchOccupancy();
+      } catch {
+        // fetchOccupancy handles its own error
+      } finally {
+        if (isMountedRef.current) {
+          setActiveMutation(null);
+        }
+        mutationLockRef.current = false;
+      }
       return;
     }
 
     setMutationFeedback({ type: 'success', message: "Giriş kaydedildi." });
-    setActiveMutation(null);
-    fetchOccupancy();
-  }, [activeMutation, fetchOccupancy]);
+    try {
+      await fetchOccupancy();
+    } catch {
+      // fetchOccupancy handles its own error
+    } finally {
+      if (isMountedRef.current) {
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
+    }
+  }, [fetchOccupancy]);
 
   const handleCheckOut = useCallback(async (memberId: number) => {
-    if (activeMutation) return;
+    if (mutationLockRef.current) return;
+    mutationLockRef.current = true;
 
     if (mutationAbortRef.current) {
       mutationAbortRef.current.abort();
@@ -414,7 +452,6 @@ export function ReceptionDashboard() {
     setMutationFeedback(null);
 
     let rawResponse: any;
-    let contractValidationFailed = false;
 
     try {
       rawResponse = await apiClient.post(
@@ -423,7 +460,10 @@ export function ReceptionDashboard() {
         { signal: abortController.signal }
       );
     } catch (err: unknown) {
-      if (abortController.signal.aborted || !isMountedRef.current) return;
+      if (abortController.signal.aborted || !isMountedRef.current) {
+        mutationLockRef.current = false;
+        return;
+      }
 
       let errMsg = "Çıkış işlemi tamamlanamadı.";
       let shouldRefreshOccupancy = false;
@@ -444,36 +484,68 @@ export function ReceptionDashboard() {
       }
 
       setMutationFeedback({ type: 'error', message: errMsg });
-      setActiveMutation(null);
 
       if (shouldRefreshOccupancy) {
-        fetchOccupancy();
+        try {
+          await fetchOccupancy();
+        } catch {
+          // fetchOccupancy handles its own error
+        }
       }
+
+      if (isMountedRef.current) {
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
       return;
     }
 
+    // Validate contract & member_id consistency
+    let contractValidationFailed = false;
     try {
-      validateCheckOutResponse(rawResponse);
+      const validated = validateCheckOutResponse(rawResponse);
+      if (validated.visit.member_id !== memberId) {
+        contractValidationFailed = true;
+      }
     } catch {
       contractValidationFailed = true;
     }
 
-    if (!isMountedRef.current) return;
+    if (abortController.signal.aborted || !isMountedRef.current) {
+      mutationLockRef.current = false;
+      return;
+    }
 
     if (contractValidationFailed) {
       setMutationFeedback({
         type: 'error',
         message: "İşlem sonucu doğrulanamadı. Salon durumu yenileniyor."
       });
-      setActiveMutation(null);
-      fetchOccupancy();
+      try {
+        await fetchOccupancy();
+      } catch {
+        // fetchOccupancy handles its own error
+      } finally {
+        if (isMountedRef.current) {
+          setActiveMutation(null);
+        }
+        mutationLockRef.current = false;
+      }
       return;
     }
 
     setMutationFeedback({ type: 'success', message: "Çıkış kaydedildi." });
-    setActiveMutation(null);
-    fetchOccupancy();
-  }, [activeMutation, fetchOccupancy]);
+    try {
+      await fetchOccupancy();
+    } catch {
+      // fetchOccupancy handles its own error
+    } finally {
+      if (isMountedRef.current) {
+        setActiveMutation(null);
+      }
+      mutationLockRef.current = false;
+    }
+  }, [fetchOccupancy]);
 
   const openMemberIds = new Set(occupancy?.items.map((item) => item.member.id) ?? []);
 
