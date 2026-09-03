@@ -18,26 +18,26 @@ class AppointmentController {
     }
 
     private function generateUuid() {
-        // v4 UUID
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
     private function getTrainerProfileId(int $adminId): int {
-        $stmt = $this->db->prepare("SELECT id FROM trainers WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1");
-        $stmt->bindValue(1, $adminId, PDO::PARAM_INT);
-        $stmt->execute();
-        $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$trainer) {
-            Response::json(['error' => 'TRAINER_PROFILE_NOT_LINKED', 'message' => 'Trainer profile not found or inactive.'], 403);
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM trainers WHERE admin_id = ? AND deleted_at IS NULL AND is_active = 1");
+            $stmt->bindValue(1, $adminId, PDO::PARAM_INT);
+            $stmt->execute();
+            $trainer = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$trainer) {
+                Response::error('Trainer profile not found or inactive.', 'TRAINER_PROFILE_NOT_LINKED', 403);
+            }
+            return (int)$trainer['id'];
+        } catch (Throwable $e) {
+            error_log("Appointment Read Error (getTrainerProfileId): " . $e->getMessage());
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
         }
-        return (int)$trainer['id'];
     }
 
     // --- READ HELPERS ---
@@ -46,110 +46,116 @@ class AppointmentController {
         try {
             $dt = new DateTime($dateStr, new DateTimeZone('Europe/Istanbul'));
             if ($dt->format('Y-m-d H:i:s') !== $dateStr) {
-                Response::json(['error' => 'VALIDATION_ERROR', 'message' => "Invalid $field format. Expected YYYY-MM-DD HH:mm:ss"], 422);
+                Response::error("Invalid $field format. Expected YYYY-MM-DD HH:mm:ss", 'VALIDATION_ERROR', 422);
             }
             return $dt;
         } catch (Exception $e) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => "Invalid $field format."], 422);
+            Response::error("Invalid $field format.", 'VALIDATION_ERROR', 422);
         }
     }
 
     private function handleRead(array $allowedParams, ?int $forcedTrainerId = null) {
-        $queryParams = $_GET;
-        
-        // Strict allowlist validation
-        foreach (array_keys($queryParams) as $key) {
-            if (!in_array($key, $allowedParams, true)) {
-                Response::json(['error' => 'VALIDATION_ERROR', 'message' => "Forbidden query parameter: $key"], 422);
+        try {
+            $queryParams = $_GET;
+            
+            // Strict allowlist validation
+            foreach (array_keys($queryParams) as $key) {
+                if (!in_array($key, $allowedParams, true)) {
+                    Response::error("Forbidden query parameter: $key", 'VALIDATION_ERROR', 422);
+                }
             }
-        }
 
-        if (!isset($queryParams['from']) || !isset($queryParams['to'])) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => "'from' and 'to' parameters are required."], 422);
-        }
-
-        if (!is_string($queryParams['from']) || !is_string($queryParams['to'])) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => "'from' and 'to' must be strings."], 422);
-        }
-
-        $fromDt = $this->parseWindowDate($queryParams['from'], 'from');
-        $toDt = $this->parseWindowDate($queryParams['to'], 'to');
-
-        if ($fromDt >= $toDt) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => "'from' must be before 'to'."], 422);
-        }
-
-        $diff = $fromDt->diff($toDt);
-        if ($diff->days > 31 || ($diff->days == 31 && ($diff->h > 0 || $diff->i > 0 || $diff->s > 0))) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => "Maximum allowed window is 31 calendar days."], 422);
-        }
-
-        $sql = "
-            SELECT 
-                a.id as appointment_id, a.uuid as appointment_uuid, a.starts_at, a.ends_at, a.status,
-                m.id as member_id, m.uuid as member_uuid, m.first_name as member_first_name, m.last_name as member_last_name,
-                t.id as trainer_id, t.uuid as trainer_uuid, t.display_name as trainer_name
-            FROM appointments a
-            INNER JOIN members m ON a.member_id = m.id
-            INNER JOIN trainers t ON a.trainer_id = t.id
-            WHERE a.starts_at < ? AND a.ends_at > ?
-        ";
-        
-        $params = [
-            $queryParams['to'],
-            $queryParams['from']
-        ];
-
-        if ($forcedTrainerId !== null) {
-            $sql .= " AND a.trainer_id = ?";
-            $params[] = $forcedTrainerId;
-        } elseif (isset($queryParams['trainer_id'])) {
-            if (!preg_match('/^[1-9]\d*$/', (string)$queryParams['trainer_id'])) {
-                Response::json(['error' => 'VALIDATION_ERROR', 'message' => "trainer_id must be a positive integer."], 422);
+            if (!isset($queryParams['from']) || !isset($queryParams['to'])) {
+                Response::error("'from' and 'to' parameters are required.", 'VALIDATION_ERROR', 422);
             }
-            $sql .= " AND a.trainer_id = ?";
-            $params[] = (int)$queryParams['trainer_id'];
-        }
 
-        if (isset($queryParams['member_id'])) {
-            if (!preg_match('/^[1-9]\d*$/', (string)$queryParams['member_id'])) {
-                Response::json(['error' => 'VALIDATION_ERROR', 'message' => "member_id must be a positive integer."], 422);
+            if (!is_string($queryParams['from']) || !is_string($queryParams['to'])) {
+                Response::error("'from' and 'to' must be strings.", 'VALIDATION_ERROR', 422);
             }
-            $sql .= " AND a.member_id = ?";
-            $params[] = (int)$queryParams['member_id'];
-        }
 
-        $sql .= " ORDER BY a.starts_at ASC, a.id ASC";
+            $fromDt = $this->parseWindowDate($queryParams['from'], 'from');
+            $toDt = $this->parseWindowDate($queryParams['to'], 'to');
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if ($fromDt >= $toDt) {
+                Response::error("'from' must be before 'to'.", 'VALIDATION_ERROR', 422);
+            }
 
-        $items = [];
-        foreach ($rows as $row) {
-            $items[] = [
-                'appointment' => [
-                    'id' => (int)$row['appointment_id'],
-                    'uuid' => $row['appointment_uuid'],
-                    'starts_at' => $row['starts_at'],
-                    'ends_at' => $row['ends_at'],
-                    'status' => $row['status']
-                ],
-                'member' => [
-                    'id' => (int)$row['member_id'],
-                    'uuid' => $row['member_uuid'],
-                    'first_name' => $row['member_first_name'],
-                    'last_name' => $row['member_last_name']
-                ],
-                'trainer' => [
-                    'id' => (int)$row['trainer_id'],
-                    'uuid' => $row['trainer_uuid'],
-                    'name' => $row['trainer_name']
-                ]
+            $diff = $fromDt->diff($toDt);
+            if ($diff->days > 31 || ($diff->days == 31 && ($diff->h > 0 || $diff->i > 0 || $diff->s > 0))) {
+                Response::error("Maximum allowed window is 31 calendar days.", 'VALIDATION_ERROR', 422);
+            }
+
+            $sql = "
+                SELECT 
+                    a.id as appointment_id, a.uuid as appointment_uuid, a.starts_at, a.ends_at, a.status,
+                    m.id as member_id, m.uuid as member_uuid, m.first_name as member_first_name, m.last_name as member_last_name,
+                    t.id as trainer_id, t.uuid as trainer_uuid, t.name as trainer_name
+                FROM appointments a
+                INNER JOIN members m ON a.member_id = m.id
+                INNER JOIN trainers t ON a.trainer_id = t.id
+                WHERE a.starts_at < ? AND a.ends_at > ?
+            ";
+            
+            $params = [
+                $queryParams['to'],
+                $queryParams['from']
             ];
-        }
 
-        Response::json(['items' => $items]);
+            if ($forcedTrainerId !== null) {
+                $sql .= " AND a.trainer_id = ?";
+                $params[] = $forcedTrainerId;
+            } elseif (isset($queryParams['trainer_id'])) {
+                if (!is_string($queryParams['trainer_id']) || !preg_match('/^[1-9]\d*$/', (string)$queryParams['trainer_id'])) {
+                    Response::error("trainer_id must be a positive integer.", 'VALIDATION_ERROR', 422);
+                }
+                $sql .= " AND a.trainer_id = ?";
+                $params[] = (int)$queryParams['trainer_id'];
+            }
+
+            if (isset($queryParams['member_id'])) {
+                if (!is_string($queryParams['member_id']) || !preg_match('/^[1-9]\d*$/', (string)$queryParams['member_id'])) {
+                    Response::error("member_id must be a positive integer.", 'VALIDATION_ERROR', 422);
+                }
+                $sql .= " AND a.member_id = ?";
+                $params[] = (int)$queryParams['member_id'];
+            }
+
+            $sql .= " ORDER BY a.starts_at ASC, a.id ASC";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $items = [];
+            foreach ($rows as $row) {
+                $items[] = [
+                    'appointment' => [
+                        'id' => (int)$row['appointment_id'],
+                        'uuid' => $row['appointment_uuid'],
+                        'starts_at' => $row['starts_at'],
+                        'ends_at' => $row['ends_at'],
+                        'status' => $row['status']
+                    ],
+                    'member' => [
+                        'id' => (int)$row['member_id'],
+                        'uuid' => $row['member_uuid'],
+                        'first_name' => $row['member_first_name'],
+                        'last_name' => $row['member_last_name']
+                    ],
+                    'trainer' => [
+                        'id' => (int)$row['trainer_id'],
+                        'uuid' => $row['trainer_uuid'],
+                        'name' => $row['trainer_name']
+                    ]
+                ];
+            }
+
+            Response::json(['items' => $items]);
+
+        } catch (Throwable $e) {
+            error_log("Appointment Read Error: " . $e->getMessage());
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
+        }
     }
 
     // --- CREATE HELPERS ---
@@ -159,7 +165,7 @@ class AppointmentController {
         $data = json_decode($input, true);
 
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
-            Response::json(['error' => 'INVALID_JSON', 'message' => 'Malformed JSON payload.'], 400);
+            Response::error('Malformed JSON payload.', 'INVALID_JSON', 400);
         }
 
         $dataKeys = array_keys($data);
@@ -168,39 +174,39 @@ class AppointmentController {
         sort($allowedSorted);
 
         if ($dataKeys !== $allowedSorted) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'Exact payload keys required.'], 422);
+            Response::error('Exact payload keys required.', 'VALIDATION_ERROR', 422);
         }
 
         if (!is_int($data['member_id']) || $data['member_id'] <= 0) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'member_id must be a positive integer.'], 422);
+            Response::error('member_id must be a positive integer.', 'VALIDATION_ERROR', 422);
         }
 
         $trainerId = $forcedTrainerId;
         if ($trainerId === null) {
             if (!is_int($data['trainer_id']) || $data['trainer_id'] <= 0) {
-                Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'trainer_id must be a positive integer.'], 422);
+                Response::error('trainer_id must be a positive integer.', 'VALIDATION_ERROR', 422);
             }
             $trainerId = $data['trainer_id'];
         }
 
         if (!is_string($data['starts_at']) || !is_string($data['ends_at'])) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'starts_at and ends_at must be strings.'], 422);
+            Response::error('starts_at and ends_at must be strings.', 'VALIDATION_ERROR', 422);
         }
 
         $startsDt = $this->parseWindowDate($data['starts_at'], 'starts_at');
         $endsDt = $this->parseWindowDate($data['ends_at'], 'ends_at');
 
         if ($startsDt >= $endsDt) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'starts_at must be strictly before ends_at.'], 422);
+            Response::error('starts_at must be strictly before ends_at.', 'VALIDATION_ERROR', 422);
         }
 
         if ($startsDt->format('Y-m-d') !== $endsDt->format('Y-m-d')) {
-            Response::json(['error' => 'VALIDATION_ERROR', 'message' => 'Appointments must start and end on the same calendar day (Europe/Istanbul).'], 422);
+            Response::error('Appointments must start and end on the same calendar day (Europe/Istanbul).', 'VALIDATION_ERROR', 422);
         }
 
         $adminId = $_SESSION['admin_id'] ?? 0;
         if (!$adminId || $adminId <= 0) {
-            Response::json(['error' => 'UNAUTHORIZED', 'message' => 'Valid session required.'], 401);
+            Response::error('Valid session required.', 'UNAUTHORIZED', 401);
         }
 
         try {
@@ -214,12 +220,12 @@ class AppointmentController {
 
             if (!$member || $member['deleted_at'] !== null) {
                 $this->db->rollBack();
-                Response::json(['error' => 'NOT_FOUND', 'message' => 'Member not found or deleted.'], 404);
+                Response::error('Member not found or deleted.', 'NOT_FOUND', 404);
             }
 
             if ($member['status'] !== 'active') {
                 $this->db->rollBack();
-                Response::json(['error' => 'MEMBER_INELIGIBLE', 'message' => 'Member is not active.'], 409);
+                Response::error('Member is not active.', 'MEMBER_INELIGIBLE', 409);
             }
 
             if ($member['membership_end_date'] !== null) {
@@ -227,13 +233,13 @@ class AppointmentController {
                 // Use DATE() comparison semantics: starts_at local calendar date must be <= membership_end_date
                 if ($startsDt->format('Y-m-d') > $memEndDate->format('Y-m-d')) {
                     $this->db->rollBack();
-                    Response::json(['error' => 'MEMBER_INELIGIBLE', 'message' => 'Appointment date exceeds membership end date.'], 409);
+                    Response::error('Appointment date exceeds membership end date.', 'MEMBER_INELIGIBLE', 409);
                 }
             }
 
             if ($forcedTrainerId !== null && (int)$member['trainer_id'] !== $forcedTrainerId) {
                 $this->db->rollBack();
-                Response::json(['error' => 'FORBIDDEN', 'message' => 'Trainer can only create appointments for assigned members.'], 403);
+                Response::error('Trainer can only create appointments for assigned members.', 'FORBIDDEN', 403);
             }
 
             // 2. Trainer lock
@@ -244,17 +250,17 @@ class AppointmentController {
 
             if (!$trainer || $trainer['deleted_at'] !== null) {
                 $this->db->rollBack();
-                Response::json(['error' => 'NOT_FOUND', 'message' => 'Trainer not found or deleted.'], 404);
+                Response::error('Trainer not found or deleted.', 'NOT_FOUND', 404);
             }
 
             if ($trainer['is_active'] != 1) {
                 $this->db->rollBack();
-                Response::json(['error' => 'TRAINER_INELIGIBLE', 'message' => 'Trainer is inactive.'], 409);
+                Response::error('Trainer is inactive.', 'TRAINER_INELIGIBLE', 409);
             }
 
             if ($forcedTrainerId !== null && (int)$trainer['admin_id'] !== $adminId) {
                 $this->db->rollBack();
-                Response::json(['error' => 'FORBIDDEN', 'message' => 'Unauthorized trainer profile access.'], 403);
+                Response::error('Unauthorized trainer profile access.', 'FORBIDDEN', 403);
             }
 
             // 3. Trainer conflict
@@ -271,7 +277,7 @@ class AppointmentController {
             
             if ($tConfStmt->fetch()) {
                 $this->db->rollBack();
-                Response::json(['error' => 'TRAINER_CONFLICT', 'message' => 'Trainer is already booked for this time.'], 409);
+                Response::error('Trainer is already booked for this time.', 'TRAINER_CONFLICT', 409);
             }
 
             // 4. Member conflict
@@ -288,7 +294,7 @@ class AppointmentController {
             
             if ($mConfStmt->fetch()) {
                 $this->db->rollBack();
-                Response::json(['error' => 'MEMBER_CONFLICT', 'message' => 'Member is already booked for this time.'], 409);
+                Response::error('Member is already booked for this time.', 'MEMBER_CONFLICT', 409);
             }
 
             // 5. Insert
@@ -307,21 +313,31 @@ class AppointmentController {
             
             $appId = (int)$this->db->lastInsertId();
 
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $fetchStmt->bindValue(1, $appId, PDO::PARAM_INT);
+            $fetchStmt->execute();
+            $persistedApp = $fetchStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$persistedApp) {
+                $this->db->rollBack();
+                Response::error('Failed to retrieve persisted appointment.', 'INTERNAL_ERROR', 500);
+            }
+
             $this->db->commit();
 
             // 6. Audit
             try {
                 AuditLogger::log(
                     'appointment.created',
-                    "Appointment created for member {$data['member_id']} with trainer {$trainerId}",
-                    [
-                        'member_id' => $data['member_id'],
-                        'trainer_id' => $trainerId,
-                        'starts_at' => $data['starts_at'],
-                        'ends_at' => $data['ends_at']
-                    ],
                     $adminId,
-                    $this->db
+                    'appointment',
+                    $appId,
+                    [
+                        'member_id' => (int)$persistedApp['member_id'],
+                        'trainer_id' => (int)$persistedApp['trainer_id'],
+                        'starts_at' => $persistedApp['starts_at'],
+                        'ends_at' => $persistedApp['ends_at']
+                    ]
                 );
             } catch (Throwable $e) {
                 // Do not fail request on audit failure
@@ -330,13 +346,13 @@ class AppointmentController {
 
             Response::json([
                 'appointment' => [
-                    'id' => $appId,
-                    'uuid' => $uuid,
-                    'member_id' => (int)$data['member_id'],
-                    'trainer_id' => $trainerId,
-                    'starts_at' => $data['starts_at'],
-                    'ends_at' => $data['ends_at'],
-                    'status' => 'scheduled'
+                    'id' => (int)$persistedApp['id'],
+                    'uuid' => $persistedApp['uuid'],
+                    'member_id' => (int)$persistedApp['member_id'],
+                    'trainer_id' => (int)$persistedApp['trainer_id'],
+                    'starts_at' => $persistedApp['starts_at'],
+                    'ends_at' => $persistedApp['ends_at'],
+                    'status' => $persistedApp['status']
                 ]
             ], 201);
 
@@ -345,7 +361,7 @@ class AppointmentController {
                 $this->db->rollBack();
             }
             error_log("Appointment Create Error: " . $e->getMessage());
-            Response::json(['error' => 'INTERNAL_ERROR', 'message' => 'An unexpected error occurred.'], 500);
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
         }
     }
 
@@ -370,7 +386,7 @@ class AppointmentController {
     public function getTrainerAppointments() {
         $adminId = $_SESSION['admin_id'] ?? 0;
         if (!$adminId) {
-            Response::json(['error' => 'UNAUTHORIZED', 'message' => 'Unauthorized.'], 401);
+            Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
         $trainerId = $this->getTrainerProfileId($adminId);
         $this->handleRead(['from', 'to', 'member_id'], $trainerId);
@@ -379,7 +395,7 @@ class AppointmentController {
     public function createTrainerAppointment() {
         $adminId = $_SESSION['admin_id'] ?? 0;
         if (!$adminId) {
-            Response::json(['error' => 'UNAUTHORIZED', 'message' => 'Unauthorized.'], 401);
+            Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
         $trainerId = $this->getTrainerProfileId($adminId);
         $this->handleCreate(['member_id', 'starts_at', 'ends_at'], $trainerId);
