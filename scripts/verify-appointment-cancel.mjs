@@ -513,6 +513,42 @@ function verifyAuditLoggerCall(auditCallBlock) {
     return true;
 }
 
+/**
+ * Predicate 8: Cancel Has No Reschedule History
+ */
+function verifyCancelHasNoRescheduleHistory(codeBlock) {
+    if (codeBlock.includes('INSERT INTO appointment_reschedules')) {
+        throw new Error("Forbidden insertion into appointment_reschedules in cancel flow");
+    }
+    return true;
+}
+
+/**
+ * Predicate 9: Cancel Response Privacy
+ */
+function verifyCancelResponsePrivacy(responseBlock) {
+    const forbiddenKeys = ['cancellation_reason', 'cancelled_by', 'cancelled_at'];
+    for (const key of forbiddenKeys) {
+        if (responseBlock.includes(key)) {
+            throw new Error(`Forbidden key '${key}' found in response block`);
+        }
+    }
+    return true;
+}
+
+/**
+ * Predicate 10: Trainer Cancel Absent
+ */
+function verifyTrainerCancelAbsent(controllerSource, indexSource) {
+    if (controllerSource.includes("cancelTrainerAppointment")) {
+         throw new Error("Forbidden cancelTrainerAppointment method found in controller");
+    }
+    if (indexSource.includes('/cancel$#') && indexSource.match(/#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$\#/)) {
+         throw new Error("Forbidden exact trainer cancel route found in index.php");
+    }
+    return true;
+}
+
 
 // =========================================================
 // 3. NEGATIVE SELF-TESTS (MINIMUM 20)
@@ -548,7 +584,7 @@ checkInvariant("Self-Test 3: Trainer cancel route FAIL", () => {
         }
     `;
     let caught = false;
-    try { verifyCancelRoute(route, /#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$\#/, ['super_admin', 'admin'], 'cancelAdminAppointment'); }
+    try { verifyTrainerCancelAbsent("cancelTrainerAppointment", route); }
     catch { caught = true; }
     if (!caught) throw new Error("Failed to reject trainer cancel route");
 });
@@ -714,12 +750,10 @@ checkInvariant("Self-Test 15: UPDATE extra column FAIL", () => {
 
 checkInvariant("Self-Test 16: appointment_reschedules INSERT FAIL", () => {
     const code = `INSERT INTO appointment_reschedules`;
-    if (code.includes('appointment_reschedules')) {
-        passedInvariants--; // offset the double logging
-        console.log(`✅ PASS: Self-Test 16: appointment_reschedules INSERT FAIL`);
-    } else {
-        throw new Error("Should fail if present");
-    }
+    let caught = false;
+    try { verifyCancelHasNoRescheduleHistory(code); }
+    catch { caught = true; }
+    if (!caught) throw new Error("Should fail if present");
 });
 
 checkInvariant("Self-Test 17: Audit contains reason FAIL", () => {
@@ -760,12 +794,10 @@ checkInvariant("Self-Test 19: Response exposes cancellation_reason FAIL", () => 
             ]
         ]);
     `;
-    if (code.includes('cancellation_reason')) {
-        passedInvariants--; // offset
-        console.log(`✅ PASS: Self-Test 19: Response exposes cancellation_reason FAIL`);
-    } else {
-        throw new Error("Response projection exposes reason");
-    }
+    let caught = false;
+    try { verifyCancelResponsePrivacy(code); }
+    catch { caught = true; }
+    if (!caught) throw new Error("Response projection exposes reason");
 });
 
 checkInvariant("Self-Test 20: Missing json_last_error check FAIL", () => {
@@ -807,9 +839,6 @@ const cancelReceptionBlock = extractFunctionBlock(controllerSource, "public func
 
 if (!cancelAdminBlock) throw new Error("FAIL: Missing cancelAdminAppointment in AppointmentController.php");
 if (!cancelReceptionBlock) throw new Error("FAIL: Missing cancelReceptionAppointment in AppointmentController.php");
-if (controllerSource.includes("function cancelTrainerAppointment")) {
-    throw new Error("FAIL: Forbidden cancelTrainerAppointment found in controller");
-}
 
 function extractRouteBlockByRegex(indexSrc, regexPatternStr) {
     const idx = indexSrc.indexOf(regexPatternStr);
@@ -824,9 +853,6 @@ const receptionRouteBlock = extractRouteBlockByRegex(indexSource, '#^/api/recept
 
 if (!adminRouteBlock) throw new Error("FAIL: Could not extract admin cancel route block");
 if (!receptionRouteBlock) throw new Error("FAIL: Could not extract reception cancel route block");
-if (indexSource.includes('/cancel$#') && indexSource.match(/#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$\#/)) {
-    throw new Error("FAIL: Forbidden trainer cancel route found");
-}
 
 console.log("--- Running Production Invariant Checks ---");
 
@@ -850,6 +876,10 @@ checkInvariant("Exact Route Matrix: Reception cancel route", () => {
         ['super_admin', 'admin', 'reception'],
         'cancelReceptionAppointment'
     );
+});
+
+checkInvariant("Trainer Cancel Absence", () => {
+    verifyTrainerCancelAbsent(controllerSource, indexSource);
 });
 
 checkInvariant("Global CSRF: Mutation guard covers PATCH", () => {
@@ -941,9 +971,8 @@ checkInvariant("Exact Appointment UPDATE statement", () => {
     if (!handleCancelBlock.includes("Response::error('Failed to cancel appointment.', 'INTERNAL_ERROR', 500)")) {
         throw new Error("Missing 500 INTERNAL_ERROR on rowCount() === 0");
     }
-    if (handleCancelBlock.includes("INSERT INTO appointment_reschedules")) {
-         throw new Error("Prohibited history insert in cancel flow");
-    }
+    
+    verifyCancelHasNoRescheduleHistory(handleCancelBlock);
 });
 
 checkInvariant("Persisted-Row Contract", () => {
@@ -956,9 +985,7 @@ checkInvariant("Success Response Privacy", () => {
     if (responseJsonIdx === -1) throw new Error("Missing Response::json");
     const responseBlock = extractBalancedCall(handleCancelBlock, "Response::json");
     
-    if (responseBlock.includes("'cancellation_reason'") || responseBlock.includes("'cancelled_by'") || responseBlock.includes("'cancelled_at'")) {
-        throw new Error("Forbidden fields exposed in response projection");
-    }
+    verifyCancelResponsePrivacy(responseBlock);
 });
 
 checkInvariant("Commit-Before-Audit", () => {
@@ -1026,8 +1053,8 @@ console.log(`Passed: ${passedInvariants}`);
 console.log(`Failed: ${failedInvariants}`);
 console.log("---------------------------------------------------------");
 
-if (failedInvariants > 0) {
-    console.error(`❌ Appointment Cancel Final Verifier FAILED with ${failedInvariants} error(s).`);
+if (failedInvariants > 0 || passedInvariants !== totalInvariants) {
+    console.error(`❌ Appointment Cancel Final Verifier FAILED. Passed: ${passedInvariants}, Failed: ${failedInvariants}, Expected Total: ${totalInvariants}`);
     process.exit(1);
 } else {
     console.log(`✅ Appointment Cancel Final Verifier PASSED (All ${passedInvariants}/${totalInvariants} invariants verified).`);
