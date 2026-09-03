@@ -161,6 +161,14 @@ class AppointmentController {
     // --- CREATE HELPERS ---
 
     private function handleCreate(array $allowedKeys, ?int $forcedTrainerId = null) {
+        if (!empty($_GET)) {
+            Response::error(
+                'Query parameters are not allowed for appointment creation.',
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
         $input = file_get_contents('php://input');
         $data = json_decode($input, true);
 
