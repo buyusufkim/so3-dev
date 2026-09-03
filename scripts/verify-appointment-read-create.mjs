@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 // =========================================================
-// FAZ 7B.4G-F.11C.2.1: APPOINTMENT READ/CREATE VERIFIER
+// FAZ 7B.4G-F.11D.0: APPOINTMENT READ/CREATE VERIFIER (PHASE-BOUNDARY ADAPTED)
 // =========================================================
 
 let totalInvariants = 0;
@@ -628,6 +628,107 @@ function verifyAuditLoggerCall(auditCallBlock) {
     return true;
 }
 
+/**
+ * Predicate 10: Appointment No-Delete Contract
+ * Verifies that neither controller nor router implements hard or soft deletion for appointments.
+ */
+function verifyAppointmentNoDelete(controllerSource, indexSource = '') {
+    // 1. Hard delete SQL statement
+    if (/DELETE\s+FROM\s+appointments/i.test(controllerSource)) {
+        throw new Error("Forbidden DELETE FROM appointments in controller");
+    }
+    if (/DELETE\s+FROM\s+appointments/i.test(indexSource)) {
+        throw new Error("Forbidden DELETE FROM appointments in router (index.php)");
+    }
+
+    // 2. Delete / destroy appointment methods
+    if (/\b(?:deleteAppointment|destroyAppointment)\b/i.test(controllerSource)) {
+        throw new Error("Forbidden deleteAppointment or destroyAppointment method in controller");
+    }
+    if (/\b(?:deleteAppointment|destroyAppointment)\b/i.test(indexSource)) {
+        throw new Error("Forbidden deleteAppointment or destroyAppointment method in router");
+    }
+
+    // 3. DELETE HTTP routes for appointments
+    const deleteIdx = indexSource.indexOf("'DELETE' =>");
+    if (deleteIdx !== -1) {
+        const deleteSection = extractBalanced(indexSource, deleteIdx, '[', ']');
+        if (deleteSection && /appointments/i.test(deleteSection)) {
+            throw new Error("Forbidden appointment route in DELETE HTTP section of router");
+        }
+    }
+    if (/DELETE['"]?\s*=>\s*\[[^\]]*appointments/is.test(indexSource)) {
+        throw new Error("Forbidden appointment route in DELETE HTTP map");
+    }
+    if (/\$method\s*===\s*['"]DELETE['"][^;]*appointments/i.test(indexSource)) {
+        throw new Error("Forbidden DELETE appointment dispatch in router");
+    }
+
+    // 4. Soft-delete appointment mutation
+    // appointments table has no deleted_at column; updating deleted_at or status='deleted' on appointments is forbidden
+    if (/UPDATE\s+appointments\b[^;]*\bdeleted_at\b/i.test(controllerSource)) {
+        throw new Error("Forbidden soft-delete appointment mutation (deleted_at) in controller");
+    }
+    if (/UPDATE\s+appointments\b[^;]*\bdeleted_at\b/i.test(indexSource)) {
+        throw new Error("Forbidden soft-delete appointment mutation (deleted_at) in router");
+    }
+    if (/UPDATE\s+appointments\b[^;]*status\s*=\s*['"]deleted['"]/i.test(controllerSource)) {
+        throw new Error("Forbidden soft-delete appointment status ('deleted') in controller");
+    }
+
+    return true;
+}
+
+/**
+ * Predicate 11: Required Read/Create Public Surface
+ * Verifies that the controller defines the 6 required read/create public entry methods exactly once.
+ * Allows optional __construct and allows future public lifecycle methods.
+ */
+function verifyRequiredPublicSurface(controllerSource) {
+    if (!controllerSource) throw new Error("Controller source is null or empty");
+
+    const requiredMethods = [
+        'getAdminAppointments',
+        'createAdminAppointment',
+        'getReceptionAppointments',
+        'createReceptionAppointment',
+        'getTrainerAppointments',
+        'createTrainerAppointment'
+    ];
+
+    // Find all public methods in the controller
+    const pubRegex = /public\s+function\s+(\w+)\s*\(/g;
+    let match;
+    const publicMethodCounts = {};
+    while ((match = pubRegex.exec(controllerSource)) !== null) {
+        const methodName = match[1];
+        publicMethodCounts[methodName] = (publicMethodCounts[methodName] || 0) + 1;
+    }
+
+    // Check if any required method exists as private or protected
+    const nonPublicRegex = /(?:private|protected)\s+function\s+(\w+)\s*\(/g;
+    let nonPubMatch;
+    const nonPublicMethods = new Set();
+    while ((nonPubMatch = nonPublicRegex.exec(controllerSource)) !== null) {
+        nonPublicMethods.add(nonPubMatch[1]);
+    }
+
+    for (const req of requiredMethods) {
+        if (nonPublicMethods.has(req)) {
+            throw new Error(`Required method '${req}' is declared as private or protected`);
+        }
+        const count = publicMethodCounts[req] || 0;
+        if (count === 0) {
+            throw new Error(`Required public method '${req}' is missing or renamed`);
+        }
+        if (count > 1) {
+            throw new Error(`Required public method '${req}' is duplicated (${count} declarations found)`);
+        }
+    }
+
+    return true;
+}
+
 // =========================================================
 // 2. NEGATIVE SELF-TESTS (USING REAL PRODUCTION PREDICATES)
 // =========================================================
@@ -1029,6 +1130,190 @@ checkInvariant('Self-Test 10: Exact AuditLogger call parser rejects extra keys, 
     if (!missingKeyFailed) throw new Error("Failed to reject missing ends_at in audit metadata");
 });
 
+checkInvariant('Self-Test 11 (Phase Boundary A): Additional lifecycle public method allowed in controller', () => {
+    const synthetic = `
+        class AppointmentController {
+            public function __construct() {}
+            public function getAdminAppointments() {}
+            public function createAdminAppointment() {}
+            public function getReceptionAppointments() {}
+            public function createReceptionAppointment() {}
+            public function getTrainerAppointments() {}
+            public function createTrainerAppointment() {}
+            public function rescheduleAdminAppointment() {}
+            public function cancelReceptionAppointment() {}
+        }
+    `;
+    verifyRequiredPublicSurface(synthetic);
+});
+
+checkInvariant('Self-Test 12 (Phase Boundary B): Required public read/create method missing or non-public fails verification', () => {
+    const missingGetAdmin = `
+        class AppointmentController {
+            public function __construct() {}
+            public function createAdminAppointment() {}
+            public function getReceptionAppointments() {}
+            public function createReceptionAppointment() {}
+            public function getTrainerAppointments() {}
+            public function createTrainerAppointment() {}
+        }
+    `;
+    let failed = false;
+    try { verifyRequiredPublicSurface(missingGetAdmin); } catch { failed = true; }
+    if (!failed) throw new Error("Failed to reject missing getAdminAppointments");
+
+    const privateGetTrainer = `
+        class AppointmentController {
+            public function getAdminAppointments() {}
+            public function createAdminAppointment() {}
+            public function getReceptionAppointments() {}
+            public function createReceptionAppointment() {}
+            private function getTrainerAppointments() {}
+            public function createTrainerAppointment() {}
+        }
+    `;
+    let privateFailed = false;
+    try { verifyRequiredPublicSurface(privateGetTrainer); } catch { privateFailed = true; }
+    if (!privateFailed) throw new Error("Failed to reject private getTrainerAppointments");
+});
+
+checkInvariant('Self-Test 13 (Phase Boundary C): Required public read/create method duplicate fails verification', () => {
+    const duplicateCreateAdmin = `
+        class AppointmentController {
+            public function getAdminAppointments() {}
+            public function createAdminAppointment() {}
+            public function createAdminAppointment() {}
+            public function getReceptionAppointments() {}
+            public function createReceptionAppointment() {}
+            public function getTrainerAppointments() {}
+            public function createTrainerAppointment() {}
+        }
+    `;
+    let failed = false;
+    try { verifyRequiredPublicSurface(duplicateCreateAdmin); } catch { failed = true; }
+    if (!failed) throw new Error("Failed to reject duplicated createAdminAppointment");
+});
+
+checkInvariant('Self-Test 14 (Phase Boundary D): Lifecycle route coexistence with six canonical read/create routes', () => {
+    const syntheticIndex = `
+        $routes = [
+            'GET' => [
+                '/api/admin/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['super_admin', 'admin']);
+                    (new AppointmentController())->getAdminAppointments();
+                },
+                '/api/reception/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+                    (new AppointmentController())->getReceptionAppointments();
+                },
+                '/api/trainer/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['trainer']);
+                    (new AppointmentController())->getTrainerAppointments();
+                },
+            ],
+            'POST' => [
+                '/api/admin/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['super_admin', 'admin']);
+                    (new AppointmentController())->createAdminAppointment();
+                },
+                '/api/reception/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+                    (new AppointmentController())->createReceptionAppointment();
+                },
+                '/api/trainer/appointments' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['trainer']);
+                    (new AppointmentController())->createTrainerAppointment();
+                },
+            ],
+            'PATCH' => [
+                '/api/admin/appointments/{id}/reschedule' => function() {
+                    AuthMiddleware::handle();
+                    AuthMiddleware::hasRole(['super_admin', 'admin']);
+                    (new AppointmentController())->rescheduleAdminAppointment();
+                }
+            ]
+        ];
+    `;
+    const getSec = extractBalanced(syntheticIndex, syntheticIndex.indexOf("'GET' =>"), '[', ']');
+    const postSec = extractBalanced(syntheticIndex, syntheticIndex.indexOf("'POST' =>"), '[', ']');
+
+    const gAdmin = extractRouteClosure(getSec, '/api/admin/appointments');
+    const pAdmin = extractRouteClosure(postSec, '/api/admin/appointments');
+    const gRecep = extractRouteClosure(getSec, '/api/reception/appointments');
+    const pRecep = extractRouteClosure(postSec, '/api/reception/appointments');
+    const gTrain = extractRouteClosure(getSec, '/api/trainer/appointments');
+    const pTrain = extractRouteClosure(postSec, '/api/trainer/appointments');
+
+    if (!gAdmin || !pAdmin || !gRecep || !pRecep || !gTrain || !pTrain) {
+        throw new Error("Failed to extract canonical read/create routes in presence of lifecycle route");
+    }
+
+    verifyRouteRbacAndMethod(gAdmin, ['super_admin', 'admin'], 'getAdminAppointments()');
+    verifyRouteRbacAndMethod(pAdmin, ['super_admin', 'admin'], 'createAdminAppointment()');
+    verifyRouteRbacAndMethod(gRecep, ['super_admin', 'admin', 'reception'], 'getReceptionAppointments()');
+    verifyRouteRbacAndMethod(pRecep, ['super_admin', 'admin', 'reception'], 'createReceptionAppointment()');
+    verifyRouteRbacAndMethod(gTrain, ['trainer'], 'getTrainerAppointments()');
+    verifyRouteRbacAndMethod(pTrain, ['trainer'], 'createTrainerAppointment()');
+});
+
+checkInvariant('Self-Test 15 (Phase Boundary E): Appointment hard-delete or delete route rejected by No-Delete predicate', () => {
+    const hardDeleteController = `
+        public function someMethod() {
+            $this->db->prepare("DELETE FROM appointments WHERE id = ?");
+        }
+    `;
+    let hdFailed = false;
+    try { verifyAppointmentNoDelete(hardDeleteController, ""); } catch { hdFailed = true; }
+    if (!hdFailed) throw new Error("Failed to reject DELETE FROM appointments in controller");
+
+    const deleteRouteIndex = `
+        $routes = [
+            'DELETE' => [
+                '/api/admin/appointments/{id}' => function() {}
+            ]
+        ];
+    `;
+    let drFailed = false;
+    try { verifyAppointmentNoDelete("", deleteRouteIndex); } catch { drFailed = true; }
+    if (!drFailed) throw new Error("Failed to reject DELETE route for appointments in index");
+
+    const deleteMethodController = `
+        public function deleteAppointment($id) {}
+    `;
+    let dmFailed = false;
+    try { verifyAppointmentNoDelete(deleteMethodController, ""); } catch { dmFailed = true; }
+    if (!dmFailed) throw new Error("Failed to reject deleteAppointment in controller");
+
+    const softDeleteController = `
+        $this->db->prepare("UPDATE appointments SET deleted_at = NOW() WHERE id = ?");
+    `;
+    let sdFailed = false;
+    try { verifyAppointmentNoDelete(softDeleteController, ""); } catch { sdFailed = true; }
+    if (!sdFailed) throw new Error("Failed to reject soft-delete appointment mutation");
+});
+
+checkInvariant('Self-Test 16 (Phase Boundary F): Normal UPDATE allowed by No-Delete predicate', () => {
+    const lifecycleUpdateController = `
+        public function rescheduleAdminAppointment($id) {
+            $stmt = $this->db->prepare("UPDATE appointments SET starts_at = ?, ends_at = ?, status = 'scheduled' WHERE id = ?");
+        }
+    `;
+    const safeIndex = `
+        $routes = [
+            'PATCH' => [
+                '/api/admin/appointments/{id}/reschedule' => function() {}
+            ]
+        ];
+    `;
+    verifyAppointmentNoDelete(lifecycleUpdateController, safeIndex);
+});
+
 
 // =========================================================
 // 3. LOAD PRODUCTION SOURCE FILES
@@ -1422,16 +1707,9 @@ checkInvariant('Commit-Before-Audit: audit call occurs in isolated local try/cat
     }
 });
 
-// Global Lifecycle Absence in Controller and Router
-checkInvariant('Global Lifecycle Absence: no reschedule, cancel, complete, no-show, or DELETE in runtime endpoints', () => {
-    const forbidden = /reschedule|cancel|complete|no-show|DELETE FROM appointments|UPDATE appointments/;
-    if (forbidden.test(src.controller)) {
-        throw new Error("Lifecycle mutation methods found in AppointmentController");
-    }
-    const forbiddenRoute = /reschedule|cancel|complete|no-show/;
-    if (forbiddenRoute.test(getRoutesSection) || forbiddenRoute.test(postRoutesSection)) {
-        throw new Error("Lifecycle mutation routes found in api/index.php");
-    }
+// Appointment No-Delete Contract
+checkInvariant('Appointment No-Delete Contract', () => {
+    verifyAppointmentNoDelete(src.controller, src.index);
 });
 
 // Temporary Artifact Absence
@@ -1444,28 +1722,9 @@ checkInvariant('Temporary Artifact Absence: patch.js, patch_index.php, and root 
     }
 });
 
-// Public Controller Surface
-checkInvariant('Public Controller Surface: exactly 7 public methods and no extraneous endpoints', () => {
-    const regex = /public\s+function\s+(\w+)\s*\(/g;
-    let match;
-    const pubMethods = [];
-    while ((match = regex.exec(src.controller)) !== null) {
-        pubMethods.push(match[1]);
-    }
-    const expectedMethods = [
-        '__construct',
-        'createAdminAppointment',
-        'createReceptionAppointment',
-        'createTrainerAppointment',
-        'getAdminAppointments',
-        'getReceptionAppointments',
-        'getTrainerAppointments'
-    ].sort();
-    pubMethods.sort();
-
-    if (JSON.stringify(pubMethods) !== JSON.stringify(expectedMethods)) {
-        throw new Error(`Public methods mismatch. Expected: [${expectedMethods.join(', ')}], Found: [${pubMethods.join(', ')}]`);
-    }
+// Required Read/Create Public Surface
+checkInvariant('Required Read/Create Public Surface', () => {
+    verifyRequiredPublicSurface(src.controller);
 });
 
 
