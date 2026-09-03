@@ -647,6 +647,188 @@ class AppointmentController {
         }
     }
 
+
+    // --- CANCEL HELPERS ---
+
+    private function handleCancel(int $appointmentId) {
+        if (!empty($_GET)) {
+            Response::error(
+                'Query parameters are not allowed for appointment cancellation.',
+                'VALIDATION_ERROR',
+                422
+            );
+        }
+
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            Response::error('Malformed JSON payload.', 'INVALID_JSON', 400);
+        }
+
+        $dataKeys = array_keys($data);
+        sort($dataKeys);
+        $allowedSorted = ['cancellation_reason'];
+
+        if ($dataKeys !== $allowedSorted) {
+            Response::error('Exact payload keys required.', 'VALIDATION_ERROR', 422);
+        }
+
+        if (!is_string($data['cancellation_reason'])) {
+            Response::error('cancellation_reason must be a string.', 'VALIDATION_ERROR', 422);
+        }
+
+        $reason = trim($data['cancellation_reason']);
+        if (empty($reason)) {
+            Response::error('cancellation_reason cannot be empty.', 'VALIDATION_ERROR', 422);
+        }
+        if (mb_strlen($reason) > 255) {
+            Response::error('cancellation_reason cannot exceed 255 characters.', 'VALIDATION_ERROR', 422);
+        }
+
+        $adminId = $_SESSION['admin_id'] ?? null;
+        if (is_string($adminId) && preg_match('/^[1-9]\d*$/', $adminId)) {
+            $adminId = (int)$adminId;
+        }
+        if (!is_int($adminId) || $adminId <= 0) {
+            Response::error('Valid session required.', 'UNAUTHORIZED', 401);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            // Discovery
+            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $discStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+            $discStmt->execute();
+            $discovery = $discStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$discovery) {
+                $this->db->rollBack();
+                Response::error('Appointment not found.', 'NOT_FOUND', 404);
+            }
+
+            $currentMemberId = (int)$discovery['member_id'];
+            $currentTrainerId = (int)$discovery['trainer_id'];
+
+            // 1. Member lock
+            $memStmt = $this->db->prepare("SELECT id FROM members WHERE id = ? FOR UPDATE");
+            $memStmt->bindValue(1, $currentMemberId, \PDO::PARAM_INT);
+            $memStmt->execute();
+            if (!$memStmt->fetch(\PDO::FETCH_ASSOC)) {
+                $this->db->rollBack();
+                Response::error('Member not found.', 'INTERNAL_ERROR', 500);
+            }
+
+            // 2. Trainer lock
+            $trainStmt = $this->db->prepare("SELECT id FROM trainers WHERE id = ? FOR UPDATE");
+            $trainStmt->bindValue(1, $currentTrainerId, \PDO::PARAM_INT);
+            $trainStmt->execute();
+            if (!$trainStmt->fetch(\PDO::FETCH_ASSOC)) {
+                $this->db->rollBack();
+                Response::error('Trainer not found.', 'INTERNAL_ERROR', 500);
+            }
+
+            // 3. Appointment lock
+            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+            $appStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+            $appStmt->execute();
+            $lockedApp = $appStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$lockedApp) {
+                $this->db->rollBack();
+                Response::error('Appointment not found.', 'NOT_FOUND', 404);
+            }
+
+            if ((int)$lockedApp['member_id'] !== $currentMemberId || (int)$lockedApp['trainer_id'] !== $currentTrainerId) {
+                $this->db->rollBack();
+                Response::error('Appointment participants have changed.', 'APPOINTMENT_CHANGED', 409);
+            }
+
+            if ($lockedApp['status'] !== 'scheduled') {
+                $this->db->rollBack();
+                Response::error('Only scheduled appointments can be cancelled.', 'APPOINTMENT_NOT_CANCELLABLE', 409);
+            }
+
+            $now = new DateTime('now', new DateTimeZone('Europe/Istanbul'));
+            $endsAtDt = new DateTime($lockedApp['ends_at'], new DateTimeZone('Europe/Istanbul'));
+
+            if ($now >= $endsAtDt) {
+                $this->db->rollBack();
+                Response::error('Cannot cancel an appointment that has already ended.', 'APPOINTMENT_NOT_CANCELLABLE', 409);
+            }
+            
+            $cancelledAt = $now->format('Y-m-d H:i:s');
+
+            // 4. Appointment UPDATE
+            $updStmt = $this->db->prepare("
+                UPDATE appointments 
+                SET status = 'cancelled', cancellation_reason = ?, cancelled_by = ?, cancelled_at = ?, updated_by = ?
+                WHERE id = ?
+            ");
+            $updStmt->bindValue(1, $reason, \PDO::PARAM_STR);
+            $updStmt->bindValue(2, $adminId, \PDO::PARAM_INT);
+            $updStmt->bindValue(3, $cancelledAt, \PDO::PARAM_STR);
+            $updStmt->bindValue(4, $adminId, \PDO::PARAM_INT);
+            $updStmt->bindValue(5, $appointmentId, \PDO::PARAM_INT);
+            $updStmt->execute();
+
+            if ($updStmt->rowCount() === 0) {
+                $this->db->rollBack();
+                Response::error('Failed to cancel appointment.', 'INTERNAL_ERROR', 500);
+            }
+
+            // 5. Persisted fetch
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, cancellation_reason, cancelled_by, cancelled_at FROM appointments WHERE id = ?");
+            $fetchStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+            $fetchStmt->execute();
+            $persistedApp = $fetchStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$persistedApp) {
+                $this->db->rollBack();
+                Response::error('Failed to retrieve persisted appointment.', 'INTERNAL_ERROR', 500);
+            }
+
+            $this->db->commit();
+
+            // 6. Audit
+            try {
+                AuditLogger::log(
+                    'appointment.cancelled',
+                    $adminId,
+                    'appointment',
+                    $appointmentId,
+                    [
+                        'previous_status' => $lockedApp['status'],
+                        'new_status' => $persistedApp['status'],
+                        'cancelled_at' => $persistedApp['cancelled_at']
+                    ]
+                );
+            } catch (Throwable $e) {
+                error_log("Failed to log appointment cancellation: " . $e->getMessage());
+            }
+
+            Response::json([
+                'appointment' => [
+                    'id' => (int)$persistedApp['id'],
+                    'uuid' => $persistedApp['uuid'],
+                    'member_id' => (int)$persistedApp['member_id'],
+                    'trainer_id' => (int)$persistedApp['trainer_id'],
+                    'starts_at' => $persistedApp['starts_at'],
+                    'ends_at' => $persistedApp['ends_at'],
+                    'status' => $persistedApp['status']
+                ]
+            ], 200);
+
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Appointment Cancel Error: " . $e->getMessage());
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
     // --- PUBLIC ENTRY POINTS ---
 
     public function getAdminAppointments() {
@@ -701,6 +883,15 @@ class AppointmentController {
         }
         $trainerId = $this->getTrainerProfileId($adminId);
         $this->handleReschedule($id, $trainerId);
+    }
+
+
+    public function cancelAdminAppointment(int $id) {
+        $this->handleCancel($id);
+    }
+
+    public function cancelReceptionAppointment(int $id) {
+        $this->handleCancel($id);
     }
 
 }

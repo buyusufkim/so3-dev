@@ -770,7 +770,27 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
-    if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri, $matches)) {
+    
+    if (preg_match('#^/api/admin/appointments/([1-9]\d*)/cancel$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->cancelAdminAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/reception/appointments/([1-9]\d*)/cancel$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->cancelReceptionAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         if ($method === 'PATCH') {
