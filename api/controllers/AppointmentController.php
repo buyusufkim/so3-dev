@@ -415,8 +415,11 @@ class AppointmentController {
             Response::error('Appointments must start and end on the same calendar day (Europe/Istanbul).', 'VALIDATION_ERROR', 422);
         }
 
-        $adminId = $_SESSION['admin_id'] ?? 0;
-        if (!$adminId || !is_int($adminId) || $adminId <= 0) {
+        $adminId = $_SESSION['admin_id'] ?? null;
+        if (is_string($adminId) && preg_match('/^[1-9]\d*$/', $adminId)) {
+            $adminId = (int)$adminId;
+        }
+        if (!is_int($adminId) || $adminId <= 0) {
             Response::error('Valid session required.', 'UNAUTHORIZED', 401);
         }
 
@@ -689,8 +692,11 @@ class AppointmentController {
     }
 
     public function rescheduleTrainerAppointment(int $id) {
-        $adminId = $_SESSION['admin_id'] ?? 0;
-        if (!$adminId) {
+        $adminId = $_SESSION['admin_id'] ?? null;
+        if (is_string($adminId) && preg_match('/^[1-9]\d*$/', $adminId)) {
+            $adminId = (int)$adminId;
+        }
+        if (!is_int($adminId) || $adminId <= 0) {
             Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
         $trainerId = $this->getTrainerProfileId($adminId);
