@@ -21,7 +21,8 @@
     "verify:trainer-dashboard-frontend": "node scripts/verify-trainer-dashboard-frontend.mjs",
     "verify:reception-membership-renewal": "node scripts/verify-reception-membership-renewal.mjs",
     "verify:reception-frontend": "node scripts/verify-reception-frontend.mjs",
-    "verify:appointment-read-create": "node scripts/verify-appointment-read-create.mjs"
+    "verify:appointment-read-create": "node scripts/verify-appointment-read-create.mjs",
+    "verify:appointment-reschedule": "node scripts/verify-appointment-reschedule.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
