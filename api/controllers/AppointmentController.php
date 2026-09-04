@@ -885,13 +885,193 @@ class AppointmentController {
         $this->handleReschedule($id, $trainerId);
     }
 
-
     public function cancelAdminAppointment(int $id) {
         $this->handleCancel($id);
     }
 
     public function cancelReceptionAppointment(int $id) {
         $this->handleCancel($id);
+    }
+
+    public function completeAdminAppointment(int $id) {
+        $this->handleTerminalize($id, 'admin', 'completed');
+    }
+
+    public function noShowAdminAppointment(int $id) {
+        $this->handleTerminalize($id, 'admin', 'no_show');
+    }
+
+    public function completeTrainerAppointment(int $id) {
+        $this->handleTerminalize($id, 'trainer', 'completed');
+    }
+
+    public function noShowTrainerAppointment(int $id) {
+        $this->handleTerminalize($id, 'trainer', 'no_show');
+    }
+
+    private function handleTerminalize(int $id, string $scope, string $targetStatus) {
+        if ($targetStatus !== 'completed' && $targetStatus !== 'no_show') {
+            Response::error('Internal Error.', 'INTERNAL_ERROR', 500);
+        }
+        
+        if (!empty($_GET)) {
+            Response::error('Query parameters are not allowed.', 'VALIDATION_ERROR', 422);
+        }
+        
+        $rawBody = file_get_contents('php://input');
+        if (empty(trim($rawBody))) {
+            Response::error('Request body is required.', 'INVALID_JSON', 400);
+        }
+        $data = json_decode($rawBody, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            Response::error('Invalid JSON.', 'INVALID_JSON', 400);
+        }
+        
+        if (count($data) > 0) {
+            Response::error('No payload fields allowed.', 'VALIDATION_ERROR', 422);
+        }
+        
+        $adminId = $_SESSION['admin_id'] ?? null;
+        if (!is_int($adminId) && !preg_match('/^[1-9]\d*$/', (string)$adminId)) {
+            Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
+        }
+        $adminId = (int)$adminId;
+        if ($adminId <= 0) {
+            Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
+        }
+
+        if ($id <= 0) {
+            Response::error('Invalid appointment ID.', 'VALIDATION_ERROR', 422);
+        }
+
+        $now = new \DateTime('now', new \DateTimeZone('Europe/Istanbul'));
+        $terminalizedAt = $now->format('Y-m-d H:i:s');
+
+        try {
+            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $discStmt->execute([$id]);
+            $discovery = $discStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$discovery) {
+                Response::error('Appointment not found.', 'NOT_FOUND', 404);
+            }
+
+            $this->db->beginTransaction();
+
+            $memStmt = $this->db->prepare("SELECT id FROM members WHERE id = ? FOR UPDATE");
+            $memStmt->execute([$discovery['member_id']]);
+            $member = $memStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$member) {
+                $this->db->rollBack();
+                Response::error('Member not found.', 'INTERNAL_ERROR', 500);
+            }
+
+            $trnStmt = $this->db->prepare("SELECT id, admin_id FROM trainers WHERE id = ? FOR UPDATE");
+            $trnStmt->execute([$discovery['trainer_id']]);
+            $trainer = $trnStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$trainer) {
+                $this->db->rollBack();
+                Response::error('Trainer not found.', 'INTERNAL_ERROR', 500);
+            }
+
+            if ($scope === 'trainer') {
+                if ($trainer['admin_id'] !== $adminId) {
+                    $this->db->rollBack();
+                    Response::error('Forbidden.', 'FORBIDDEN', 403);
+                }
+            }
+
+            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+            $appStmt->execute([$id]);
+            $lockedApp = $appStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$lockedApp) {
+                $this->db->rollBack();
+                Response::error('Appointment not found.', 'NOT_FOUND', 404);
+            }
+
+            if ($lockedApp['member_id'] !== $discovery['member_id'] || $lockedApp['trainer_id'] !== $discovery['trainer_id']) {
+                $this->db->rollBack();
+                Response::error('Appointment participants have changed.', 'APPOINTMENT_CHANGED', 409);
+            }
+
+            if ($lockedApp['status'] !== 'scheduled') {
+                $this->db->rollBack();
+                Response::error('Only scheduled appointments can be terminalized.', 'APPOINTMENT_NOT_TERMINALIZABLE', 409);
+            }
+
+            $endsAtDt = new \DateTime($lockedApp['ends_at'], new \DateTimeZone('Europe/Istanbul'));
+            if ($now < $endsAtDt) {
+                $this->db->rollBack();
+                Response::error('Appointment cannot be terminalized before it ends.', 'APPOINTMENT_NOT_TERMINALIZABLE', 409);
+            }
+
+            if ($targetStatus === 'completed') {
+                $updStmt = $this->db->prepare("
+                    UPDATE appointments 
+                    SET status = 'completed', completed_by = ?, completed_at = ?, updated_by = ?
+                    WHERE id = ?
+                ");
+                $updStmt->execute([$adminId, $terminalizedAt, $adminId, $id]);
+            } else {
+                $updStmt = $this->db->prepare("
+                    UPDATE appointments 
+                    SET status = 'no_show', no_show_by = ?, no_show_at = ?, updated_by = ?
+                    WHERE id = ?
+                ");
+                $updStmt->execute([$adminId, $terminalizedAt, $adminId, $id]);
+            }
+
+            if ($updStmt->rowCount() === 0) {
+                $this->db->rollBack();
+                Response::error('Failed to terminalize appointment.', 'INTERNAL_ERROR', 500);
+            }
+
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
+            $fetchStmt->execute([$id]);
+            $persisted = $fetchStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$persisted) {
+                $this->db->rollBack();
+                Response::error('Failed to fetch persisted appointment.', 'INTERNAL_ERROR', 500);
+            }
+
+            $this->db->commit();
+
+            try {
+                if ($targetStatus === 'completed') {
+                    \Core\AuditLogger::log('appointment.completed', $id, 'appointment', $adminId, [
+                        'previous_status' => $lockedApp['status'],
+                        'new_status' => $persisted['status'],
+                        'completed_at' => $persisted['completed_at']
+                    ]);
+                } else {
+                    \Core\AuditLogger::log('appointment.no_show', $id, 'appointment', $adminId, [
+                        'previous_status' => $lockedApp['status'],
+                        'new_status' => $persisted['status'],
+                        'no_show_at' => $persisted['no_show_at']
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                error_log('AuditLogger failed during appointment ' . $targetStatus . ': ' . $e->getMessage());
+            }
+
+            Response::json([
+                'appointment' => [
+                    'id' => $persisted['id'],
+                    'uuid' => $persisted['uuid'],
+                    'member_id' => $persisted['member_id'],
+                    'trainer_id' => $persisted['trainer_id'],
+                    'starts_at' => $persisted['starts_at'],
+                    'ends_at' => $persisted['ends_at'],
+                    'status' => $persisted['status']
+                ]
+            ]);
+
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log('Appointment terminalization error: ' . $e->getMessage());
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
+        }
     }
 
 }

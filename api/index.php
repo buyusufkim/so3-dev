@@ -819,6 +819,46 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
             $matched = true;
         }
     }
+
+    if (preg_match('#^/api/admin/appointments/([1-9]\d*)/complete$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->completeAdminAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/appointments/([1-9]\d*)/no-show$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->noShowAdminAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/appointments/([1-9]\d*)/complete$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->completeTrainerAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/trainer/appointments/([1-9]\d*)/no-show$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->noShowTrainerAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
 }
 
 if (!$matched) {
