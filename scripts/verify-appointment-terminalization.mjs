@@ -194,8 +194,16 @@ function verifyGlobalCsrfPositive(indexSource) {
     }
     
     const completeAdminIdx = indexSource.search(/if\s*\(\s*preg_match\s*\(\s*'#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#'/);
-    if (completeAdminIdx !== -1 && globalCsrfMatch.index > completeAdminIdx) {
-        throw new Error("Global CSRF guard must appear before terminalization routes dispatch");
+    const noShowAdminIdx = indexSource.search(/if\s*\(\s*preg_match\s*\(\s*'#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#'/);
+    const completeTrainerIdx = indexSource.search(/if\s*\(\s*preg_match\s*\(\s*'#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#'/);
+    const noShowTrainerIdx = indexSource.search(/if\s*\(\s*preg_match\s*\(\s*'#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#'/);
+    
+    if (completeAdminIdx === -1 || noShowAdminIdx === -1 || completeTrainerIdx === -1 || noShowTrainerIdx === -1) {
+        throw new Error("Missing terminalization route dispatch in indexSource");
+    }
+    const earliestTerminalizationRouteIndex = Math.min(completeAdminIdx, noShowAdminIdx, completeTrainerIdx, noShowTrainerIdx);
+    if (globalCsrfMatch.index > earliestTerminalizationRouteIndex) {
+        throw new Error("Global CSRF guard must appear before all terminalization routes dispatch");
     }
 }
 
@@ -211,15 +219,14 @@ function verifyExactJsonContract(block) {
         throw new Error("non-empty $_GET must reject with 422 VALIDATION_ERROR");
     }
 
-    if (block.indexOf("trim($rawBody)") === -1) throw new Error("Missing trim($rawBody) empty check");
     const emptyBodyIdx = block.indexOf("empty(trim($rawBody))");
-    if (emptyBodyIdx !== -1) {
-        const emptyBodyBlock = extractBalanced(block, emptyBodyIdx);
-        if (!emptyBodyBlock || !emptyBodyBlock.includes("400") || !emptyBodyBlock.includes("INVALID_JSON")) {
-            throw new Error("Empty body must reject with 400 INVALID_JSON");
-        }
-        if (emptyBodyIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
+    if (emptyBodyIdx === -1) throw new Error("Missing empty(trim($rawBody)) empty/whitespace body guard");
+    
+    const emptyBodyBlock = extractBalanced(block, emptyBodyIdx);
+    if (!emptyBodyBlock || !emptyBodyBlock.includes("400") || !emptyBodyBlock.includes("INVALID_JSON")) {
+        throw new Error("Empty body must reject with 400 INVALID_JSON");
     }
+    if (emptyBodyIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
 
     const decodeObjIdx = block.indexOf("json_decode($rawBody)");
     if (decodeObjIdx === -1) throw new Error("Missing json_decode($rawBody)");
@@ -527,10 +534,34 @@ function assertThrows(fn) {
 }
 
 checkInvariant("Self-Test 1: Global CSRF", () => {
-    const good = "if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) { CsrfMiddleware::handle(); }";
+    const good = `
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) { CsrfMiddleware::handle(); }
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/complete$#')) {}
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/no-show$#')) {}
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/complete$#')) {}
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/no-show$#')) {}
+    `;
     verifyGlobalCsrfPositive(good);
-    assertThrows(() => verifyGlobalCsrfPositive("if (in_array($method, ['POST', 'PUT', 'DELETE'])) { CsrfMiddleware::handle(); }")); // missing patch
-    assertThrows(() => verifyGlobalCsrfPositive("if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) { }")); // missing handle
+    assertThrows(() => verifyGlobalCsrfPositive(good.replace("'POST'", "'POST', 'GET'")));
+    assertThrows(() => verifyGlobalCsrfPositive(good.replace("'PATCH', ", "")));
+    
+    const badOrderAdmin = `
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/complete$#')) {}
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) { CsrfMiddleware::handle(); }
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/no-show$#')) {}
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/complete$#')) {}
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/no-show$#')) {}
+    `;
+    assertThrows(() => verifyGlobalCsrfPositive(badOrderAdmin));
+    
+    const badOrderTrainer = `
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/complete$#')) {}
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) { CsrfMiddleware::handle(); }
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/complete$#')) {}
+        if (preg_match('#^/api/admin/appointments/([1-9]\\d*)/no-show$#')) {}
+        if (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/no-show$#')) {}
+    `;
+    assertThrows(() => verifyGlobalCsrfPositive(badOrderTrainer));
 });
 
 checkInvariant("Self-Test 2: Reception Absence", () => {
@@ -553,6 +584,7 @@ checkInvariant("Self-Test 3: Exact JSON Contract", () => {
         $this->db->beginTransaction();
     `;
     verifyExactJsonContract(good);
+    assertThrows(() => verifyExactJsonContract(good.replace("if (empty(trim($rawBody))) { Response::error('', 'INVALID_JSON', 400); }", "$stray = trim($rawBody);")));
     assertThrows(() => verifyExactJsonContract(good.replace("is_object", "is_array")));
     assertThrows(() => verifyExactJsonContract(good.replace("count($data) > 0", "")));
     assertThrows(() => verifyExactJsonContract("$this->db->beginTransaction();" + good.replace("$this->db->beginTransaction();", ""))); // tx order
@@ -798,7 +830,7 @@ checkInvariant("Commit-Before-Audit Isolation", () => {
 });
 
 checkInvariant("Temporary Artifact Absence", () => {
-    const forbiddenArtifacts = ['test.mjs', 'test2.mjs', 'test3.mjs', 'patch.cjs', 'patch.js', 'patch_index.php'];
+    const forbiddenArtifacts = ['test.mjs', 'test2.mjs', 'test3.mjs', 'patch.cjs', 'patch.js', 'patch_index.php', 'test-audit-keys.mjs', 'test-csrf.mjs'];
     for (const art of forbiddenArtifacts) {
         if (fs.existsSync(path.resolve(rootDir, art))) throw new Error(`Forbidden artifact ${art}`);
     }
