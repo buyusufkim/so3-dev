@@ -922,20 +922,28 @@ class AppointmentController {
         if (empty(trim($rawBody))) {
             Response::error('Request body is required.', 'INVALID_JSON', 400);
         }
-        $data = json_decode($rawBody, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+        
+        $dataObj = json_decode($rawBody);
+        if (json_last_error() !== JSON_ERROR_NONE) {
             Response::error('Invalid JSON.', 'INVALID_JSON', 400);
         }
+        if (!is_object($dataObj)) {
+            Response::error('Payload must be a JSON object.', 'VALIDATION_ERROR', 422);
+        }
         
+        $data = json_decode($rawBody, true);
         if (count($data) > 0) {
             Response::error('No payload fields allowed.', 'VALIDATION_ERROR', 422);
         }
         
         $adminId = $_SESSION['admin_id'] ?? null;
-        if (!is_int($adminId) && !preg_match('/^[1-9]\d*$/', (string)$adminId)) {
-            Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
+        if (!is_int($adminId)) {
+            if (is_string($adminId) && preg_match('/^[1-9]\d*$/', $adminId)) {
+                $adminId = (int)$adminId;
+            } else {
+                Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
+            }
         }
-        $adminId = (int)$adminId;
         if ($adminId <= 0) {
             Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
@@ -944,18 +952,16 @@ class AppointmentController {
             Response::error('Invalid appointment ID.', 'VALIDATION_ERROR', 422);
         }
 
-        $now = new \DateTime('now', new \DateTimeZone('Europe/Istanbul'));
-        $terminalizedAt = $now->format('Y-m-d H:i:s');
-
         try {
+            $this->db->beginTransaction();
+
             $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
             $discStmt->execute([$id]);
             $discovery = $discStmt->fetch(\PDO::FETCH_ASSOC);
             if (!$discovery) {
+                $this->db->rollBack();
                 Response::error('Appointment not found.', 'NOT_FOUND', 404);
             }
-
-            $this->db->beginTransaction();
 
             $memStmt = $this->db->prepare("SELECT id FROM members WHERE id = ? FOR UPDATE");
             $memStmt->execute([$discovery['member_id']]);
@@ -974,7 +980,7 @@ class AppointmentController {
             }
 
             if ($scope === 'trainer') {
-                if ($trainer['admin_id'] !== $adminId) {
+                if ((int)$trainer['admin_id'] !== $adminId) {
                     $this->db->rollBack();
                     Response::error('Forbidden.', 'FORBIDDEN', 403);
                 }
@@ -997,6 +1003,9 @@ class AppointmentController {
                 $this->db->rollBack();
                 Response::error('Only scheduled appointments can be terminalized.', 'APPOINTMENT_NOT_TERMINALIZABLE', 409);
             }
+
+            $now = new \DateTime('now', new \DateTimeZone('Europe/Istanbul'));
+            $terminalizedAt = $now->format('Y-m-d H:i:s');
 
             $endsAtDt = new \DateTime($lockedApp['ends_at'], new \DateTimeZone('Europe/Istanbul'));
             if ($now < $endsAtDt) {
@@ -1037,13 +1046,13 @@ class AppointmentController {
 
             try {
                 if ($targetStatus === 'completed') {
-                    \Core\AuditLogger::log('appointment.completed', $id, 'appointment', $adminId, [
+                    \Core\AuditLogger::log('appointment.completed', $adminId, 'appointment', $id, [
                         'previous_status' => $lockedApp['status'],
                         'new_status' => $persisted['status'],
                         'completed_at' => $persisted['completed_at']
                     ]);
                 } else {
-                    \Core\AuditLogger::log('appointment.no_show', $id, 'appointment', $adminId, [
+                    \Core\AuditLogger::log('appointment.no_show', $adminId, 'appointment', $id, [
                         'previous_status' => $lockedApp['status'],
                         'new_status' => $persisted['status'],
                         'no_show_at' => $persisted['no_show_at']
@@ -1055,10 +1064,10 @@ class AppointmentController {
 
             Response::json([
                 'appointment' => [
-                    'id' => $persisted['id'],
+                    'id' => (int)$persisted['id'],
                     'uuid' => $persisted['uuid'],
-                    'member_id' => $persisted['member_id'],
-                    'trainer_id' => $persisted['trainer_id'],
+                    'member_id' => (int)$persisted['member_id'],
+                    'trainer_id' => (int)$persisted['trainer_id'],
                     'starts_at' => $persisted['starts_at'],
                     'ends_at' => $persisted['ends_at'],
                     'status' => $persisted['status']
