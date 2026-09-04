@@ -174,46 +174,82 @@ function verifyReceptionTerminalizationAbsent(controllerSource, indexSource) {
 function verifyGlobalCsrfPositive(indexSource) {
     const globalCsrfMatch = indexSource.match(/if\s*\(\s*in_array\s*\(\s*\$method,\s*\[(.*?)\]\s*\)\s*\)/s);
     if (!globalCsrfMatch) throw new Error("Missing global mutation method guard");
+    
     const methodsStr = globalCsrfMatch[1];
-    if (!methodsStr.includes("'POST'") || !methodsStr.includes("'PUT'") || !methodsStr.includes("'PATCH'") || !methodsStr.includes("'DELETE'")) {
-        throw new Error("Global CSRF guard must cover exactly POST, PUT, PATCH, DELETE");
+    const extractedMethods = [...methodsStr.matchAll(/'([A-Z]+)'/g)].map(m => m[1]);
+    const expectedMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    
+    if (extractedMethods.length !== expectedMethods.length) throw new Error("Global CSRF method count mismatch");
+    for (const em of extractedMethods) {
+        if (!expectedMethods.includes(em)) throw new Error(`Extra method ${em} in global CSRF guard`);
     }
+    for (const em of expectedMethods) {
+        if (!extractedMethods.includes(em)) throw new Error(`Missing method ${em} in global CSRF guard`);
+    }
+    
     const guardBlock = extractBalanced(indexSource, globalCsrfMatch.index);
     if (!guardBlock) throw new Error("Failed to extract global CSRF guard block");
     if (!guardBlock.includes("CsrfMiddleware::handle()")) {
         throw new Error("CsrfMiddleware::handle() missing in global guard");
     }
+    
+    const completeAdminIdx = indexSource.search(/if\s*\(\s*preg_match\s*\(\s*'#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#'/);
+    if (completeAdminIdx !== -1 && globalCsrfMatch.index > completeAdminIdx) {
+        throw new Error("Global CSRF guard must appear before terminalization routes dispatch");
+    }
 }
 
 function verifyExactJsonContract(block) {
+    const beginTxIdx = block.indexOf("$this->db->beginTransaction()");
+    
     const getCheckIdx = block.indexOf("!empty($_GET)");
     if (getCheckIdx === -1) throw new Error("Missing non-empty $_GET rejection");
+    if (getCheckIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
     
     const getCheckBlock = extractBalanced(block, getCheckIdx);
     if (!getCheckBlock || !getCheckBlock.includes("Response::error") || (!getCheckBlock.includes("422") && !getCheckBlock.includes("VALIDATION_ERROR"))) {
         throw new Error("non-empty $_GET must reject with 422 VALIDATION_ERROR");
     }
 
+    if (block.indexOf("trim($rawBody)") === -1) throw new Error("Missing trim($rawBody) empty check");
+    const emptyBodyIdx = block.indexOf("empty(trim($rawBody))");
+    if (emptyBodyIdx !== -1) {
+        const emptyBodyBlock = extractBalanced(block, emptyBodyIdx);
+        if (!emptyBodyBlock || !emptyBodyBlock.includes("400") || !emptyBodyBlock.includes("INVALID_JSON")) {
+            throw new Error("Empty body must reject with 400 INVALID_JSON");
+        }
+        if (emptyBodyIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
+    }
+
     const decodeObjIdx = block.indexOf("json_decode($rawBody)");
     if (decodeObjIdx === -1) throw new Error("Missing json_decode($rawBody)");
+
+    const lastErrIdx = block.indexOf("json_last_error() !== JSON_ERROR_NONE");
+    if (lastErrIdx === -1) throw new Error("Missing json_last_error() !== JSON_ERROR_NONE check");
+    const lastErrBlock = extractBalanced(block, block.lastIndexOf("if", lastErrIdx));
+    if (!lastErrBlock || !lastErrBlock.includes("400") || !lastErrBlock.includes("INVALID_JSON")) {
+        throw new Error("json_last_error failure must reject with 400 INVALID_JSON");
+    }
+    if (lastErrIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
 
     const isObjectIdx = block.indexOf("is_object");
     if (isObjectIdx === -1) throw new Error("Missing is_object validation");
     const isObjectBlock = extractBalanced(block, block.lastIndexOf("if", isObjectIdx));
-    if (!isObjectBlock || !isObjectBlock.includes("422")) throw new Error("is_object failure must reject with 422");
+    if (!isObjectBlock || !isObjectBlock.includes("422") || !isObjectBlock.includes("VALIDATION_ERROR")) {
+        throw new Error("is_object failure must reject with 422 VALIDATION_ERROR");
+    }
+    if (isObjectIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
 
     const decodeAssocIdx = block.indexOf("json_decode($rawBody, true)");
     if (decodeAssocIdx === -1) throw new Error("Missing json_decode($rawBody, true)");
     
     const countCheckIdx = block.indexOf("count($data) > 0");
     if (countCheckIdx === -1) throw new Error("Missing count($data) > 0 empty object validation");
-    const countBlock = extractBalanced(block, block.lastIndexOf("if", countCheckIdx));
-    if (!countBlock || !countBlock.includes("422")) throw new Error("count > 0 must reject with 422");
-    
-    const txIdx = block.indexOf("beginTransaction");
-    if (txIdx !== -1 && (getCheckIdx > txIdx || decodeObjIdx > txIdx || isObjectIdx > txIdx || decodeAssocIdx > txIdx || countCheckIdx > txIdx)) {
-        throw new Error("Query guard and JSON decoding must happen before beginTransaction");
+    const countCheckBlock = extractBalanced(block, block.lastIndexOf("if", countCheckIdx));
+    if (!countCheckBlock || !countCheckBlock.includes("422") || !countCheckBlock.includes("VALIDATION_ERROR")) {
+        throw new Error("count($data) > 0 must reject with 422 VALIDATION_ERROR");
     }
+    if (countCheckIdx > beginTxIdx) throw new Error("Validation must be before beginTransaction");
 }
 
 function verifyActorNormalization(block) {
@@ -250,9 +286,21 @@ function verifyOrdering(block) {
     const nowIdx = block.indexOf("new \\DateTime('now'");
     if (nowIdx === -1 || nowIdx < scheduledGuardIdx) throw new Error("$now creation must be after scheduled-only guard (and appointment lock)");
     
+    const updateTargetIdx = block.indexOf("UPDATE appointments");
+    const rowCountIdx = block.indexOf("rowCount() === 0");
+    const persistedSelectIdx = block.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
     const commitIdx = block.indexOf("$this->db->commit()");
     const auditIdx = block.indexOf("AuditLogger::log");
-    if (commitIdx === -1 || auditIdx === -1 || auditIdx < commitIdx) throw new Error("audit must be after commit");
+    
+    if (updateTargetIdx === -1) throw new Error("Missing UPDATE appointments");
+    if (rowCountIdx === -1) throw new Error("Missing rowCount() check");
+    if (persistedSelectIdx === -1) throw new Error("Missing persisted row fetch");
+    if (commitIdx === -1) throw new Error("Missing commit");
+    if (auditIdx === -1) throw new Error("Missing audit log");
+    
+    if (!(updateTargetIdx < rowCountIdx && rowCountIdx < persistedSelectIdx && persistedSelectIdx < commitIdx && commitIdx < auditIdx)) {
+        throw new Error("Order must be: UPDATE -> rowCount guard -> persisted SELECT -> commit -> audit -> response");
+    }
 }
 
 function verifyHistoricalEligibilityAbsence(block) {
@@ -285,6 +333,18 @@ function verifyTrainerOwnership(block) {
 }
 
 function verifyTimeBoundary(block) {
+    const scheduledGuardIdx = block.indexOf("'scheduled'");
+    if (scheduledGuardIdx === -1) throw new Error("Missing scheduled status guard");
+    const scheduledGuardBlock = extractBalanced(block, block.lastIndexOf("if", scheduledGuardIdx));
+    if (!scheduledGuardBlock || !scheduledGuardBlock.includes("409")) throw new Error("scheduled guard must reject with 409");
+    
+    const nowIdx = block.indexOf("new \\DateTime('now'");
+    if (nowIdx === -1 || nowIdx < scheduledGuardIdx) throw new Error("Missing now creation after scheduled guard");
+    
+    if (!block.includes("$terminalizedAt = $now->format('Y-m-d H:i:s')")) {
+        throw new Error("Missing $terminalizedAt = $now->format('Y-m-d H:i:s')");
+    }
+    
     if (!block.includes("APPOINTMENT_NOT_TERMINALIZABLE") || !block.includes("409")) {
         throw new Error("Missing APPOINTMENT_NOT_TERMINALIZABLE 409 rejection");
     }
@@ -299,37 +359,67 @@ function verifyTimeBoundary(block) {
     for (const f of forbidden) {
         if (block.includes(f)) throw new Error(`Forbidden time boundary construct: ${f}`);
     }
-    if (block.match(/\$now\s*>=\s*\$startsAtDt/)) throw new Error("starts_at restriction forbidden");
+    if (block.match(/\$now\s*>=\s*\$startsAtDt/)) throw new Error("starts_at based rejection is forbidden");
+    if (block.includes("starts_at") && block.match(/\$now\s*<\s*\$startsAtDt/)) throw new Error("starts_at based rejection is forbidden");
 }
 
 function verifyCompletedUpdate(block) {
-    const updMatch = block.match(/UPDATE\s+appointments\s+SET\s+status\s*=\s*'completed'([^;]+)/is);
+    const updMatch = block.match(/UPDATE\s+appointments\s+SET\s+(.+?)\s+WHERE/is);
     if (!updMatch) throw new Error("Missing completed UPDATE branch");
     const updCode = updMatch[1];
     
+    if (!updCode.includes("status = 'completed'")) throw new Error("Missing status = 'completed'");
     if (!updCode.includes("completed_by = ?")) throw new Error("Missing completed_by");
     if (!updCode.includes("completed_at = ?")) throw new Error("Missing completed_at");
     if (!updCode.includes("updated_by = ?")) throw new Error("Missing updated_by");
     
-    const forbidden = ["no_show_by", "no_show_at", "cancelled_by", "cancelled_at", "cancellation_reason", "starts_at", "ends_at", "member_id", "trainer_id", "foo"];
-    for (const f of forbidden) {
-        if (updCode.includes(f)) throw new Error(`completed UPDATE must not mutate ${f}`);
+    // Exact column set parser
+    const parts = updCode.split(',');
+    let columns = [];
+    for (let part of parts) {
+        part = part.trim();
+        if (part === '') continue;
+        let colName = part.split('=')[0].trim();
+        columns.push(colName);
     }
+    
+    const expected = ["status", "completed_by", "completed_at", "updated_by"];
+    for (const c of columns) {
+        if (!expected.includes(c)) throw new Error(`completed UPDATE must not mutate extra column ${c}`);
+    }
+    if (columns.length !== expected.length) throw new Error(`completed UPDATE column count mismatch`);
 }
 
 function verifyNoShowUpdate(block) {
-    const updMatch = block.match(/UPDATE\s+appointments\s+SET\s+status\s*=\s*'no_show'([^;]+)/is);
-    if (!updMatch) throw new Error("Missing no_show UPDATE branch");
-    const updCode = updMatch[1];
+    const matches = [...block.matchAll(/UPDATE\s+appointments\s+SET\s+(.+?)\s+WHERE/igs)];
+    let updCode = null;
+    for (const m of matches) {
+        if (m[1].includes("'no_show'")) {
+            updCode = m[1];
+            break;
+        }
+    }
+    if (!updCode) throw new Error("Missing no_show UPDATE branch");
     
+    if (!updCode.includes("status = 'no_show'")) throw new Error("Missing status = 'no_show'");
     if (!updCode.includes("no_show_by = ?")) throw new Error("Missing no_show_by");
     if (!updCode.includes("no_show_at = ?")) throw new Error("Missing no_show_at");
     if (!updCode.includes("updated_by = ?")) throw new Error("Missing updated_by");
-    
-    const forbidden = ["completed_by", "completed_at", "cancelled_by", "cancelled_at", "cancellation_reason", "starts_at", "ends_at", "member_id", "trainer_id", "foo"];
-    for (const f of forbidden) {
-        if (updCode.includes(f)) throw new Error(`no_show UPDATE must not mutate ${f}`);
+
+    const parts = updCode.split(',');
+    let columns = [];
+    for (let part of parts) {
+        part = part.trim();
+        if (part === '') continue;
+        let colName = part.split('=')[0].trim();
+        columns.push(colName);
     }
+    
+    const expected = ["status", "no_show_by", "no_show_at", "updated_by"];
+    for (const c of columns) {
+        if (!expected.includes(c)) throw new Error(`no_show UPDATE must not mutate extra column ${c}`);
+    }
+    if (columns.length !== expected.length) throw new Error(`no_show UPDATE column count mismatch`);
 }
 
 function verifyNoSideEffects(block) {
@@ -402,12 +492,25 @@ function verifyAuditContract(block, action) {
     if (!metadataStr.includes("'previous_status' => $lockedApp['status']")) throw new Error("metadata missing previous_status from $lockedApp");
     if (!metadataStr.includes("'new_status' => $persisted['status']")) throw new Error("metadata missing new_status from $persisted");
     
+    const matches = [...metadataStr.matchAll(/'([a-zA-Z_]+)'\s*=>/g)];
+    const keys = matches.map(m => m[1]);
+    
     if (action === 'appointment.completed') {
         if (!metadataStr.includes("'completed_at' => $persisted['completed_at']")) throw new Error("metadata missing completed_at from $persisted");
-        if (metadataStr.includes("no_show_at")) throw new Error("extra metadata no_show_at in completed audit");
+        
+        const expected = ["previous_status", "new_status", "completed_at"];
+        for (const key of keys) {
+            if (!expected.includes(key)) throw new Error(`extra metadata ${key} in completed audit`);
+        }
+        if (keys.length !== expected.length) throw new Error("completed audit metadata count mismatch");
     } else if (action === 'appointment.no_show') {
         if (!metadataStr.includes("'no_show_at' => $persisted['no_show_at']")) throw new Error("metadata missing no_show_at from $persisted");
-        if (metadataStr.includes("completed_at")) throw new Error("extra metadata completed_at in no_show audit");
+        
+        const expected = ["previous_status", "new_status", "no_show_at"];
+        for (const key of keys) {
+            if (!expected.includes(key)) throw new Error(`extra metadata ${key} in no_show audit`);
+        }
+        if (keys.length !== expected.length) throw new Error("no_show audit metadata count mismatch");
     }
 }
 
@@ -441,7 +544,9 @@ checkInvariant("Self-Test 2: Reception Absence", () => {
 checkInvariant("Self-Test 3: Exact JSON Contract", () => {
     const good = `
         if (!empty($_GET)) { Response::error('','VALIDATION_ERROR', 422); }
+        if (empty(trim($rawBody))) { Response::error('', 'INVALID_JSON', 400); }
         $dataObj = json_decode($rawBody);
+        if (json_last_error() !== JSON_ERROR_NONE) { Response::error('', 'INVALID_JSON', 400); }
         if (!is_object($dataObj)) { Response::error('','VALIDATION_ERROR', 422); }
         $data = json_decode($rawBody, true);
         if (count($data) > 0) { Response::error('','VALIDATION_ERROR', 422); }
@@ -462,6 +567,9 @@ checkInvariant("Self-Test 4: Transaction & Lock Ordering", () => {
         FROM appointments WHERE id = ? FOR UPDATE
         'scheduled'
         new \\DateTime('now'
+        UPDATE appointments
+        rowCount() === 0
+        SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?
         $this->db->commit();
         AuditLogger::log
     `;
@@ -492,9 +600,10 @@ checkInvariant("Self-Test 6: Trainer Ownership", () => {
 
 checkInvariant("Self-Test 7: Time Boundary", () => {
     const good = `
-        Response::error('','APPOINTMENT_NOT_TERMINALIZABLE',409);
+        if ('scheduled') { Response::error('', '', 409); }
         $now = new \\DateTime('now', new \\DateTimeZone('Europe/Istanbul'));
-        if ($now < $endsAtDt) { }
+        $terminalizedAt = $now->format('Y-m-d H:i:s');
+        if ($now < $endsAtDt) { Response::error('','APPOINTMENT_NOT_TERMINALIZABLE',409); }
     `;
     verifyTimeBoundary(good);
     assertThrows(() => verifyTimeBoundary(good.replace("Europe/Istanbul", "")));
@@ -508,7 +617,7 @@ checkInvariant("Self-Test 8: Exact UPDATEs", () => {
     assertThrows(() => verifyCompletedUpdate("UPDATE appointments SET status = 'completed', completed_by = ?, completed_at = ?, updated_by = ?, no_show_at = ? WHERE"));
     assertThrows(() => verifyCompletedUpdate("UPDATE appointments SET status = 'completed', completed_by = ?, completed_at = ?, updated_by = ?, foo = ? WHERE"));
     
-    const goodNoShow = "UPDATE appointments SET status = 'no_show', no_show_by = ?, no_show_at = ?, updated_by = ? WHERE";
+    const goodNoShow = "UPDATE appointments SET status = 'completed', completed_by = ?, completed_at = ?, updated_by = ? WHERE \n UPDATE appointments SET status = 'no_show', no_show_by = ?, no_show_at = ?, updated_by = ? WHERE";
     verifyNoShowUpdate(goodNoShow);
     assertThrows(() => verifyNoShowUpdate("UPDATE appointments SET status = 'no_show', no_show_by = ?, no_show_at = ?, updated_by = ?, completed_at = ? WHERE"));
 });
@@ -683,12 +792,22 @@ checkInvariant("Commit-Before-Audit Isolation", () => {
     if (auditCatchBlock.includes("rollBack") || auditCatchBlock.includes("Response::error")) {
         throw new Error("Audit catch must not rollback or return Response::error");
     }
+    if (auditCatchBlock.includes("UPDATE appointments") || auditCatchBlock.includes("retry")) {
+        throw new Error("Audit catch must not contain UPDATE or retry logic");
+    }
 });
 
 checkInvariant("Temporary Artifact Absence", () => {
     const forbiddenArtifacts = ['test.mjs', 'test2.mjs', 'test3.mjs', 'patch.cjs', 'patch.js', 'patch_index.php'];
     for (const art of forbiddenArtifacts) {
         if (fs.existsSync(path.resolve(rootDir, art))) throw new Error(`Forbidden artifact ${art}`);
+    }
+    
+    const files = fs.readdirSync(rootDir);
+    for (const file of files) {
+        if (file.endsWith('.tmp') || file.endsWith('.fixed')) {
+            throw new Error(`Forbidden temporary artifact found: ${file}`);
+        }
     }
 });
 
@@ -697,7 +816,7 @@ console.log(`Total Invariants: ${totalInvariants}`);
 console.log(`Passed: ${passedInvariants}`);
 console.log(`Failed: ${failedInvariants}`);
 console.log("---------------------------------------------------------");
-if (failedInvariants > 0 || passedInvariants !== totalInvariants) {
+if (failedInvariants !== 0 || passedInvariants !== totalInvariants) {
     console.error(`❌ Appointment Terminalization Final Verifier FAILED.`);
     process.exit(1);
 } else {
