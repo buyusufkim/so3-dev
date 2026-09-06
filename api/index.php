@@ -113,6 +113,12 @@ $routes = [
             require_once __DIR__ . '/controllers/AppointmentController.php';
             (new \Controllers\AppointmentController())->getReceptionAppointments();
         },
+        '/api/reception/appointment-trainers' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getReceptionAppointmentTrainers();
+        },
         '/api/trainer/appointments' => function() {
             AuthMiddleware::handle();
             AuthMiddleware::hasRole(['trainer']);

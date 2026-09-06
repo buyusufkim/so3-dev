@@ -25,7 +25,8 @@
     "verify:appointment-reschedule": "node scripts/verify-appointment-reschedule.mjs",
     "verify:appointment-cancel": "node scripts/verify-appointment-cancel.mjs",
     "verify:appointment-terminalization": "node scripts/verify-appointment-terminalization.mjs",
-    "verify:appointment-lifecycle": "node scripts/verify-appointment-lifecycle.mjs"
+    "verify:appointment-lifecycle": "node scripts/verify-appointment-lifecycle.mjs",
+    "verify:appointment-create-options": "node scripts/verify-appointment-create-options.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -17,6 +17,35 @@ class AppointmentController {
         $this->db = Database::getInstance()->getConnection();
     }
 
+    public function getReceptionAppointmentTrainers() {
+        if (!empty($_GET)) {
+            Response::error('VALIDATION_ERROR', 'No query parameters are allowed.', 422);
+        }
+
+        try {
+            $stmt = $this->db->prepare("
+                SELECT id, name
+                FROM trainers
+                WHERE deleted_at IS NULL AND is_active = 1
+                ORDER BY sort_order ASC, id ASC
+            ");
+            $stmt->execute();
+            $trainers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $normalizedTrainers = array_map(function($t) {
+                return [
+                    'id' => (int)$t['id'],
+                    'name' => (string)$t['name']
+                ];
+            }, $trainers);
+
+            Response::json(['items' => $normalizedTrainers]);
+        } catch (Exception $e) {
+            error_log("Error in getReceptionAppointmentTrainers: " . $e->getMessage());
+            Response::error('INTERNAL_ERROR', 'An error occurred while fetching trainers.', 500);
+        }
+    }
+
     private function generateUuid() {
         $data = random_bytes(16);
         $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
