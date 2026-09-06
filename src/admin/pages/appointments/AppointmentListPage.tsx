@@ -163,7 +163,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
       console.error(err);
       setError('Randevular yüklenirken bir hata oluştu.');
     } finally {
-      if (localGeneration === requestGenerationRef.current) {
+      if (localGeneration === requestGenerationRef.current && !abortController.signal.aborted) {
         setIsLoading(false);
       }
     }
@@ -172,6 +172,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
   useEffect(() => {
     fetchAppointments(selectedDate);
     return () => {
+      requestGenerationRef.current += 1;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
