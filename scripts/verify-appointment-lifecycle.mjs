@@ -111,6 +111,57 @@ function getHandlers(controllerSrc) {
 }
 
 function verifyNamespaceCapabilityMatrix(indexSrc) {
+    if (indexSrc.match(/['"]\/api\/(public|member|members)\/appointments/)) {
+        throw new Error("Public/member appointment route found");
+    }
+
+    const getBucketMatches = indexSrc.match(/'GET'\s*=>\s*\[([\s\S]*?)\],\s*'POST'/);
+    if (!getBucketMatches) throw new Error("Could not find GET bucket");
+    const getBucket = getBucketMatches[1];
+    
+    if (!getBucket.includes("'/api/admin/appointments' => function() {") || !getBucket.includes("->getAdminAppointments()")) throw new Error("Missing GET admin route");
+    if (!getBucket.includes("'/api/reception/appointments' => function() {") || !getBucket.includes("->getReceptionAppointments()")) throw new Error("Missing GET reception route");
+    if (!getBucket.includes("'/api/trainer/appointments' => function() {") || !getBucket.includes("->getTrainerAppointments()")) throw new Error("Missing GET trainer route");
+    
+    if (getBucket.includes("->createAdminAppointment()") || getBucket.includes("->createReceptionAppointment()") || getBucket.includes("->createTrainerAppointment()")) throw new Error("POST controller in GET bucket");
+    if (getBucket.includes("->rescheduleAdminAppointment()") || getBucket.includes("->cancelAdminAppointment()") || getBucket.includes("->completeAdminAppointment()") || getBucket.includes("->noShowAdminAppointment()")) throw new Error("PATCH controller in GET bucket");
+
+    const postBucketMatches = indexSrc.match(/'POST'\s*=>\s*\[([\s\S]*?)\]\s*;/);
+    const postBucket = postBucketMatches ? postBucketMatches[1] : indexSrc; // simplistic fallback
+    
+    // We should parse indexSrc for POST bucket specifically.
+    const postStart = indexSrc.indexOf("'POST' => [");
+    if (postStart !== -1) {
+        const postEnd = indexSrc.indexOf("];", postStart);
+        const pBucket = indexSrc.substring(postStart, postEnd);
+        if (!pBucket.includes("'/api/admin/appointments' => function() {") || !pBucket.includes("->createAdminAppointment()")) throw new Error("Missing POST admin route");
+        if (!pBucket.includes("'/api/reception/appointments' => function() {") || !pBucket.includes("->createReceptionAppointment()")) throw new Error("Missing POST reception route");
+        if (!pBucket.includes("'/api/trainer/appointments' => function() {") || !pBucket.includes("->createTrainerAppointment()")) throw new Error("Missing POST trainer route");
+        if (pBucket.includes("->getAdminAppointments()") || pBucket.includes("->getReceptionAppointments()") || pBucket.includes("->getTrainerAppointments()")) throw new Error("GET controller in POST bucket");
+    }
+
+    const matchBlock = (regex, reqRole, reqMethod, reqController) => {
+        const m = indexSrc.match(regex);
+        if (!m) throw new Error("Missing route block for " + reqController);
+        const block = m[1];
+        if (!block.includes("AuthMiddleware::handle()")) throw new Error("Missing AuthMiddleware::handle() in " + reqController);
+        if (!block.includes("AuthMiddleware::hasRole(" + reqRole + ")")) throw new Error("Missing exact role " + reqRole + " in " + reqController);
+        if (!block.includes("$method === '" + reqMethod + "'")) throw new Error("Missing method check " + reqMethod + " in " + reqController);
+        if (!block.includes(reqController)) throw new Error("Missing controller " + reqController + " in its own block");
+    };
+
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->cancelAdminAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin', 'reception'\]", "PATCH", "->cancelReceptionAppointment\(\(int\)\$matches\[1\]\)");
+    
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->rescheduleAdminAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin', 'reception'\]", "PATCH", "->rescheduleReceptionAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->rescheduleTrainerAppointment\(\(int\)\$matches\[1\]\)");
+    
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->completeAdminAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->noShowAdminAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->completeTrainerAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->noShowTrainerAppointment\(\(int\)\$matches\[1\]\)");
+
     const adminBlocks = [...indexSrc.matchAll(/'\/api\/admin\/appointments'|preg_match\('#\^\/api\/admin\/appointments/g)];
     for (const match of adminBlocks) {
         const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
@@ -272,6 +323,12 @@ function verifyTrainerScope(controllerSrc) {
     if (!controllerSrc.includes("public function getTrainerAppointments")) throw new Error("Missing getTrainerAppointments");
     if (!controllerSrc.includes("public function createTrainerAppointment")) throw new Error("Missing createTrainerAppointment");
     if (!controllerSrc.includes("public function rescheduleTrainerAppointment")) throw new Error("Missing rescheduleTrainerAppointment");
+
+    const reschTrn = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function rescheduleTrainerAppointment")));
+    if (!reschTrn.includes("$_SESSION['admin_id']")) throw new Error("rescheduleTrainerAppointment missing $_SESSION['admin_id']");
+    if (!reschTrn.includes("getTrainerProfileId")) throw new Error("rescheduleTrainerAppointment missing getTrainerProfileId");
+    if (!reschTrn.match(/handleReschedule\(\$id,\s*\$trainerId\)/)) throw new Error("rescheduleTrainerAppointment missing handleReschedule($id, $trainerId)");
+
     
     const getTrn = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function getTrainerAppointments")));
     if (!getTrn.includes("getTrainerProfileId") || !getTrn.match(/handleRead\(\[.+?\],\s*\$trainerId\)/)) throw new Error("getTrainerAppointments missing getTrainerProfileId or handleRead");
@@ -295,6 +352,19 @@ function verifyReceptionScope(controllerSrc) {
     if (!controllerSrc.includes("public function createReceptionAppointment")) throw new Error("Missing createReceptionAppointment");
     if (!controllerSrc.includes("public function rescheduleReceptionAppointment")) throw new Error("Missing rescheduleReceptionAppointment");
     if (!controllerSrc.includes("public function cancelReceptionAppointment")) throw new Error("Missing cancelReceptionAppointment");
+
+    const getRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function getReceptionAppointments")));
+    if (!getRec.match(/handleRead\(\['from',\s*'to',\s*'trainer_id',\s*'member_id'\]\)/)) throw new Error("getReceptionAppointments missing handleRead");
+
+    const createRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function createReceptionAppointment")));
+    if (!createRec.match(/handleCreate\(\['member_id',\s*'trainer_id',\s*'starts_at',\s*'ends_at'\]\)/)) throw new Error("createReceptionAppointment missing handleCreate");
+
+    const reschRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function rescheduleReceptionAppointment")));
+    if (!reschRec.includes("handleReschedule($id)")) throw new Error("rescheduleReceptionAppointment missing handleReschedule($id)");
+
+    const cancelRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function cancelReceptionAppointment")));
+    if (!cancelRec.includes("handleCancel($id)")) throw new Error("cancelReceptionAppointment missing handleCancel($id)");
+
     
     if (controllerSrc.includes("public function completeReceptionAppointment")) throw new Error("completeReceptionAppointment forbidden");
     if (controllerSrc.includes("public function noShowReceptionAppointment")) throw new Error("noShowReceptionAppointment forbidden");
@@ -446,6 +516,8 @@ function verifySchemaConsistency(migration35, migration36) {
 }
 
 function verifyNoDeleteDomain(controllerSrc, indexSrc) {
+    if (indexSrc.includes("'DELETE' => [") && indexSrc.match(/'DELETE'\s*=>\s*\[[^\]]*appointments/)) throw new Error("Static DELETE route for appointments found");
+
     if (indexSrc.match(/preg_match\('#\^\/api\/[a-z_]+\/appointments[^']*'[^}]+method === 'DELETE'/)) {
         throw new Error("Realistic delete route block detected in index.php");
     }
@@ -613,6 +685,28 @@ checkInvariant("Negative: ROUTE CONTROLLER SWAP", () => {
 });
 checkInvariant("Negative: TRAINER OWN-READ SCOPE REMOVAL", () => {
     assertThrows(() => verifyTrainerScope(origControllerSrc.replace(/handleRead\(\[.+?\],\s*\$trainerId\)/g, "handleRead(['from'], null)")));
+});
+
+checkInvariant("Negative: PUBLIC APPOINTMENT ROUTE INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "'/api/public/appointments' => function() {}, '/api/public/events'")));
+});
+checkInvariant("Negative: ADMIN CANCEL CALLING RESCHEDULE", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/->cancelAdminAppointment\(\S+\)/, "->rescheduleAdminAppointment((int)$matches[1])")));
+});
+checkInvariant("Negative: PATCH CHANGED TO POST IN DYNAMIC ROUTE", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/\$method === 'PATCH'.*cancelAdminAppointment/s, "$method === 'POST') { (new \Controllers\AppointmentController())->cancelAdminAppointment((int)$matches[1]); $matched = true; }")));
+});
+checkInvariant("Negative: WEAK ID REGEX IN PATCH ROUTE", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/appointments\/\(\[1-9\]\\d\*\)\/cancel/, "appointments/(\\d+)/cancel")));
+});
+checkInvariant("Negative: RECEPTION GET CALLING HANDLE CREATE", () => {
+    assertThrows(() => verifyReceptionScope(origControllerSrc.replace(/handleRead\(\['from', 'to', 'trainer_id', 'member_id'\]\)/g, "handleCreate(['from'])")));
+});
+checkInvariant("Negative: TRAINER RESCHEDULE UNSCOPED", () => {
+    assertThrows(() => verifyTrainerScope(origControllerSrc.replace(/handleReschedule\(\$id, \$trainerId\)/g, "handleReschedule($id)")));
+});
+checkInvariant("Negative: STATIC APPOINTMENT DELETE ROUTE INJECTED", () => {
+    assertThrows(() => verifyNoDeleteDomain(origControllerSrc, origIndexSrc.replace(/'POST' => \[/, "'DELETE' => ['/api/admin/appointments' => function() {}], 'POST' => [")));
 });
 
 console.log("--- Loading Production Sources (Fail-Closed) ---");
