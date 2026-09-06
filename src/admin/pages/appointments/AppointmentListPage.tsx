@@ -66,11 +66,15 @@ function validateAppointmentResponse(data: unknown): AppointmentListResponse {
   const validItems: AppointmentListItem[] = [];
 
   for (const item of (data as any).items) {
+    if (!item || typeof item !== 'object') {
+      throw new Error('Invalid item data');
+    }
+    
     const appt = item.appointment;
     const member = item.member;
     const trainer = item.trainer;
 
-    if (!appt || typeof appt.id !== 'number' || appt.id <= 0 ||
+    if (!appt || typeof appt !== 'object' || typeof appt.id !== 'number' || !Number.isInteger(appt.id) || appt.id <= 0 ||
         typeof appt.uuid !== 'string' || !appt.uuid ||
         typeof appt.starts_at !== 'string' || !appt.starts_at ||
         typeof appt.ends_at !== 'string' || !appt.ends_at ||
@@ -78,14 +82,14 @@ function validateAppointmentResponse(data: unknown): AppointmentListResponse {
       throw new Error('Invalid appointment data');
     }
 
-    if (!member || typeof member.id !== 'number' || member.id <= 0 ||
+    if (!member || typeof member !== 'object' || typeof member.id !== 'number' || !Number.isInteger(member.id) || member.id <= 0 ||
         typeof member.uuid !== 'string' || !member.uuid ||
         typeof member.first_name !== 'string' ||
         typeof member.last_name !== 'string') {
       throw new Error('Invalid member data');
     }
 
-    if (!trainer || typeof trainer.id !== 'number' || trainer.id <= 0 ||
+    if (!trainer || typeof trainer !== 'object' || typeof trainer.id !== 'number' || !Number.isInteger(trainer.id) || trainer.id <= 0 ||
         typeof trainer.uuid !== 'string' || !trainer.uuid ||
         typeof trainer.name !== 'string') {
       throw new Error('Invalid trainer data');
@@ -122,8 +126,12 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const requestGenerationRef = useRef(0);
 
   const fetchAppointments = useCallback(async (date: string) => {
+    requestGenerationRef.current += 1;
+    const localGeneration = requestGenerationRef.current;
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -147,13 +155,17 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
       });
       
       const validated = validateAppointmentResponse(response);
-      setItems(validated.items);
+      if (localGeneration === requestGenerationRef.current && !abortController.signal.aborted) {
+        setItems(validated.items);
+      }
     } catch (err: any) {
-      if (err.name === 'AbortError') return;
+      if (abortController.signal.aborted || localGeneration !== requestGenerationRef.current) return;
       console.error(err);
       setError('Randevular yüklenirken bir hata oluştu.');
     } finally {
-      setIsLoading(false);
+      if (localGeneration === requestGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [scope]);
 
