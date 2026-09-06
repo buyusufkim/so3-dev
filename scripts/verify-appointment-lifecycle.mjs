@@ -115,30 +115,68 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
         throw new Error("Public/member appointment route found");
     }
 
-    const getBucketMatches = indexSrc.match(/'GET'\s*=>\s*\[([\s\S]*?)\],\s*'POST'/);
-    if (!getBucketMatches) throw new Error("Could not find GET bucket");
-    const getBucket = getBucketMatches[1];
-    
-    if (!getBucket.includes("'/api/admin/appointments' => function() {") || !getBucket.includes("->getAdminAppointments()")) throw new Error("Missing GET admin route");
-    if (!getBucket.includes("'/api/reception/appointments' => function() {") || !getBucket.includes("->getReceptionAppointments()")) throw new Error("Missing GET reception route");
-    if (!getBucket.includes("'/api/trainer/appointments' => function() {") || !getBucket.includes("->getTrainerAppointments()")) throw new Error("Missing GET trainer route");
-    
-    if (getBucket.includes("->createAdminAppointment()") || getBucket.includes("->createReceptionAppointment()") || getBucket.includes("->createTrainerAppointment()")) throw new Error("POST controller in GET bucket");
-    if (getBucket.includes("->rescheduleAdminAppointment()") || getBucket.includes("->cancelAdminAppointment()") || getBucket.includes("->completeAdminAppointment()") || getBucket.includes("->noShowAdminAppointment()")) throw new Error("PATCH controller in GET bucket");
+    const extractBalancedBracket = (src, startIdx) => {
+        if (startIdx === -1) return "";
+        let count = 0;
+        let endIdx = -1;
+        for (let i = startIdx; i < src.length; i++) {
+            if (src[i] === '[' || src[i] === '{') count++;
+            if (src[i] === ']' || src[i] === '}') count--;
+            if (count === 0 && (src[i] === ']' || src[i] === '}')) {
+                endIdx = i;
+                break;
+            }
+        }
+        return endIdx !== -1 ? src.substring(startIdx, endIdx + 1) : "";
+    };
 
-    const postBucketMatches = indexSrc.match(/'POST'\s*=>\s*\[([\s\S]*?)\]\s*;/);
-    const postBucket = postBucketMatches ? postBucketMatches[1] : indexSrc; // simplistic fallback
-    
-    // We should parse indexSrc for POST bucket specifically.
+    const getStart = indexSrc.indexOf("'GET' => [");
+    if (getStart === -1) throw new Error("Could not find GET bucket");
+    const getBucket = extractBalancedBracket(indexSrc, indexSrc.indexOf('[', getStart));
+
     const postStart = indexSrc.indexOf("'POST' => [");
-    if (postStart !== -1) {
-        const postEnd = indexSrc.indexOf("];", postStart);
-        const pBucket = indexSrc.substring(postStart, postEnd);
-        if (!pBucket.includes("'/api/admin/appointments' => function() {") || !pBucket.includes("->createAdminAppointment()")) throw new Error("Missing POST admin route");
-        if (!pBucket.includes("'/api/reception/appointments' => function() {") || !pBucket.includes("->createReceptionAppointment()")) throw new Error("Missing POST reception route");
-        if (!pBucket.includes("'/api/trainer/appointments' => function() {") || !pBucket.includes("->createTrainerAppointment()")) throw new Error("Missing POST trainer route");
-        if (pBucket.includes("->getAdminAppointments()") || pBucket.includes("->getReceptionAppointments()") || pBucket.includes("->getTrainerAppointments()")) throw new Error("GET controller in POST bucket");
-    }
+    if (postStart === -1) throw new Error("Could not find POST bucket");
+    const postBucket = extractBalancedBracket(indexSrc, indexSrc.indexOf('[', postStart));
+
+    const verifyStaticRoute = (bucket, bucketName, routeString, reqRole, reqController) => {
+        const routeIdx = bucket.indexOf(routeString);
+        if (routeIdx === -1) throw new Error("Missing static " + bucketName + " route " + routeString);
+        const block = extractBalanced(bucket, bucket.indexOf('{', routeIdx));
+        
+        if (!block.includes("AuthMiddleware::handle()")) throw new Error("Missing AuthMiddleware::handle() in " + bucketName + " " + routeString);
+        if (!block.includes("AuthMiddleware::hasRole(" + reqRole + ")")) throw new Error("Missing exact role " + reqRole + " in " + bucketName + " " + routeString);
+        if (!block.includes(reqController)) throw new Error("Missing exact controller " + reqController + " in " + bucketName + " " + routeString);
+        
+        const allMethods = [
+            "getAdminAppointments", "getReceptionAppointments", "getTrainerAppointments",
+            "createAdminAppointment", "createReceptionAppointment", "createTrainerAppointment"
+        ];
+        
+        for (const m of allMethods) {
+            if (block.includes(m) && !reqController.includes(m)) {
+                throw new Error("Cross-namespace swap detected: " + m + " found in " + bucketName + " " + routeString);
+            }
+        }
+        
+        const patchMethods = [
+            "rescheduleAdminAppointment", "cancelAdminAppointment", "completeAdminAppointment", "noShowAdminAppointment",
+            "rescheduleReceptionAppointment", "cancelReceptionAppointment",
+            "rescheduleTrainerAppointment", "completeTrainerAppointment", "noShowTrainerAppointment"
+        ];
+        for (const m of patchMethods) {
+            if (block.includes(m)) {
+                throw new Error("PATCH method " + m + " found in " + bucketName + " " + routeString);
+            }
+        }
+    };
+
+    verifyStaticRoute(getBucket, 'GET', "'/api/admin/appointments' => function()", "['super_admin', 'admin']", "->getAdminAppointments()");
+    verifyStaticRoute(getBucket, 'GET', "'/api/reception/appointments' => function()", "['super_admin', 'admin', 'reception']", "->getReceptionAppointments()");
+    verifyStaticRoute(getBucket, 'GET', "'/api/trainer/appointments' => function()", "['trainer']", "->getTrainerAppointments()");
+
+    verifyStaticRoute(postBucket, 'POST', "'/api/admin/appointments' => function()", "['super_admin', 'admin']", "->createAdminAppointment()");
+    verifyStaticRoute(postBucket, 'POST', "'/api/reception/appointments' => function()", "['super_admin', 'admin', 'reception']", "->createReceptionAppointment()");
+    verifyStaticRoute(postBucket, 'POST', "'/api/trainer/appointments' => function()", "['trainer']", "->createTrainerAppointment()");
 
     const matchBlock = (regex, reqRole, reqMethod, reqController) => {
         const m = indexSrc.match(regex);
@@ -150,61 +188,17 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
         if (!block.includes(reqController)) throw new Error("Missing controller " + reqController + " in its own block");
     };
 
-    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->cancelAdminAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin', 'reception'\]", "PATCH", "->cancelReceptionAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin']", "PATCH", "->cancelAdminAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin', 'reception']", "PATCH", "->cancelReceptionAppointment((int)$matches[1])");
     
-    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->rescheduleAdminAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin', 'reception'\]", "PATCH", "->rescheduleReceptionAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->rescheduleTrainerAppointment\(\(int\)\$matches\[1\]\)");
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin']", "PATCH", "->rescheduleAdminAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin', 'reception']", "PATCH", "->rescheduleReceptionAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['trainer']", "PATCH", "->rescheduleTrainerAppointment((int)$matches[1])");
     
-    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->completeAdminAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['super_admin', 'admin'\]", "PATCH", "->noShowAdminAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->completeTrainerAppointment\(\(int\)\$matches\[1\]\)");
-    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "\['trainer'\]", "PATCH", "->noShowTrainerAppointment\(\(int\)\$matches\[1\]\)");
-
-    const adminBlocks = [...indexSrc.matchAll(/'\/api\/admin\/appointments'|preg_match\('#\^\/api\/admin\/appointments/g)];
-    for (const match of adminBlocks) {
-        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
-        if (!block.includes("AuthMiddleware::handle()")) throw new Error("Missing AuthMiddleware::handle()");
-        if (!block.includes("AuthMiddleware::hasRole(['super_admin', 'admin'])")) {
-            throw new Error("Admin route missing exact AuthMiddleware::hasRole(['super_admin', 'admin'])");
-        }
-        if (block.includes("'editor'")) throw new Error("Editor extra role forbidden in admin appointments");
-        if (block.includes("preg_match") && !block.includes("([1-9]\\d*)")) {
-            throw new Error("Dynamic route ID missing exact ([1-9]\\d*)");
-        }
-        if (block.includes("preg_match") && !block.includes("(int)$matches[1]")) {
-            throw new Error("Dynamic route ID missing exact (int)$matches[1]");
-        }
-    }
-    
-    if (!indexSrc.includes("getAdminAppointments") || !indexSrc.includes("createAdminAppointment") || !indexSrc.includes("rescheduleAdminAppointment") || !indexSrc.includes("cancelAdminAppointment") || !indexSrc.includes("completeAdminAppointment") || !indexSrc.includes("noShowAdminAppointment")) throw new Error("Admin missing exact methods");
-
-    const recBlocks = [...indexSrc.matchAll(/'\/api\/reception\/appointments'|preg_match\('#\^\/api\/reception\/appointments/g)];
-    for (const match of recBlocks) {
-        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
-        if (!block.includes("AuthMiddleware::handle()")) throw new Error("Missing AuthMiddleware::handle()");
-        if (!block.includes("AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])")) {
-            throw new Error("Reception route missing exact AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])");
-        }
-        if (block.includes("completeReceptionAppointment") || block.includes("noShowReceptionAppointment") || block.includes("delete")) {
-            throw new Error("Reception forbidden methods");
-        }
-    }
-    if (!indexSrc.includes("getReceptionAppointments") || !indexSrc.includes("createReceptionAppointment") || !indexSrc.includes("rescheduleReceptionAppointment") || !indexSrc.includes("cancelReceptionAppointment")) throw new Error("Reception missing exact methods");
-    
-    const trnBlocks = [...indexSrc.matchAll(/'\/api\/trainer\/appointments'|preg_match\('#\^\/api\/trainer\/appointments/g)];
-    for (const match of trnBlocks) {
-        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
-        if (!block.includes("AuthMiddleware::handle()")) throw new Error("Missing AuthMiddleware::handle()");
-        if (!block.includes("AuthMiddleware::hasRole(['trainer'])")) {
-            throw new Error("Trainer route missing exact AuthMiddleware::hasRole(['trainer'])");
-        }
-        if (block.includes("cancelTrainerAppointment") || block.includes("delete")) {
-            throw new Error("Trainer forbidden methods");
-        }
-    }
-    if (!indexSrc.includes("getTrainerAppointments") || !indexSrc.includes("createTrainerAppointment") || !indexSrc.includes("rescheduleTrainerAppointment") || !indexSrc.includes("completeTrainerAppointment") || !indexSrc.includes("noShowTrainerAppointment")) throw new Error("Trainer missing exact methods");
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin']", "PATCH", "->completeAdminAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/admin\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['super_admin', 'admin']", "PATCH", "->noShowAdminAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/complete\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['trainer']", "PATCH", "->completeTrainerAppointment((int)$matches[1])");
+    matchBlock(/if \(preg_match\('#\^\/api\/trainer\/appointments\/\(\[1-9\]\\d\*\)\/no-show\$#', \$requestUri, \$matches\)\) \{([\s\S]*?)\$matched = true;\s*\}\s*\}/, "['trainer']", "PATCH", "->noShowTrainerAppointment((int)$matches[1])");
 }
 function verifyStateMachine(migration35, handlers, indexSrc) {
     const statusMatch = migration35.match(/ENUM\(([^)]+)\)/i);
@@ -709,6 +703,15 @@ checkInvariant("Negative: STATIC APPOINTMENT DELETE ROUTE INJECTED", () => {
     assertThrows(() => verifyNoDeleteDomain(origControllerSrc, origIndexSrc.replace(/'POST' => \[/, "'DELETE' => ['/api/admin/appointments' => function() {}], 'POST' => [")));
 });
 
+
+checkInvariant("Negative: CROSS-NAMESPACE GET CONTROLLER SWAP", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/->getAdminAppointments\(\)/, "->getReceptionAppointments()")));
+});
+
+checkInvariant("Negative: CROSS-NAMESPACE POST CONTROLLER SWAP", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/->createReceptionAppointment\(\)/, "->createAdminAppointment()")));
+});
+
 console.log("--- Loading Production Sources (Fail-Closed) ---");
 const indexSrc = origIndexSrc;
 const controllerSrc = origControllerSrc;
@@ -770,7 +773,7 @@ checkInvariant("Artifact guard", () => {
         'make_verifier.js', 'patch2.cjs', 'patch_lifecycle.cjs', 'patch_tests.js',
         'test_asserts.cjs', 'test_regex.cjs', 'test_regex.js', 'test_regex2.cjs', 'test_regex_update.cjs', 'test_extract.cjs',
         'test.mjs', 'test2.mjs', 'test3.mjs', 'test-audit-keys.mjs', 'test-csrf.mjs',
-        'patch.cjs', 'patch.js', 'patch_index.php'
+        'patch.cjs', 'patch.js', 'patch_index.php', 'summary.txt', 'patch_verifier.cjs', 'patch_matrix.cjs', 'test_balanced.cjs', 'patch_negative.cjs'
     ];
     for (const art of forbiddenArtifacts) {
         if (fs.existsSync(path.resolve(rootDir, art))) throw new Error("Forbidden artifact " + art);
