@@ -34,6 +34,7 @@ const TrainerMemberDetail = lazy(() => import("../admin/pages/trainer-members/Tr
 const TrainerMemberProgressPage = lazy(() => import("../admin/pages/trainer-member-progress/TrainerMemberProgressPage").then(m => ({ default: m.TrainerMemberProgressPage })));
 const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/TrainerDashboard").then(m => ({ default: m.TrainerDashboard })));
 const ReceptionDashboard = lazy(() => import("../admin/pages/reception/ReceptionDashboard").then(m => ({ default: m.ReceptionDashboard })));
+const AppointmentListPage = lazy(() => import("../admin/pages/appointments/AppointmentListPage").then(m => ({ default: m.AppointmentListPage })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -100,6 +101,18 @@ const router = createBrowserRouter([
       {
         path: "homepage",
         element: <AdminSuspense><Homepage /></AdminSuspense>,
+      },
+      {
+        path: "appointments",
+        element: <AdminSuspense><AppointmentListPage scope="admin" /></AdminSuspense>,
+      },
+      {
+        path: "reception/appointments",
+        element: <AdminSuspense><AppointmentListPage scope="reception" /></AdminSuspense>,
+      },
+      {
+        path: "my-appointments",
+        element: <AdminSuspense><AppointmentListPage scope="trainer" /></AdminSuspense>,
       },
       {
         path: "login",

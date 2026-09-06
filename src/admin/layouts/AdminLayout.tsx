@@ -119,6 +119,7 @@ export function AdminLayout() {
             <div>
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
               <div className="space-y-1">
+                <NavLink to="/admin/appointments" className={navLinkClass}>Randevular</NavLink>
                 <NavLink to="/admin/members" className={navLinkClass}>Üyeler</NavLink>
                 <NavLink to="/admin/trainer-accounts" className={navLinkClass}>Eğitmen Hesapları</NavLink>
               </div>
@@ -130,6 +131,7 @@ export function AdminLayout() {
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Eğitmen</h3>
               <div className="space-y-1">
                 <NavLink to="/admin/trainer" end className={navLinkClass}>Dashboard</NavLink>
+                <NavLink to="/admin/my-appointments" className={navLinkClass}>Randevularım</NavLink>
                 <NavLink to="/admin/my-members" className={navLinkClass}>Bana Atanan Üyeler</NavLink>
               </div>
             </div>
@@ -139,7 +141,8 @@ export function AdminLayout() {
             <div>
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Operasyon</h3>
               <div className="space-y-1">
-                <NavLink to="/admin/reception" className={navLinkClass}>Resepsiyon</NavLink>
+                <NavLink to="/admin/reception" end className={navLinkClass}>Resepsiyon</NavLink>
+                <NavLink to="/admin/reception/appointments" className={navLinkClass}>Randevular</NavLink>
               </div>
             </div>
           )}

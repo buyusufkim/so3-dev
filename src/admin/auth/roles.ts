@@ -45,8 +45,9 @@ export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
   
   if (role === 'trainer') {
     if (pathname === '/admin/trainer') return true;
-    const basePath = '/admin/my-members';
-    return pathname === basePath || pathname.startsWith(basePath + '/');
+    if (pathname === '/admin/my-members' || pathname.startsWith('/admin/my-members/')) return true;
+    if (pathname === '/admin/my-appointments' || pathname.startsWith('/admin/my-appointments/')) return true;
+    return false;
   }
   
   if (role === 'reception') {
