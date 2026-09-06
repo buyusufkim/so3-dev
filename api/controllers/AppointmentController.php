@@ -19,7 +19,7 @@ class AppointmentController {
 
     public function getReceptionAppointmentTrainers() {
         if (!empty($_GET)) {
-            Response::error('VALIDATION_ERROR', 'No query parameters are allowed.', 422);
+            Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
         }
 
         try {
@@ -42,7 +42,7 @@ class AppointmentController {
             Response::json(['items' => $normalizedTrainers]);
         } catch (Exception $e) {
             error_log("Error in getReceptionAppointmentTrainers: " . $e->getMessage());
-            Response::error('INTERNAL_ERROR', 'An error occurred while fetching trainers.', 500);
+            Response::error('Eğitmen listesi alınırken beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);
         }
     }
 
