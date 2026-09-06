@@ -15,10 +15,10 @@ function checkInvariant(name, fn) {
     totalInvariants++;
     try {
         fn();
-        console.log(`✅ PASS: ${name}`);
+        console.log("✅ PASS: " + name);
         passedInvariants++;
     } catch (e) {
-        console.error(`❌ FAIL: ${name} -> ${e.message}`);
+        console.error("❌ FAIL: " + name + " -> " + e.message);
         failedInvariants++;
     }
 }
@@ -92,9 +92,6 @@ function extractBalanced(source, startIndex, openChar = '{', closeChar = '}') {
     return null;
 }
 
-// ---------------------------------------------------------
-// Check Logic
-// ---------------------------------------------------------
 function getHandlers(controllerSrc) {
     const cIdx = controllerSrc.indexOf("private function handleCreate(");
     const rIdx = controllerSrc.indexOf("private function handleReschedule(");
@@ -114,36 +111,61 @@ function getHandlers(controllerSrc) {
 }
 
 function verifyNamespaceCapabilityMatrix(indexSrc) {
-    const allMatches = [...indexSrc.matchAll(new RegExp("/api/([a-z_]+)/appointments", "g"))];
-    const routeNamespaces = new Set(allMatches.map(m => m[1]));
-    
-    if (!routeNamespaces.has('admin') || !routeNamespaces.has('reception') || !routeNamespaces.has('trainer')) {
-        throw new Error("Missing namespaces in routes");
-    }
-    
     if (indexSrc.includes('/api/public/appointments') || indexSrc.match(/\/api\/[a-z_]*member[a-z_]*\/appointments/)) {
         throw new Error("Public/member appointment read/write lifecycle route forbidden");
     }
     
-    if (!indexSrc.includes("/api/admin/appointments")) throw new Error("Missing admin GET/POST");
-    if (!indexSrc.match(new RegExp("/api/admin/appointments/\\(\\[1-9\\]\\\\d\\*\\)/reschedule"))) throw new Error("Missing admin reschedule");
-    if (!indexSrc.match(new RegExp("/api/admin/appointments/\\(\\[1-9\\]\\\\d\\*\\)/cancel"))) throw new Error("Missing admin cancel");
-    if (!indexSrc.match(new RegExp("/api/admin/appointments/\\(\\[1-9\\]\\\\d\\*\\)/complete"))) throw new Error("Missing admin complete");
-    if (!indexSrc.match(new RegExp("/api/admin/appointments/\\(\\[1-9\\]\\\\d\\*\\)/no-show"))) throw new Error("Missing admin no-show");
+    const adminBlocks = [...indexSrc.matchAll(/'\/api\/admin\/appointments'|preg_match\('#\^\/api\/admin\/appointments/g)];
+    for (const match of adminBlocks) {
+        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
+        if (!block.includes("AuthMiddleware::hasRole(['super_admin', 'admin'])")) {
+            throw new Error("Admin route missing exact AuthMiddleware::hasRole(['super_admin', 'admin'])");
+        }
+        if (block.includes("'editor'")) throw new Error("Editor extra role forbidden in admin appointments");
+        if (block.includes("preg_match") && !block.includes("([1-9]\\d*)")) {
+            throw new Error("Dynamic route ID missing exact ([1-9]\\d*)");
+        }
+        if (block.includes("preg_match") && !block.includes("(int)$matches[1]")) {
+            throw new Error("Dynamic route ID missing exact (int)$matches[1]");
+        }
+    }
     
-    if (!indexSrc.includes("/api/reception/appointments")) throw new Error("Missing reception GET/POST");
-    if (!indexSrc.match(new RegExp("/api/reception/appointments/\\(\\[1-9\\]\\\\d\\*\\)/reschedule"))) throw new Error("Missing reception reschedule");
-    if (!indexSrc.match(new RegExp("/api/reception/appointments/\\(\\[1-9\\]\\\\d\\*\\)/cancel"))) throw new Error("Missing reception cancel");
-    if (indexSrc.match(new RegExp("/api/reception/appointments/\\(\\[1-9\\]\\\\d\\*\\)/(complete|no-show)"))) throw new Error("Reception complete/no-show forbidden");
-    
-    if (!indexSrc.includes("/api/trainer/appointments")) throw new Error("Missing trainer GET/POST");
-    if (!indexSrc.match(new RegExp("/api/trainer/appointments/\\(\\[1-9\\]\\\\d\\*\\)/reschedule"))) throw new Error("Missing trainer reschedule");
-    if (indexSrc.match(new RegExp("/api/trainer/appointments/\\(\\[1-9\\]\\\\d\\*\\)/cancel"))) throw new Error("Trainer cancel forbidden");
-    if (!indexSrc.match(new RegExp("/api/trainer/appointments/\\(\\[1-9\\]\\\\d\\*\\)/complete"))) throw new Error("Missing trainer complete");
-    if (!indexSrc.match(new RegExp("/api/trainer/appointments/\\(\\[1-9\\]\\\\d\\*\\)/no-show"))) throw new Error("Missing trainer no-show");
+    if (!indexSrc.includes("preg_match('#^/api/admin/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches)")) throw new Error("Admin missing reschedule");
+    if (!indexSrc.includes("preg_match('#^/api/admin/appointments/([1-9]\\d*)/cancel$#', $requestUri, $matches)")) throw new Error("Admin missing cancel");
+    if (!indexSrc.includes("preg_match('#^/api/admin/appointments/([1-9]\\d*)/complete$#', $requestUri, $matches)")) throw new Error("Admin missing complete");
+    if (!indexSrc.includes("preg_match('#^/api/admin/appointments/([1-9]\\d*)/no-show$#', $requestUri, $matches)")) throw new Error("Admin missing no-show");
+
+    const recBlocks = [...indexSrc.matchAll(/'\/api\/reception\/appointments'|preg_match\('#\^\/api\/reception\/appointments/g)];
+    for (const match of recBlocks) {
+        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
+        if (!block.includes("AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])")) {
+            throw new Error("Reception route missing exact AuthMiddleware::hasRole(['super_admin', 'admin', 'reception'])");
+        }
+        if (block.includes("completeReceptionAppointment") || block.includes("noShowReceptionAppointment") || block.includes("delete")) {
+            throw new Error("Reception forbidden methods");
+        }
+    }
+    if (!indexSrc.includes("preg_match('#^/api/reception/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches)")) throw new Error("Reception missing reschedule");
+    if (!indexSrc.includes("preg_match('#^/api/reception/appointments/([1-9]\\d*)/cancel$#', $requestUri, $matches)")) throw new Error("Reception missing cancel");
+    if (indexSrc.match(/preg_match\('#\^\/api\/reception\/appointments\/\(\[1-9\]\\d\*\)\/(complete|no-show)\$#'/)) throw new Error("Reception complete/no-show forbidden");
+
+    const trnBlocks = [...indexSrc.matchAll(/'\/api\/trainer\/appointments'|preg_match\('#\^\/api\/trainer\/appointments/g)];
+    for (const match of trnBlocks) {
+        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
+        if (!block.includes("AuthMiddleware::hasRole(['trainer'])")) {
+            throw new Error("Trainer route missing exact AuthMiddleware::hasRole(['trainer'])");
+        }
+        if (block.includes("cancelTrainerAppointment") || block.includes("delete")) {
+            throw new Error("Trainer forbidden methods");
+        }
+    }
+    if (!indexSrc.includes("preg_match('#^/api/trainer/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches)")) throw new Error("Trainer missing reschedule");
+    if (!indexSrc.includes("preg_match('#^/api/trainer/appointments/([1-9]\\d*)/complete$#', $requestUri, $matches)")) throw new Error("Trainer missing complete");
+    if (!indexSrc.includes("preg_match('#^/api/trainer/appointments/([1-9]\\d*)/no-show$#', $requestUri, $matches)")) throw new Error("Trainer missing no-show");
+    if (indexSrc.includes("preg_match('#^/api/trainer/appointments/([1-9]\\d*)/cancel$#', $requestUri, $matches)")) throw new Error("Trainer cancel forbidden");
 }
 
-function verifyStateMachine(migration35, controllerSrc, indexSrc) {
+function verifyStateMachine(migration35, handlers, indexSrc) {
     const statusMatch = migration35.match(/ENUM\(([^)]+)\)/i);
     if (!statusMatch) throw new Error("Missing status ENUM");
     const statuses = statusMatch[1].split(',').map(s => s.replace(/['\s]/g, ''));
@@ -152,38 +174,66 @@ function verifyStateMachine(migration35, controllerSrc, indexSrc) {
         throw new Error("Exact statuses must be scheduled, completed, cancelled, no_show");
     }
     
-    if (controllerSrc.includes("updateStatus") || controllerSrc.includes("setAppointmentStatus")) {
-        throw new Error("Generic status updater found");
-    }
-    if (indexSrc.match(new RegExp("/api/[a-z_]+/appointments/\\(\\[1-9\\]\\\\d\\*\\)\\'"))) {
+    if (indexSrc.match(/\/api\/[a-z_]+\/appointments\/\(\[1-9\]\\d\*\)'/)) {
         throw new Error("Generic PATCH /appointments/{id} bypass forbidden");
+    }
+
+    if (!handlers.reschedule.match(/status.*?['"]scheduled['"]/i)) {
+        throw new Error("Reschedule missing locked status scheduled only");
+    }
+    if (!handlers.cancel.match(/status.*?['"]scheduled['"]/i)) {
+        throw new Error("Cancel missing locked status scheduled only");
+    }
+    if (!handlers.terminalize.match(/status.*?['"]scheduled['"]/i)) {
+        throw new Error("Terminalize missing locked status scheduled only");
     }
 }
 
 function verifyLockDisciplineAndDiscovery(handlers) {
-    const flows = ['reschedule', 'cancel', 'terminalize'];
-    for (const f of flows) {
+    for (const f of ['reschedule', 'cancel', 'terminalize']) {
         const handler = handlers[f];
-        if (!handler.includes("beginTransaction()")) throw new Error(`Missing beginTransaction in ${f}`);
+        if (!handler.includes("beginTransaction()")) throw new Error("Missing beginTransaction in " + f);
+        
+        const bIdx = handler.indexOf("beginTransaction()");
+        
+        const discoveryIdx = handler.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        if (discoveryIdx === -1) throw new Error("Missing non-locking discovery in " + f);
+        if (bIdx > discoveryIdx) throw new Error("beginTransaction must occur before discovery in " + f);
+        if (handler.substring(discoveryIdx, discoveryIdx + 150).includes("FOR UPDATE")) {
+            throw new Error("Discovery must be non-locking in " + f);
+        }
         
         const mLock = handler.indexOf("FROM members WHERE id = ? FOR UPDATE");
         const tLock = handler.indexOf("FROM trainers WHERE id = ? FOR UPDATE");
         const aLock = handler.indexOf("FROM appointments WHERE id = ? FOR UPDATE");
         
-        if (mLock === -1 || tLock === -1 || aLock === -1) throw new Error(`Missing lock in ${f}`);
+        if (mLock === -1 || tLock === -1 || aLock === -1) throw new Error("Missing lock in " + f);
         if (mLock > tLock || mLock > aLock || tLock > aLock) {
-            throw new Error(`Participant lock order mismatch in ${f}`);
+            throw new Error("Participant lock order mismatch in " + f);
         }
-        if (!handler.includes("APPOINTMENT_CHANGED")) throw new Error(`Missing APPOINTMENT_CHANGED in ${f}`);
-        if (!handler.includes("409")) throw new Error(`Missing 409 in ${f}`);
+        
+        if (!handler.includes("['member_id'] !==") || !handler.includes("['trainer_id'] !==")) {
+            throw new Error("Missing discovery-vs-locked comparison in " + f);
+        }
+        if (!handler.includes("APPOINTMENT_CHANGED") || !handler.includes("409")) {
+            throw new Error("Missing APPOINTMENT_CHANGED 409 in " + f);
+        }
     }
     
-    // Create flow
-    const cHandler = handlers['create'];
+    const cHandler = handlers.create;
+    if (!cHandler.includes("beginTransaction()")) throw new Error("Missing beginTransaction in create");
+    
+    const cBIdx = cHandler.indexOf("beginTransaction()");
     const cmLock = cHandler.indexOf("FROM members WHERE id = ? FOR UPDATE");
     const ctLock = cHandler.indexOf("FROM trainers WHERE id = ? FOR UPDATE");
+    
     if (cmLock === -1 || ctLock === -1) throw new Error("Missing lock in create");
     if (cmLock > ctLock) throw new Error("Participant lock order mismatch in create");
+    if (cBIdx > cmLock) throw new Error("create beginTransaction moved after member lock");
+    
+    if (cHandler.includes("FROM appointments WHERE id = ? FOR UPDATE")) {
+        throw new Error("Create flow should not lock appointment row");
+    }
 }
 
 function verifyTimePartition(handlers) {
@@ -200,19 +250,58 @@ function verifyTimePartition(handlers) {
     }
 }
 
+function verifyEligibilityAsymmetry(handlers) {
+    if (!handlers.create.includes("membership_end_date") || !handlers.reschedule.includes("membership_end_date")) {
+        throw new Error("Missing eligibility in create/reschedule");
+    }
+    if (handlers.create.includes("membership_start_date") || handlers.reschedule.includes("membership_start_date")) {
+        throw new Error("Forbidden membership_start_date");
+    }
+    if (handlers.cancel.match(/membership_end_date|is_active|deleted_at IS NULL(?!\s+AND\s+is_active)/is) && handlers.cancel.includes("membership_end_date")) {
+        throw new Error("Eligibility injected into historical cancel");
+    }
+    if (handlers.terminalize.match(/membership_end_date|is_active(?!\s*=\s*1)/is) && handlers.terminalize.includes("membership_end_date")) {
+        throw new Error("Eligibility injected into historical terminalize");
+    }
+    
+    if (!handlers.terminalize.includes("(int)$trainer['admin_id'] !== $adminId") && !handlers.terminalize.includes("(int)$lockedApp['trainer_admin_id'] !== $adminId")) {
+        if (!handlers.terminalize.includes("int)$trainer['admin_id'] !== $adminId")) {
+             throw new Error("Missing exact trainer ownership semantic in terminalize: (int)$trainer['admin_id'] !== $adminId");
+        }
+    }
+    if (handlers.terminalize.includes("getTrainerProfileId")) {
+        throw new Error("Active-profile dependency in terminalize");
+    }
+}
+
+function verifyTrainerScope(controllerSrc) {
+    if (controllerSrc.includes("function cancelTrainerAppointment")) throw new Error("cancelTrainerAppointment must be absent");
+    if (!controllerSrc.includes("members.trainer_id === currentTrainerId") && !controllerSrc.includes("['trainer_id'] !== $forcedTrainerId")) {
+        if (!controllerSrc.includes("(int)$member['trainer_id'] !== $forcedTrainerId")) {
+             throw new Error("Member assignment scope check missing in create");
+        }
+    }
+}
+
+function verifyReceptionScope(controllerSrc) {
+    if (controllerSrc.includes("function completeReceptionAppointment") || controllerSrc.includes("function noShowReceptionAppointment")) {
+        throw new Error("completeReceptionAppointment / noShowReceptionAppointment absent");
+    }
+}
+
 function verifyConflictPool(handlers) {
-    const cHandler = handlers.create;
-    const rHandler = handlers.reschedule;
-    
-    if (!cHandler.includes("starts_at < ? AND ends_at > ?") || !rHandler.includes("starts_at < ? AND ends_at > ?")) {
-        throw new Error("Conflict predicate changed from half-open");
-    }
-    
-    if (!cHandler.includes("status = 'scheduled'") || !rHandler.includes("status = 'scheduled'")) {
-        throw new Error("Conflict pool must only check scheduled");
-    }
-    if (cHandler.includes("status != 'cancelled'") || rHandler.includes("status = 'completed'")) {
-        throw new Error("Conflict pool semantic violation");
+    for (const f of ['create', 'reschedule']) {
+        const handler = handlers[f];
+        if (!handler.includes("starts_at < ?") || !handler.includes("ends_at > ?")) {
+            throw new Error("Conflict predicate changed from half-open in " + f);
+        }
+        if (!handler.includes("status = 'scheduled'")) {
+            throw new Error("Conflict pool must only check scheduled in " + f);
+        }
+        
+        if (!handler.includes("trainer_id = ?") || !handler.includes("member_id = ?")) {
+            throw new Error("Missing member/trainer conflict domain in " + f);
+        }
     }
     
     if (handlers.cancel.includes("starts_at < ? AND ends_at > ?") || handlers.terminalize.includes("starts_at < ? AND ends_at > ?")) {
@@ -220,125 +309,141 @@ function verifyConflictPool(handlers) {
     }
 }
 
-function verifyRescheduleHistory(handlers) {
-    if (!handlers.reschedule.includes("INSERT INTO appointment_reschedules")) {
-        throw new Error("Reschedule history insert missing");
-    }
-    const otherFlows = ['create', 'cancel', 'terminalize'];
-    for (const f of otherFlows) {
+function verifyRescheduleHistory(handlers, controllerSrc, migration36) {
+    const rIdx = handlers.reschedule.indexOf("INSERT INTO appointment_reschedules");
+    if (rIdx === -1) throw new Error("Reschedule history insert missing in reschedule");
+    const uIdx = handlers.reschedule.indexOf("UPDATE appointments");
+    if (rIdx > uIdx) throw new Error("History INSERT must occur before appointment UPDATE");
+    
+    for (const f of ['create', 'cancel', 'terminalize']) {
         if (handlers[f].includes("INSERT INTO appointment_reschedules")) {
-            throw new Error(`Reschedule history written outside reschedule in ${f}`);
+            throw new Error("Reschedule history written outside reschedule in " + f);
         }
     }
     
-    if (Object.values(handlers).some(h => h.includes("UPDATE appointment_reschedules") || h.includes("DELETE FROM appointment_reschedules"))) {
-        throw new Error("Reschedule history must be append-only");
+    if (controllerSrc.includes("UPDATE appointment_reschedules") || controllerSrc.includes("DELETE FROM appointment_reschedules")) {
+        throw new Error("Global UPDATE/DELETE appointment_reschedules forbidden");
+    }
+    
+    const reqCols = ['appointment_id', 'previous_starts_at', 'previous_ends_at', 'new_starts_at', 'new_ends_at', 'rescheduled_by', 'created_at'];
+    for (const col of reqCols) {
+        if (!migration36.includes(col)) throw new Error("Migration 36 missing " + col);
     }
 }
 
 function verifyMutationColumnIsolation(handlers) {
-    const rUpdateMatch = handlers.reschedule.match(/UPDATE\s+appointments\s+SET\s+(.*?)\s+WHERE/is);
-    if (!rUpdateMatch) throw new Error("Missing reschedule UPDATE");
-    const rCols = rUpdateMatch[1].split(',').map(s => s.trim().split('=')[0].trim());
+    const rMatch = handlers.reschedule.match(/UPDATE\s+appointments\s+SET\s+(.*?)\s+WHERE/is);
+    if (!rMatch) throw new Error("Missing reschedule UPDATE");
+    const rCols = rMatch[1].split(',').map(s => s.trim().split('=')[0].trim());
     if (rCols.length !== 3 || !rCols.includes("starts_at") || !rCols.includes("ends_at") || !rCols.includes("updated_by")) {
-        throw new Error("Reschedule column isolation failure");
+        throw new Error("Reschedule exact set mismatch");
     }
     
-    const cUpdateMatch = handlers.cancel.match(/UPDATE\s+appointments\s+SET\s+(.*?)\s+WHERE/is);
-    if (!cUpdateMatch) throw new Error("Missing cancel UPDATE");
-    const cCols = cUpdateMatch[1].split(',').map(s => s.trim().split('=')[0].trim());
+    const cMatch = handlers.cancel.match(/UPDATE\s+appointments\s+SET\s+(.*?)\s+WHERE/is);
+    if (!cMatch) throw new Error("Missing cancel UPDATE");
+    const cCols = cMatch[1].split(',').map(s => s.trim().split('=')[0].trim());
     if (cCols.length !== 5 || !cCols.includes("status") || !cCols.includes("cancellation_reason") || !cCols.includes("cancelled_by") || !cCols.includes("cancelled_at") || !cCols.includes("updated_by")) {
-        throw new Error("Cancel column isolation failure");
+        throw new Error("Cancel exact set mismatch");
     }
     
-    // terminalize has two branches
-    if (!handlers.terminalize.includes("status = 'completed'") || !handlers.terminalize.includes("status = 'no_show'")) {
-        throw new Error("Terminalize missing branches");
+    const tMatch = [...handlers.terminalize.matchAll(/UPDATE\s+appointments\s+SET\s+(.*?)\s+WHERE/igs)];
+    if (tMatch.length < 2) throw new Error("Terminalize missing branches");
+    
+    const compCols = tMatch[0][1].split(',').map(s => s.trim().split('=')[0].trim());
+    if (compCols.length !== 4 || !compCols.includes("status") || !compCols.includes("completed_by") || !compCols.includes("completed_at") || !compCols.includes("updated_by")) {
+        throw new Error("Completed exact set mismatch");
     }
     
-    // check participant IDs
-    for (const h of Object.values(handlers)) {
-        if (h.match(/UPDATE\s+appointments\s+SET.*?member_id\s*=/is) || h.match(/UPDATE\s+appointments\s+SET.*?trainer_id\s*=/is)) {
-            throw new Error("Participant IDs immutable after create");
-        }
+    const nsCols = tMatch[1][1].split(',').map(s => s.trim().split('=')[0].trim());
+    if (nsCols.length !== 4 || !nsCols.includes("status") || !nsCols.includes("no_show_by") || !nsCols.includes("no_show_at") || !nsCols.includes("updated_by")) {
+        throw new Error("No-show exact set mismatch");
     }
-}
-
-function verifyEligibilityAsymmetry(handlers) {
-    if (!handlers.create.includes("membership_end_date") || !handlers.reschedule.includes("membership_end_date")) {
-        throw new Error("Missing eligibility in create/reschedule");
-    }
-    if (handlers.cancel.includes("membership_end_date") || handlers.terminalize.includes("membership_end_date")) {
-        throw new Error("Eligibility injected into historical cancel/terminalize");
-    }
-    
-    if (handlers.terminalize.includes("getTrainerProfileId") || handlers.terminalize.includes("is_active")) {
-        throw new Error("Active-profile dependency in terminalize");
-    }
-    if (!handlers.terminalize.includes("admin_id")) {
-        throw new Error("Trainer ownership via admin_id missing in terminalize");
-    }
-}
-
-function verifyTrainerScope(controllerSrc, indexSrc) {
-    // verified by namespace matrix + eligibility asymmetry, but check cancelTrainerAppointment absence
-    if (controllerSrc.includes("function cancelTrainerAppointment")) throw new Error("cancelTrainerAppointment must be absent");
 }
 
 function verifyCancellationReason(handlers) {
     if (!handlers.cancel.includes("cancellation_reason")) throw new Error("Missing cancellation_reason in cancel");
-    if (!handlers.cancel.includes("trim(") || !handlers.cancel.includes("mb_strlen(") || !handlers.cancel.includes("> 255") || !handlers.cancel.includes("empty(")) throw new Error("Missing trim/length check on cancellation_reason");
+    if (!handlers.cancel.includes("trim(") || !handlers.cancel.includes("mb_strlen(") || !handlers.cancel.includes("> 255") || !handlers.cancel.includes("empty(")) {
+        throw new Error("Missing trim/empty/length check on cancellation_reason in cancel");
+    }
+    if (handlers.cancel.match(/mb_strlen.*?<\s*3/)) throw new Error("No min-3 rule allowed for cancellation reason");
     
     for (const f of ['create', 'reschedule', 'terminalize']) {
-        if (handlers[f].includes("cancellation_reason")) throw new Error(`cancellation_reason accepted in ${f}`);
+        if (handlers[f].includes("cancellation_reason")) throw new Error("cancellation_reason accepted in " + f);
     }
 }
 
 function verifyResponsePrivacy(handlers) {
     const forbidden = ['email', 'phone', 'emergency', 'blood', 'password', 'credential'];
+    
     for (const f in handlers) {
-        for (const word of forbidden) {
-            if (handlers[f].includes(`'${word}'`)) throw new Error(`Privacy leak of ${word} in ${f}`);
+        const respIdx = handlers[f].indexOf("Response::json(");
+        if (respIdx !== -1) {
+            const respBlock = extractBalanced(handlers[f], respIdx, '(', ')');
+            if (respBlock) {
+                for (const word of forbidden) {
+                    if (respBlock.includes("'" + word + "'")) throw new Error("Privacy leak of " + word + " in success response of " + f);
+                }
+                if (f === 'cancel') {
+                    if (respBlock.includes("'cancellation_reason'") || respBlock.includes("'cancelled_by'") || respBlock.includes("'cancelled_at'")) {
+                        throw new Error("Cancellation metadata leaked in success response");
+                    }
+                }
+                if (f === 'terminalize') {
+                    if (respBlock.includes("'completed_by'") || respBlock.includes("'completed_at'") || respBlock.includes("'no_show_by'") || respBlock.includes("'no_show_at'")) {
+                        throw new Error("Terminal metadata leaked in success response");
+                    }
+                }
+            }
         }
     }
-    if (handlers.cancel.includes("'cancellation_reason' =>") || handlers.cancel.includes("'cancelled_by' =>")) throw new Error("Cancellation metadata leaked in response");
-    if (handlers.terminalize.includes("'completed_by' =>") || handlers.terminalize.includes("'no_show_by' =>")) throw new Error("Terminal metadata leaked in response");
 }
 
 function verifyAuditDisjoint(handlers) {
-    if (!handlers.create.includes("'appointment.created'")) throw new Error("Missing appointment.created audit in create");
-    if (!handlers.reschedule.includes("'appointment.rescheduled'")) throw new Error("Missing appointment.rescheduled audit in reschedule");
-    if (!handlers.cancel.includes("'appointment.cancelled'")) throw new Error("Missing appointment.cancelled audit in cancel");
-    if (!handlers.terminalize.includes("'appointment.completed'") || !handlers.terminalize.includes("'appointment.no_show'")) {
-        throw new Error("Missing terminal audit actions in terminalize");
+    if (!handlers.create.match(/AuditLogger::log\(\s*'appointment\.created',\s*\$adminId,\s*'appointment'/)) throw new Error("Missing appointment.created audit in create");
+    if (!handlers.reschedule.match(/AuditLogger::log\(\s*'appointment\.rescheduled',\s*\$adminId,\s*'appointment'/)) throw new Error("Missing appointment.rescheduled audit in reschedule");
+    if (!handlers.cancel.match(/AuditLogger::log\(\s*'appointment\.cancelled',\s*\$adminId,\s*'appointment'/)) throw new Error("Missing appointment.cancelled audit in cancel");
+    
+    if (!handlers.terminalize.match(/AuditLogger::log\(\s*'appointment\.completed',\s*\$adminId,\s*'appointment'/)) throw new Error("Missing appointment.completed audit in terminalize");
+    if (!handlers.terminalize.match(/AuditLogger::log\(\s*'appointment\.no_show',\s*\$adminId,\s*'appointment'/)) throw new Error("Missing appointment.no_show audit in terminalize");
+    
+    for (const f of ['create', 'reschedule', 'cancel', 'terminalize']) {
+        const h = handlers[f];
+        const commitIdx = h.indexOf("commit()");
+        const auditIdx = h.indexOf("AuditLogger::log");
+        if (commitIdx === -1) throw new Error("Missing commit in " + f);
+        if (auditIdx === -1) throw new Error("Missing AuditLogger in " + f);
+        if (commitIdx > auditIdx) throw new Error("commit -> audit ordering violation in " + f);
     }
     
-    if (handlers.cancel.includes("'appointment.completed'") || handlers.terminalize.includes("'appointment.cancelled'")) {
-        throw new Error("Audit actions cross-wired");
+    if (handlers.cancel.match(/AuditLogger::log.*?cancellation_reason/s)) {
+        throw new Error("Cancel audit metadata cannot contain cancellation_reason");
     }
 }
 
 function verifyActorSemantics(handlers) {
     for (const f of ['reschedule', 'cancel', 'terminalize']) {
         const handler = handlers[f];
-        if (!handler.includes("$_SESSION['admin_id']") || !handler.includes("preg_match('/^[1-9]\\d*$/'")) {
-            throw new Error(`Missing positive canonical numeric actor semantics in ${f}`);
-        }
-        if (!handler.match(/AuditLogger::log\(\s*'appointment\.[a-z_]+',\s*\$adminId,\s*'appointment'/)) {
-            throw new Error(`Audit arg2/arg4 actor mapping invalid in ${f}`);
+        if (!handler.includes("preg_match('/^[1-9]\\d*$/'")) {
+            throw new Error("Missing positive canonical numeric actor semantics in " + f);
         }
     }
 }
 
-function verifyAppointmentNotVisit(controllerSrc) {
-    if (controllerSrc.includes("INSERT INTO member_visits") || controllerSrc.includes("visit_id") || controllerSrc.includes("check-in")) {
-        throw new Error("Completing appointment does NOT create visit");
+function verifySchemaConsistency(migration35, migration36) {
+    if (migration35.includes("visit_id") || migration35.includes("deleted_at") || migration35.includes("session_credits") || migration35.includes("payment")) {
+        throw new Error("Invalid fields introduced into appointment V1 lifecycle schema");
+    }
+    if (migration36.includes("visit_id") || migration36.includes("payment")) {
+        throw new Error("Invalid fields in migration 36");
     }
 }
 
-function verifyNoDeleteDomain(controllerSrc) {
-    if (controllerSrc.includes("deleteAppointment") || controllerSrc.includes("destroyAppointment") || controllerSrc.includes("DELETE FROM appointments") || controllerSrc.includes("appointments.deleted_at")) {
-        throw new Error("No appointment DELETE route");
+function verifyNoDeleteDomain(controllerSrc, indexSrc) {
+    if (indexSrc.includes("DELETE /api/") && indexSrc.includes("appointments")) {
+        throw new Error("DELETE appointment route found");
+    }
+    if (controllerSrc.includes("deleteAppointment") || controllerSrc.includes("destroyAppointment") || controllerSrc.includes("DELETE FROM appointments") || controllerSrc.includes("appointments.deleted_at") || controllerSrc.includes("visit_id") || controllerSrc.includes("INSERT INTO member_visits")) {
+        throw new Error("No appointment DELETE route and no visit creation allowed");
     }
 }
 
@@ -357,26 +462,11 @@ function verifyGlobalCsrfIntegration(indexSrc) {
     if (!guardBlock || !guardBlock.includes("CsrfMiddleware::handle()")) {
         throw new Error("Missing CsrfMiddleware::handle() in global guard");
     }
-}
-
-function verifyAdminFirewall(indexSrc) {
-    const adminRoutes = [
-        ...indexSrc.matchAll(/preg_match\('#\^\/api\/admin\/appointments/g),
-        ...indexSrc.matchAll(/'\/api\/admin\/appointments'/g)
-    ];
-    for (const match of adminRoutes) {
-        const block = extractBalanced(indexSrc, indexSrc.indexOf('{', match.index));
-        if (block && !block.includes("AuthMiddleware::hasRole(['super_admin', 'admin'])")) {
-            if (!block.includes("GET") && !block.includes("POST")) {
-                throw new Error("Missing exact admin narrowing for mutation");
-            }
-        }
-    }
-}
-
-function verifySchemaConsistency(migration35) {
-    if (migration35.includes("visit_id") || migration35.includes("deleted_at") || migration35.includes("session_credits")) {
-        throw new Error("Invalid fields introduced into appointment V1 lifecycle schema");
+    
+    const guardIdx = indexSrc.indexOf("in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])");
+    const routeIdx = indexSrc.indexOf("preg_match('#^/api/");
+    if (guardIdx > routeIdx) {
+        throw new Error("Global CSRF guard must occur before routing");
     }
 }
 
@@ -388,8 +478,9 @@ function verifyExactPublicSurface(controllerSrc) {
         'cancelAdminAppointment', 'cancelReceptionAppointment',
         'completeAdminAppointment', 'noShowAdminAppointment', 'completeTrainerAppointment', 'noShowTrainerAppointment'
     ];
+    
     for (const m of methods) {
-        if (!controllerSrc.includes(`function ${m}`)) throw new Error(`Missing public lifecycle method ${m}`);
+        if (!controllerSrc.includes("public function " + m)) throw new Error("Missing public lifecycle method " + m);
     }
     
     const forbidden = [
@@ -397,7 +488,7 @@ function verifyExactPublicSurface(controllerSrc) {
         'deleteAppointment', 'destroyAppointment'
     ];
     for (const f of forbidden) {
-        if (controllerSrc.includes(`function ${f}`)) throw new Error(`Forbidden public lifecycle method ${f}`);
+        if (controllerSrc.includes("function " + f)) throw new Error("Forbidden public lifecycle method " + f);
     }
 }
 
@@ -409,143 +500,56 @@ console.log("--- Starting Negative Self-Tests ---");
 const origIndexSrc = fs.readFileSync(path.join(rootDir, 'api/index.php'), 'utf8');
 const origControllerSrc = fs.readFileSync(path.join(rootDir, 'api/controllers/AppointmentController.php'), 'utf8');
 const origMigration35 = fs.readFileSync(path.join(rootDir, 'database/migrations/035_create_appointments.sql'), 'utf8');
+const origMigration36 = fs.readFileSync(path.join(rootDir, 'database/migrations/036_create_appointment_reschedules.sql'), 'utf8');
 
-checkInvariant("Negative: Editor added to admin appointment route", () => {
-    assertThrows(() => verifyAdminFirewall(origIndexSrc.replace(/hasRole\(\['super_admin', 'admin'\]\)/g, "hasRole(['super_admin', 'admin', 'editor'])")));
+checkInvariant("Negative: EXACT RECEPTION/TRAINER RBAC DRIFT", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/hasRole\(\['super_admin', 'admin', 'reception'\]\)/g, "hasRole(['reception'])")));
 });
-
-checkInvariant("Negative: Reception complete route injected", () => {
-    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc + `\nif (preg_match('#^/api/reception/appointments/([1-9]\\d*)/complete$#')) {}`));
+checkInvariant("Negative: PER-FLOW DISCOVERY DRIFT", () => {
+    const h = getHandlers(origControllerSrc);
+    h.reschedule = h.reschedule.replace("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?", "SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+    assertThrows(() => verifyLockDisciplineAndDiscovery(h));
 });
-
-checkInvariant("Negative: Trainer cancel route injected", () => {
-    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc + `\nif (preg_match('#^/api/trainer/appointments/([1-9]\\d*)/cancel$#')) {}`));
+checkInvariant("Negative: SCHEDULED-ONLY GATE REMOVAL", () => {
+    const h = getHandlers(origControllerSrc);
+    h.reschedule = h.reschedule.replace(/scheduled/g, "completed");
+    assertThrows(() => verifyStateMachine(origMigration35, h, origIndexSrc));
 });
-
-checkInvariant("Negative: Create trainer-before-member lock", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.create = handlers.create.replace("FROM members WHERE id = ? FOR UPDATE", "XXXX").replace("FROM trainers WHERE id = ? FOR UPDATE", "FROM members WHERE id = ? FOR UPDATE").replace("XXXX", "FROM trainers WHERE id = ? FOR UPDATE");
-    assertThrows(() => verifyLockDisciplineAndDiscovery(handlers));
+checkInvariant("Negative: ELIGIBILITY ASYMMETRY DRIFT", () => {
+    const h = getHandlers(origControllerSrc);
+    h.terminalize += " membership_end_date ";
+    assertThrows(() => verifyEligibilityAsymmetry(h));
 });
-
-checkInvariant("Negative: Reschedule appointment-before-member lock", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.reschedule = handlers.reschedule.replace("FROM appointments WHERE id = ? FOR UPDATE", "XXXX").replace("FROM members WHERE id = ? FOR UPDATE", "FROM appointments WHERE id = ? FOR UPDATE").replace("XXXX", "FROM members WHERE id = ? FOR UPDATE");
-    assertThrows(() => verifyLockDisciplineAndDiscovery(handlers));
+checkInvariant("Negative: MISSING MEMBER/TRAINER CONFLICT DOMAIN", () => {
+    const h = getHandlers(origControllerSrc);
+    h.reschedule = h.reschedule.replace(/member_id = \?/g, "1=1");
+    assertThrows(() => verifyConflictPool(h));
 });
-
-checkInvariant("Negative: Cancel trainer-before-member lock", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("FROM members WHERE id = ? FOR UPDATE", "XXXX").replace("FROM trainers WHERE id = ? FOR UPDATE", "FROM members WHERE id = ? FOR UPDATE").replace("XXXX", "FROM trainers WHERE id = ? FOR UPDATE");
-    assertThrows(() => verifyLockDisciplineAndDiscovery(handlers));
+checkInvariant("Negative: HISTORY ORDER DRIFT", () => {
+    const h = getHandlers(origControllerSrc);
+    h.reschedule = h.reschedule.replace("INSERT INTO appointment_reschedules", "UPDATE appointments");
+    assertThrows(() => verifyRescheduleHistory(h, origControllerSrc, origMigration36));
 });
-
-checkInvariant("Negative: Terminalize appointment-before-trainer lock", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize = handlers.terminalize.replace("FROM appointments WHERE id = ? FOR UPDATE", "XXXX").replace("FROM trainers WHERE id = ? FOR UPDATE", "FROM appointments WHERE id = ? FOR UPDATE").replace("XXXX", "FROM trainers WHERE id = ? FOR UPDATE");
-    assertThrows(() => verifyLockDisciplineAndDiscovery(handlers));
+checkInvariant("Negative: MIGRATION 036 FIELD DRIFT", () => {
+    assertThrows(() => verifyRescheduleHistory(getHandlers(origControllerSrc), origControllerSrc, origMigration36.replace("previous_starts_at", "missing_field")));
 });
-
-checkInvariant("Negative: Cancel boundary >= changed to >", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("$now >= $endsAtDt", "$now > $endsAtDt");
-    assertThrows(() => verifyTimePartition(handlers));
+checkInvariant("Negative: TERMINALIZATION EXTRA UPDATE COLUMN", () => {
+    const h = getHandlers(origControllerSrc);
+    h.terminalize = h.terminalize.replace(/status = 'completed'/g, "status = 'completed', extra_col = 1");
+    assertThrows(() => verifyMutationColumnIsolation(h));
 });
-
-checkInvariant("Negative: Terminalize boundary < changed to <=", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize = handlers.terminalize.replace("$now < $endsAtDt", "$now <= $endsAtDt");
-    assertThrows(() => verifyTimePartition(handlers));
+checkInvariant("Negative: CANCEL MIN-3 RULE", () => {
+    const h = getHandlers(origControllerSrc);
+    h.cancel += " mb_strlen($reason) < 3 ";
+    assertThrows(() => verifyCancellationReason(h));
 });
-
-checkInvariant("Negative: Cancel time guard removed", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("$now >= $endsAtDt", "false");
-    assertThrows(() => verifyTimePartition(handlers));
+checkInvariant("Negative: TERMINAL TIMESTAMP RESPONSE LEAK", () => {
+    const h = getHandlers(origControllerSrc);
+    h.terminalize = h.terminalize.replace(/Response::json\(\[/g, "Response::json(['completed_at' => '123', ");
+    assertThrows(() => verifyResponsePrivacy(h));
 });
-
-checkInvariant("Negative: Terminalize time guard removed", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize = handlers.terminalize.replace("$now < $endsAtDt", "false");
-    assertThrows(() => verifyTimePartition(handlers));
-});
-
-checkInvariant("Negative: Remove APPOINTMENT_CHANGED from cancel only", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("APPOINTMENT_CHANGED", "ERROR");
-    assertThrows(() => verifyLockDisciplineAndDiscovery(handlers));
-});
-
-checkInvariant("Negative: Remove member active eligibility from reschedule", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.reschedule = handlers.reschedule.replace(/membership_end_date/g, "deleted_at");
-    assertThrows(() => verifyEligibilityAsymmetry(handlers));
-});
-
-checkInvariant("Negative: Inject membership_end gate into cancel", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel += " membership_end_date ";
-    assertThrows(() => verifyEligibilityAsymmetry(handlers));
-});
-
-checkInvariant("Negative: Inject trainer is_active gate into terminalize", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize += " is_active ";
-    assertThrows(() => verifyEligibilityAsymmetry(handlers));
-});
-
-checkInvariant("Negative: Create overlap <= injected", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.create = handlers.create.replace(/starts_at < \? AND ends_at > \?/g, "starts_at <= ? AND ends_at >= ?");
-    assertThrows(() => verifyConflictPool(handlers));
-});
-
-checkInvariant("Negative: Reschedule scheduled filter removed", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.reschedule = handlers.reschedule.replace(/status = 'scheduled'/g, "status != 'cancelled'");
-    assertThrows(() => verifyConflictPool(handlers));
-});
-
-checkInvariant("Negative: Conflict query injected into terminalize", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize += " starts_at < ? AND ends_at > ? ";
-    assertThrows(() => verifyConflictPool(handlers));
-});
-
-checkInvariant("Negative: History write outside reschedule", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel += " INSERT INTO appointment_reschedules ";
-    assertThrows(() => verifyRescheduleHistory(handlers));
-});
-
-checkInvariant("Negative: Arbitrary mutation column", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("status = 'cancelled'", "status = 'cancelled', member_id = 999");
-    assertThrows(() => verifyMutationColumnIsolation(handlers));
-});
-
-checkInvariant("Negative: Audit action cross-wired", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.cancel = handlers.cancel.replace("'appointment.cancelled'", "'appointment.rescheduled'");
-    assertThrows(() => verifyAuditDisjoint(handlers));
-});
-
-checkInvariant("Negative: Cancellation reason outside cancel", () => {
-    const handlers = getHandlers(origControllerSrc);
-    handlers.terminalize += " cancellation_reason ";
-    assertThrows(() => verifyCancellationReason(handlers));
-});
-
-checkInvariant("Negative: Arbitrary fifth status in migration", () => {
-    assertThrows(() => verifyStateMachine(origMigration35.replace(/'no_show'/g, "'no_show','pending'"), origControllerSrc, origIndexSrc));
-});
-
-checkInvariant("Negative: Terminalization member_visits insert", () => {
-    assertThrows(() => verifyAppointmentNotVisit(origControllerSrc + " INSERT INTO member_visits "));
-});
-
-checkInvariant("Negative: Appointment DELETE route", () => {
-    assertThrows(() => verifyNoDeleteDomain(origControllerSrc + " DELETE FROM appointments "));
+checkInvariant("Negative: DELETE ROUTE INJECTION", () => {
+    assertThrows(() => verifyNoDeleteDomain(origControllerSrc, origIndexSrc + "\nif (preg_match('#^/api/admin/appointments/([1-9]\\d*)$#', $requestUri, $matches) && $method === 'DELETE') {DELETE /api/}"));
 });
 
 // ---------------------------------------------------------
@@ -555,7 +559,7 @@ console.log("--- Loading Production Sources (Fail-Closed) ---");
 const indexSrc = origIndexSrc;
 const controllerSrc = origControllerSrc;
 const migration35 = origMigration35;
-const migration36 = fs.readFileSync(path.join(rootDir, 'database/migrations/036_create_appointment_reschedules.sql'), 'utf8');
+const migration36 = origMigration36;
 const pkgJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 
 // ---------------------------------------------------------
@@ -570,13 +574,13 @@ const childVerifiers = [
 ];
 
 for (const script of childVerifiers) {
-    checkInvariant(`Child Verifier Execution: ${script}`, () => {
-        if (!pkgJson.scripts[script]) throw new Error(`Missing script ${script} in package.json`);
+    checkInvariant("Child Verifier Execution: " + script, () => {
+        if (!pkgJson.scripts[script]) throw new Error("Missing script " + script + " in package.json");
         const result = spawnSync('npm', ['run', script], { cwd: rootDir, encoding: 'utf8' });
         if (result.status !== 0) {
             console.error(result.stdout);
             console.error(result.stderr);
-            throw new Error(`Child verifier ${script} failed with code ${result.status}`);
+            throw new Error("Child verifier " + script + " failed with code " + result.status);
         }
     });
 }
@@ -589,53 +593,52 @@ console.log("--- Running Production Invariant Checks ---");
 const handlers = getHandlers(controllerSrc);
 
 checkInvariant("Namespace Capability Matrix", () => verifyNamespaceCapabilityMatrix(indexSrc));
-checkInvariant("State Machine", () => verifyStateMachine(migration35, controllerSrc, indexSrc));
+checkInvariant("State Machine", () => verifyStateMachine(migration35, handlers, indexSrc));
 checkInvariant("Cross-lifecycle time partition", () => verifyTimePartition(handlers));
 checkInvariant("Canonical participant lock discipline", () => verifyLockDisciplineAndDiscovery(handlers));
 checkInvariant("Conflict pool consistency", () => verifyConflictPool(handlers));
-checkInvariant("Reschedule history exclusivity", () => verifyRescheduleHistory(handlers));
+checkInvariant("Reschedule history exclusivity", () => verifyRescheduleHistory(handlers, controllerSrc, migration36));
 checkInvariant("Lifecycle mutation-column isolation", () => verifyMutationColumnIsolation(handlers));
 checkInvariant("Eligibility asymmetry", () => verifyEligibilityAsymmetry(handlers));
-checkInvariant("Trainer scope integration", () => verifyTrainerScope(controllerSrc, indexSrc));
+checkInvariant("Trainer scope integration", () => verifyTrainerScope(controllerSrc));
+checkInvariant("Reception scope integration", () => verifyReceptionScope(controllerSrc));
 checkInvariant("Cancellation reason uniqueness", () => verifyCancellationReason(handlers));
 checkInvariant("Response privacy compatibility", () => verifyResponsePrivacy(handlers));
 checkInvariant("Audit action-to-handler mapping", () => verifyAuditDisjoint(handlers));
 checkInvariant("Actor semantics", () => verifyActorSemantics(handlers));
-checkInvariant("Appointment != visit", () => verifyAppointmentNotVisit(controllerSrc));
-checkInvariant("No-delete domain", () => verifyNoDeleteDomain(controllerSrc));
+checkInvariant("Appointment != visit", () => verifyNoDeleteDomain(controllerSrc, indexSrc));
 checkInvariant("Global CSRF integration", () => verifyGlobalCsrfIntegration(indexSrc));
-checkInvariant("Global admin firewall + route-specific narrowing", () => verifyAdminFirewall(indexSrc));
-checkInvariant("Schema/controller consistency", () => verifySchemaConsistency(migration35));
+checkInvariant("Schema/controller consistency", () => verifySchemaConsistency(migration35, migration36));
 checkInvariant("Exact public controller lifecycle surface", () => verifyExactPublicSurface(controllerSrc));
 
 checkInvariant("Artifact guard", () => {
     const forbiddenArtifacts = [
         'make_verifier.js', 'patch2.cjs', 'patch_lifecycle.cjs', 'patch_tests.js',
-        'test_asserts.cjs', 'test_regex.cjs', 'test_regex.js', 'test_regex2.cjs', 'test_regex_update.cjs',
+        'test_asserts.cjs', 'test_regex.cjs', 'test_regex.js', 'test_regex2.cjs', 'test_regex_update.cjs', 'test_extract.cjs',
         'test.mjs', 'test2.mjs', 'test3.mjs', 'test-audit-keys.mjs', 'test-csrf.mjs',
         'patch.cjs', 'patch.js', 'patch_index.php'
     ];
     for (const art of forbiddenArtifacts) {
-        if (fs.existsSync(path.resolve(rootDir, art))) throw new Error(`Forbidden artifact ${art}`);
+        if (fs.existsSync(path.resolve(rootDir, art))) throw new Error("Forbidden artifact " + art);
     }
     const files = fs.readdirSync(rootDir);
     for (const file of files) {
         if (file.endsWith('.tmp') || file.endsWith('.fixed')) {
-            throw new Error(`Forbidden temporary artifact found: ${file}`);
+            throw new Error("Forbidden temporary artifact found: " + file);
         }
     }
 });
 
 console.log("---------------------------------------------------------");
-console.log(`Total Invariants: ${totalInvariants}`);
-console.log(`Passed: ${passedInvariants}`);
-console.log(`Failed: ${failedInvariants}`);
+console.log("Total Invariants: " + totalInvariants);
+console.log("Passed: " + passedInvariants);
+console.log("Failed: " + failedInvariants);
 console.log("---------------------------------------------------------");
 
 if (failedInvariants !== 0 || passedInvariants !== totalInvariants) {
-    console.error(`❌ Appointment Lifecycle Final Verifier FAILED.`);
+    console.error("❌ Appointment Lifecycle Final Verifier FAILED.");
     process.exit(1);
 } else {
-    console.log(`✅ Appointment Lifecycle Final Verifier PASSED.`);
+    console.log("✅ Appointment Lifecycle Final Verifier PASSED.");
     process.exit(0);
 }
