@@ -130,6 +130,11 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [rescheduleItem, setRescheduleItem] = useState<AppointmentListItem | null>(null);
 
+  const selectedDateRef = useRef(selectedDate);
+  useEffect(() => {
+    selectedDateRef.current = selectedDate;
+  }, [selectedDate]);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestGenerationRef = useRef(0);
 
@@ -197,8 +202,9 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <h2 className="text-xl font-medium">{pageTitle}</h2>
         <button 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-[#851C35] text-white text-sm font-medium rounded hover:bg-[#6a162a] transition flex items-center gap-2"
+          onClick={() => { if (!rescheduleItem) setIsCreateModalOpen(true); }}
+          disabled={!!rescheduleItem}
+          className="px-4 py-2 bg-[#851C35] text-white text-sm font-medium rounded hover:bg-[#6a162a] transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14"/>
@@ -324,19 +330,20 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
           onClose={() => setIsCreateModalOpen(false)}
           onSuccess={() => {
             setIsCreateModalOpen(false);
-            fetchAppointments(selectedDate);
+            fetchAppointments(selectedDateRef.current);
           }}
         />
       )}
 
       {rescheduleItem && !isCreateModalOpen && (
         <AppointmentRescheduleModal
+          key={`${scope}-${rescheduleItem.appointment.id}`}
           scope={scope}
           item={rescheduleItem}
           onClose={() => setRescheduleItem(null)}
           onSuccess={() => {
             setRescheduleItem(null);
-            fetchAppointments(selectedDate);
+            fetchAppointments(selectedDateRef.current);
           }}
         />
       )}

@@ -10,16 +10,30 @@ interface AppointmentRescheduleModalProps {
 }
 
 export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: AppointmentRescheduleModalProps) {
-  // Extract YYYY-MM-DD from starts_at (which is in YYYY-MM-DD HH:mm:ss format)
-  const [date, setDate] = useState(() => item.appointment.starts_at.substring(0, 10));
-  const [startTime, setStartTime] = useState(() => item.appointment.starts_at.substring(11, 16));
-  const [endTime, setEndTime] = useState(() => item.appointment.ends_at.substring(11, 16));
-  // Keep original seconds around just in case, though backend might handle 00
-  const originalStartSeconds = useRef(item.appointment.starts_at.substring(16, 19) || ':00');
-  const originalEndSeconds = useRef(item.appointment.ends_at.substring(16, 19) || ':00');
+  const initStart = item.appointment.starts_at.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/);
+  const initEnd = item.appointment.ends_at.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/);
+
+  const [date, setDate] = useState(initStart ? initStart[1] : '');
+  const [startTime, setStartTime] = useState(initStart ? initStart[2] : '');
+  const [endTime, setEndTime] = useState(initEnd ? initEnd[2] : '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  const [submitError, setSubmitError] = useState<string | null>(() => {
+    if (!initStart || !initEnd) {
+      return 'Orijinal randevu tarih veya saat formatı geçersiz.';
+    }
+    if (initStart[1] !== initEnd[1]) {
+      return 'Randevunun başlangıç ve bitiş tarihi aynı gün olmalıdır.';
+    }
+    if (initStart[2] >= initEnd[2]) {
+      return 'Orijinal randevunun bitiş saati, başlangıç saatinden sonra olmalıdır.';
+    }
+    if (typeof item.appointment.id !== 'number' || !Number.isInteger(item.appointment.id) || item.appointment.id <= 0 || item.appointment.status !== 'scheduled') {
+      return 'Bu randevu yeniden planlanamaz.';
+    }
+    return null;
+  });
 
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
@@ -35,21 +49,35 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
     e.preventDefault();
     if (submitLockRef.current || isSubmitting) return;
 
+    if (submitError && (submitError.includes('Orijinal') || submitError.includes('planlanamaz'))) {
+      return;
+    }
+
     if (!date || !startTime || !endTime) {
       setSubmitError('Lütfen tarih ve saat alanlarını doldurun.');
       return;
     }
 
-    if (startTime >= endTime) {
+    let finalStartTime = startTime;
+    if (finalStartTime.length === 5) finalStartTime += ':00';
+    let finalEndTime = endTime;
+    if (finalEndTime.length === 5) finalEndTime += ':00';
+
+    if (finalStartTime >= finalEndTime) {
       setSubmitError('Bitiş saati, başlangıç saatinden sonra olmalıdır.');
       return;
     }
 
-    const newStartsAt = `${date} ${startTime}${originalStartSeconds.current}`;
-    const newEndsAt = `${date} ${endTime}${originalEndSeconds.current}`;
+    const newStartsAt = `${date} ${finalStartTime}`;
+    const newEndsAt = `${date} ${finalEndTime}`;
 
     if (newStartsAt === item.appointment.starts_at && newEndsAt === item.appointment.ends_at) {
       setSubmitError('Lütfen farklı bir saat veya tarih seçin.');
+      return;
+    }
+    
+    if (typeof item.appointment.id !== 'number' || !Number.isInteger(item.appointment.id) || item.appointment.id <= 0 || item.appointment.status !== 'scheduled') {
+      setSubmitError('Bu randevu yeniden planlanamaz.');
       return;
     }
 
@@ -75,14 +103,15 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
       }
 
       const appt = res.appointment;
-      if (typeof appt.id !== 'number' || !Number.isInteger(appt.id) || appt.id <= 0 ||
-          typeof appt.uuid !== 'string' || !appt.uuid ||
-          typeof appt.member_id !== 'number' || !Number.isInteger(appt.member_id) || appt.member_id <= 0 ||
-          typeof appt.trainer_id !== 'number' || !Number.isInteger(appt.trainer_id) || appt.trainer_id <= 0 ||
-          typeof appt.starts_at !== 'string' || !appt.starts_at ||
-          typeof appt.ends_at !== 'string' || !appt.ends_at ||
-          appt.status !== 'scheduled' ||
-          appt.id !== item.appointment.id) {
+      if (
+          appt.id !== item.appointment.id ||
+          appt.uuid !== item.appointment.uuid ||
+          appt.member_id !== item.member.id ||
+          appt.trainer_id !== item.trainer.id ||
+          appt.starts_at !== newStartsAt ||
+          appt.ends_at !== newEndsAt ||
+          appt.status !== 'scheduled'
+      ) {
         throw new Error('Malformed or mismatched appointment in response');
       }
 
@@ -163,7 +192,7 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !initStart}
                 className="w-full bg-black border border-white/20 rounded px-4 py-2.5 text-white text-sm focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] disabled:opacity-50"
                 required
               />
@@ -175,9 +204,10 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
                 <input 
                   id="reschedule-start-time"
                   type="time"
+                  step="1"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !initStart}
                   className="w-full bg-black border border-white/20 rounded px-4 py-2.5 text-white text-sm focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] disabled:opacity-50"
                   required
                 />
@@ -187,9 +217,10 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
                 <input 
                   id="reschedule-end-time"
                   type="time"
+                  step="1"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !initEnd}
                   className="w-full bg-black border border-white/20 rounded px-4 py-2.5 text-white text-sm focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] disabled:opacity-50"
                   required
                 />
@@ -210,7 +241,7 @@ export function AppointmentRescheduleModal({ scope, item, onClose, onSuccess }: 
           <button 
             type="submit"
             form="appointment-reschedule-form"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !initStart || !initEnd}
             className="px-5 py-2.5 rounded font-medium text-sm bg-[#851C35] text-white hover:bg-[#6a162a] transition disabled:opacity-50 flex items-center gap-2"
           >
             {isSubmitting && (
