@@ -3,6 +3,8 @@ import { apiClient } from '../../api/client';
 import { AppointmentScope, AppointmentListResponse, AppointmentStatus, AppointmentListItem } from './types';
 import { AppointmentCreateModal } from './AppointmentCreateModal';
 import { AppointmentRescheduleModal } from './AppointmentRescheduleModal';
+import { AppointmentCancelModal } from './AppointmentCancelModal';
+import { AppointmentTerminalModal } from './AppointmentTerminalModal';
 
 interface AppointmentListPageProps {
   scope: AppointmentScope;
@@ -129,6 +131,10 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [rescheduleItem, setRescheduleItem] = useState<AppointmentListItem | null>(null);
+  const [cancelItem, setCancelItem] = useState<AppointmentListItem | null>(null);
+  const [terminalItem, setTerminalItem] = useState<{ item: AppointmentListItem; action: 'completed' | 'no_show' } | null>(null);
+
+  const isAnyModalOpen = isCreateModalOpen || rescheduleItem || cancelItem || terminalItem;
 
   const selectedDateRef = useRef(selectedDate);
   useEffect(() => {
@@ -202,8 +208,8 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <h2 className="text-xl font-medium">{pageTitle}</h2>
         <button 
-          onClick={() => { if (!rescheduleItem) setIsCreateModalOpen(true); }}
-          disabled={!!rescheduleItem}
+          onClick={() => { if (!isAnyModalOpen) setIsCreateModalOpen(true); }}
+          disabled={!!isAnyModalOpen}
           className="px-4 py-2 bg-[#851C35] text-white text-sm font-medium rounded hover:bg-[#6a162a] transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -306,14 +312,50 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                   </td>
                   <td className="p-4 text-right">
                     {item.appointment.status === 'scheduled' && (
-                      <button
-                        onClick={() => {
-                          if (!isCreateModalOpen) setRescheduleItem(item);
-                        }}
-                        className="text-xs font-medium text-blue-400 hover:text-blue-300 underline transition"
-                      >
-                        Yeniden Planla
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => {
+                            if (!isAnyModalOpen) setRescheduleItem(item);
+                          }}
+                          disabled={!!isAnyModalOpen}
+                          className="text-xs font-medium text-blue-400 hover:text-blue-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Yeniden Planla
+                        </button>
+                        {(scope === 'admin' || scope === 'reception') && (
+                          <button
+                            onClick={() => {
+                              if (!isAnyModalOpen) setCancelItem(item);
+                            }}
+                            disabled={!!isAnyModalOpen}
+                            className="text-xs font-medium text-red-400 hover:text-red-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            İptal Et
+                          </button>
+                        )}
+                        {(scope === 'admin' || scope === 'trainer') && (
+                          <>
+                            <button
+                              onClick={() => {
+                                if (!isAnyModalOpen) setTerminalItem({ item, action: 'completed' });
+                              }}
+                              disabled={!!isAnyModalOpen}
+                              className="text-xs font-medium text-green-400 hover:text-green-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Tamamla
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (!isAnyModalOpen) setTerminalItem({ item, action: 'no_show' });
+                              }}
+                              disabled={!!isAnyModalOpen}
+                              className="text-xs font-medium text-orange-400 hover:text-orange-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Gelmedi
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -323,7 +365,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
         </div>
       )}
       
-      {isCreateModalOpen && !rescheduleItem && (
+      {isCreateModalOpen && !rescheduleItem && !cancelItem && !terminalItem && (
         <AppointmentCreateModal
           scope={scope}
           selectedDate={selectedDate}
@@ -335,14 +377,41 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
         />
       )}
 
-      {rescheduleItem && !isCreateModalOpen && (
+      {rescheduleItem && !isCreateModalOpen && !cancelItem && !terminalItem && (
         <AppointmentRescheduleModal
-          key={`${scope}-${rescheduleItem.appointment.id}`}
+          key={`reschedule-${scope}-${rescheduleItem.appointment.id}`}
           scope={scope}
           item={rescheduleItem}
           onClose={() => setRescheduleItem(null)}
           onSuccess={() => {
             setRescheduleItem(null);
+            fetchAppointments(selectedDateRef.current);
+          }}
+        />
+      )}
+
+      {cancelItem && !isCreateModalOpen && !rescheduleItem && !terminalItem && (
+        <AppointmentCancelModal
+          key={`cancel-${scope}-${cancelItem.appointment.id}`}
+          scope={scope}
+          item={cancelItem}
+          onClose={() => setCancelItem(null)}
+          onSuccess={() => {
+            setCancelItem(null);
+            fetchAppointments(selectedDateRef.current);
+          }}
+        />
+      )}
+
+      {terminalItem && !isCreateModalOpen && !rescheduleItem && !cancelItem && (
+        <AppointmentTerminalModal
+          key={`terminal-${scope}-${terminalItem.action}-${terminalItem.item.appointment.id}`}
+          scope={scope}
+          item={terminalItem.item}
+          action={terminalItem.action}
+          onClose={() => setTerminalItem(null)}
+          onSuccess={() => {
+            setTerminalItem(null);
             fetchAppointments(selectedDateRef.current);
           }}
         />
