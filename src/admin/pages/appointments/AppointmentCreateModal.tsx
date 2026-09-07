@@ -48,70 +48,92 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
   const trainersAbortControllerRef = useRef<AbortController | null>(null);
 
   const submitLockRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const trainersGenerationRef = useRef(0);
 
   // Fetch trainers on mount
-  useEffect(() => {
+  const loadTrainers = useCallback(async () => {
     if (scope === 'trainer') return; // No trainer picker for trainer scope
+
+    trainersGenerationRef.current += 1;
+    const localGen = trainersGenerationRef.current;
+
+    if (trainersAbortControllerRef.current) {
+      trainersAbortControllerRef.current.abort();
+    }
 
     const abortController = new AbortController();
     trainersAbortControllerRef.current = abortController;
 
-    const fetchTrainers = async () => {
-      setIsLoadingTrainers(true);
-      setTrainerError(null);
+    setIsLoadingTrainers(true);
+    setTrainerError(null);
 
-      let endpoint = '';
-      if (scope === 'admin') endpoint = '/api/admin/trainers';
-      else if (scope === 'reception') endpoint = '/api/reception/appointment-trainers';
+    let endpoint = '';
+    if (scope === 'admin') endpoint = '/api/admin/trainers';
+    else if (scope === 'reception') endpoint = '/api/reception/appointment-trainers';
 
-      try {
-        const response = await apiClient.get(endpoint, { signal: abortController.signal });
-        
-        if (abortController.signal.aborted) return;
+    try {
+      const response = await apiClient.get(endpoint, { signal: abortController.signal });
+      
+      if (abortController.signal.aborted || localGen !== trainersGenerationRef.current) return;
 
-        let validTrainers: TrainerOption[] = [];
-        
-        // Runtime validation based on endpoint
-        if (scope === 'admin') {
-           if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
-             throw new Error('Invalid trainers response');
-           }
-           for (const t of (response as any).items) {
-             if (t && typeof t.id === 'number' && t.id > 0 && typeof t.name === 'string' && typeof t.is_active === 'boolean') {
-               if (t.is_active) {
-                 validTrainers.push({ id: t.id, name: t.name });
-               }
-             }
-           }
-        } else if (scope === 'reception') {
-           if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
-             throw new Error('Invalid trainers response');
-           }
-           for (const t of (response as any).items) {
-             if (t && typeof t.id === 'number' && t.id > 0 && typeof t.name === 'string' && t.name.trim() !== '') {
+      let validTrainers: TrainerOption[] = [];
+      
+      // Runtime validation based on endpoint
+      if (scope === 'admin') {
+         if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
+           throw new Error('Invalid trainers response');
+         }
+         for (const t of (response as any).items) {
+           if (t && typeof t.id === 'number' && Number.isInteger(t.id) && t.id > 0 && typeof t.name === 'string' && t.name.trim() !== '' && typeof t.is_active === 'boolean') {
+             if (t.is_active) {
                validTrainers.push({ id: t.id, name: t.name });
              }
+           } else {
+             throw new Error('Malformed trainer item');
            }
-        }
-        
-        setTrainers(validTrainers);
-      } catch (err: any) {
-        if (abortController.signal.aborted) return;
-        console.error(err);
-        setTrainerError('Eğitmen listesi yüklenemedi.');
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoadingTrainers(false);
-        }
+         }
+      } else if (scope === 'reception') {
+         if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
+           throw new Error('Invalid trainers response');
+         }
+         for (const t of (response as any).items) {
+           if (t && typeof t.id === 'number' && Number.isInteger(t.id) && t.id > 0 && typeof t.name === 'string' && t.name.trim() !== '') {
+             validTrainers.push({ id: t.id, name: t.name });
+           } else {
+             throw new Error('Malformed trainer item');
+           }
+         }
+      }
+      
+      if (mountedRef.current) setTrainers(validTrainers);
+    } catch (err: any) {
+      if (abortController.signal.aborted || localGen !== trainersGenerationRef.current) return;
+      console.error(err);
+      if (mountedRef.current) setTrainerError('Eğitmen listesi yüklenemedi.');
+    } finally {
+      if (!abortController.signal.aborted && localGen === trainersGenerationRef.current) {
+        if (mountedRef.current) setIsLoadingTrainers(false);
+      }
+    }
+  }, [scope]);
+
+  useEffect(() => {
+    loadTrainers();
+    return () => {
+      trainersGenerationRef.current += 1;
+      if (trainersAbortControllerRef.current) {
+        trainersAbortControllerRef.current.abort();
       }
     };
-
-    fetchTrainers();
-
-    return () => {
-      abortController.abort();
-    };
-  }, [scope]);
+  }, [loadTrainers]);
 
   // Handle member search
   const performSearch = useCallback(async (query: string) => {
@@ -122,7 +144,9 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
       searchAbortControllerRef.current.abort();
     }
 
-    if (query.length < 2) {
+    const trimmedQuery = query.trim();
+
+    if (trimmedQuery.length < 2) {
       setMemberOptions([]);
       setIsSearchingMembers(false);
       setMemberSearchError(null);
@@ -137,31 +161,34 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
 
     let url = '';
     if (scope === 'admin') {
-      url = `/api/admin/members?q=${encodeURIComponent(query)}&status=active&page=1&per_page=20`;
+      url = `/api/admin/members?q=${encodeURIComponent(trimmedQuery)}&status=active&deleted=active&page=1&per_page=20`;
     } else if (scope === 'reception') {
-      url = `/api/reception/members?q=${encodeURIComponent(query)}`;
+      url = `/api/reception/members?q=${encodeURIComponent(trimmedQuery)}`;
     } else if (scope === 'trainer') {
-      url = `/api/trainer/members?q=${encodeURIComponent(query)}&status=active&page=1&per_page=20`;
+      url = `/api/trainer/members?q=${encodeURIComponent(trimmedQuery)}&status=active&page=1&per_page=20`;
     }
 
     try {
       const response = await apiClient.get(url, { signal: abortController.signal });
       
       if (localGeneration === searchGenerationRef.current && !abortController.signal.aborted) {
+        if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
+          throw new Error('Invalid members response');
+        }
         let validMembers: MemberOption[] = [];
-        if (response && typeof response === 'object' && Array.isArray((response as any).items)) {
-           for (const m of (response as any).items) {
-             if (m && typeof m.id === 'number' && m.id > 0 && 
-                 typeof m.first_name === 'string' && typeof m.last_name === 'string' && typeof m.status === 'string') {
-               if (m.status === 'active') {
-                 validMembers.push({
-                   id: m.id,
-                   first_name: m.first_name,
-                   last_name: m.last_name,
-                   status: m.status
-                 });
-               }
+        for (const m of (response as any).items) {
+           if (m && typeof m.id === 'number' && Number.isInteger(m.id) && m.id > 0 && 
+               typeof m.first_name === 'string' && typeof m.last_name === 'string' && typeof m.status === 'string') {
+             if (m.status === 'active') {
+               validMembers.push({
+                 id: m.id,
+                 first_name: m.first_name,
+                 last_name: m.last_name,
+                 status: m.status
+               });
              }
+           } else {
+             throw new Error('Malformed member item');
            }
         }
         setMemberOptions(validMembers);
@@ -169,10 +196,10 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     } catch (err: any) {
       if (abortController.signal.aborted || localGeneration !== searchGenerationRef.current) return;
       console.error(err);
-      setMemberSearchError('Üye araması başarısız oldu.');
+      if (mountedRef.current) setMemberSearchError('Üye araması başarısız oldu.');
     } finally {
       if (localGeneration === searchGenerationRef.current && !abortController.signal.aborted) {
-        setIsSearchingMembers(false);
+        if (mountedRef.current) setIsSearchingMembers(false);
       }
     }
   }, [scope]);
@@ -182,7 +209,7 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
       clearTimeout(debounceTimeoutRef.current);
     }
     
-    if (memberSearch.length >= 2) {
+    if (memberSearch.trim().length >= 2) {
       debounceTimeoutRef.current = setTimeout(() => {
         performSearch(memberSearch);
       }, 300);
@@ -211,7 +238,9 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     if (submitLockRef.current || isSubmitting) return;
 
     // Client side validation
-    if (!selectedMemberId || (!selectedTrainerId && scope !== 'trainer') || !startTime || !endTime) {
+    if (!selectedMemberId || typeof selectedMemberId !== 'number' || !Number.isInteger(selectedMemberId) || selectedMemberId <= 0 ||
+        (!selectedTrainerId && scope !== 'trainer') || (scope !== 'trainer' && (typeof selectedTrainerId !== 'number' || !Number.isInteger(selectedTrainerId) || selectedTrainerId <= 0)) ||
+        !startTime || !endTime) {
       setSubmitError('Lütfen tüm alanları doldurun.');
       return;
     }
@@ -226,13 +255,13 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     setSubmitError(null);
 
     const payload: any = {
-      member_id: Number(selectedMemberId),
+      member_id: selectedMemberId,
       starts_at: `${selectedDate} ${startTime}:00`,
       ends_at: `${selectedDate} ${endTime}:00`
     };
 
     if (scope !== 'trainer') {
-      payload.trainer_id = Number(selectedTrainerId);
+      payload.trainer_id = selectedTrainerId;
     }
 
     let endpoint = '';
@@ -249,51 +278,48 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
       }
       
       const appt = res.appointment;
-      if (typeof appt.id !== 'number' || appt.id <= 0 ||
+      if (typeof appt.id !== 'number' || !Number.isInteger(appt.id) || appt.id <= 0 ||
           typeof appt.uuid !== 'string' || !appt.uuid ||
-          typeof appt.member_id !== 'number' || appt.member_id <= 0 ||
+          typeof appt.member_id !== 'number' || !Number.isInteger(appt.member_id) || appt.member_id <= 0 ||
           typeof appt.starts_at !== 'string' || !appt.starts_at ||
           typeof appt.ends_at !== 'string' || !appt.ends_at ||
-          appt.status !== 'scheduled') {
+          appt.status !== 'scheduled' ||
+          typeof appt.trainer_id !== 'number' || !Number.isInteger(appt.trainer_id) || appt.trainer_id <= 0) {
         throw new Error('Malformed appointment in response');
       }
 
-      if (scope !== 'trainer') {
-        if (typeof appt.trainer_id !== 'number' || appt.trainer_id <= 0) {
-           throw new Error('Malformed appointment in response: invalid trainer_id');
-        }
-      }
-
-      onSuccess();
+      if (mountedRef.current) onSuccess();
     } catch (err: any) {
       console.error(err);
-      let errMsg = 'Randevu oluşturulurken beklenmedik bir hata oluştu.';
-      if (err.code) {
-        const codeMap: Record<string, string> = {
-          'MEMBER_CONFLICT': 'Üyenin bu saat aralığında başka bir randevusu var.',
-          'TRAINER_CONFLICT': 'Eğitmenin bu saat aralığında başka bir randevusu var.',
-          'MEMBER_INELIGIBLE': 'Üye bu tarih için randevuya uygun değil.',
-          'TRAINER_INELIGIBLE': 'Eğitmen aktif değil.',
-          'FORBIDDEN': 'Bu randevuyu oluşturma yetkiniz yok.',
-          'NOT_FOUND': 'Seçilen üye veya eğitmen artık bulunamıyor.',
-          'VALIDATION_ERROR': 'Randevu bilgileri geçersiz.'
-        };
-        if (codeMap[err.code]) {
-          errMsg = codeMap[err.code];
+      if (mountedRef.current) {
+        let errMsg = 'Randevu oluşturulurken beklenmedik bir hata oluştu.';
+        if (err.code) {
+          const codeMap: Record<string, string> = {
+            'MEMBER_CONFLICT': 'Üyenin bu saat aralığında başka bir randevusu var.',
+            'TRAINER_CONFLICT': 'Eğitmenin bu saat aralığında başka bir randevusu var.',
+            'MEMBER_INELIGIBLE': 'Üye bu tarih için randevuya uygun değil.',
+            'TRAINER_INELIGIBLE': 'Eğitmen aktif değil.',
+            'FORBIDDEN': 'Bu randevuyu oluşturma yetkiniz yok.',
+            'NOT_FOUND': 'Seçilen üye veya eğitmen artık bulunamıyor.',
+            'VALIDATION_ERROR': 'Randevu bilgileri geçersiz.'
+          };
+          if (codeMap[err.code]) {
+            errMsg = codeMap[err.code];
+          }
         }
+        setSubmitError(errMsg);
       }
-      setSubmitError(errMsg);
     } finally {
       submitLockRef.current = false;
-      setIsSubmitting(false);
+      if (mountedRef.current) setIsSubmitting(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-full">
+      <div role="dialog" aria-modal="true" aria-labelledby="create-modal-title" className="bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-full">
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
-          <h2 className="text-lg font-medium text-white">Yeni Randevu</h2>
+          <h2 id="create-modal-title" className="text-lg font-medium text-white">Yeni Randevu</h2>
           <button 
             onClick={() => { if (!isSubmitting) onClose(); }}
             disabled={isSubmitting}
@@ -321,11 +347,16 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-1.5">Üye Ara</label>
+              <label htmlFor="member-search" className="block text-sm font-medium text-white/70 mb-1.5">Üye Ara</label>
               <input 
+                id="member-search"
                 type="text"
                 value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)}
+                onChange={(e) => {
+                  setMemberSearch(e.target.value);
+                  setSelectedMemberId('');
+                }}
+                maxLength={80}
                 placeholder="İsim ile ara (min 2 karakter)"
                 className="w-full bg-black border border-white/20 rounded px-4 py-2.5 text-white text-sm focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] placeholder:text-white/30"
                 disabled={isSubmitting}
@@ -356,13 +387,17 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
 
             {scope !== 'trainer' && (
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Eğitmen</label>
+                <label htmlFor="trainer-select" className="block text-sm font-medium text-white/70 mb-1.5">Eğitmen</label>
                 {trainerError ? (
-                  <div className="text-sm text-red-400">{trainerError}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-red-400">{trainerError}</div>
+                    <button type="button" disabled={isSubmitting} onClick={loadTrainers} className="text-xs text-[#851C35] hover:text-[#6a162a] underline disabled:opacity-50">Tekrar Dene</button>
+                  </div>
                 ) : isLoadingTrainers ? (
                   <div className="text-sm text-white/50">Yükleniyor...</div>
                 ) : (
                   <select 
+                    id="trainer-select"
                     value={selectedTrainerId}
                     onChange={(e) => setSelectedTrainerId(e.target.value ? Number(e.target.value) : '')}
                     disabled={isSubmitting || trainers.length === 0}
@@ -379,8 +414,9 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Başlangıç Saati</label>
+                <label htmlFor="start-time" className="block text-sm font-medium text-white/70 mb-1.5">Başlangıç Saati</label>
                 <input 
+                  id="start-time"
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
@@ -390,8 +426,9 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Bitiş Saati</label>
+                <label htmlFor="end-time" className="block text-sm font-medium text-white/70 mb-1.5">Bitiş Saati</label>
                 <input 
+                  id="end-time"
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
