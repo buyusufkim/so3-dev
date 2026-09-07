@@ -51,6 +51,7 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
