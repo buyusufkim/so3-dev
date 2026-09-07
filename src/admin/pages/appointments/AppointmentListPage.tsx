@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../../api/client';
 import { AppointmentScope, AppointmentListResponse, AppointmentStatus, AppointmentListItem } from './types';
 import { AppointmentCreateModal } from './AppointmentCreateModal';
+import { AppointmentRescheduleModal } from './AppointmentRescheduleModal';
 
 interface AppointmentListPageProps {
   scope: AppointmentScope;
@@ -127,7 +128,8 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  
+  const [rescheduleItem, setRescheduleItem] = useState<AppointmentListItem | null>(null);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestGenerationRef = useRef(0);
 
@@ -267,7 +269,8 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                 <th className="p-4 font-medium">Saat</th>
                 <th className="p-4 font-medium">Üye</th>
                 <th className="p-4 font-medium">Eğitmen</th>
-                <th className="p-4 font-medium text-right">Durum</th>
+                <th className="p-4 font-medium">Durum</th>
+                <th className="p-4 font-medium text-right">Aksiyon</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -290,10 +293,22 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                       {item.trainer.name}
                     </div>
                   </td>
-                  <td className="p-4 text-right">
+                  <td className="p-4">
                     <span className={`inline-block px-2.5 py-1 rounded text-[11px] uppercase tracking-wider font-medium ${statusColors[item.appointment.status]}`}>
                       {statusLabels[item.appointment.status]}
                     </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    {item.appointment.status === 'scheduled' && (
+                      <button
+                        onClick={() => {
+                          if (!isCreateModalOpen) setRescheduleItem(item);
+                        }}
+                        className="text-xs font-medium text-blue-400 hover:text-blue-300 underline transition"
+                      >
+                        Yeniden Planla
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -302,13 +317,25 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
         </div>
       )}
       
-      {isCreateModalOpen && (
+      {isCreateModalOpen && !rescheduleItem && (
         <AppointmentCreateModal
           scope={scope}
           selectedDate={selectedDate}
           onClose={() => setIsCreateModalOpen(false)}
           onSuccess={() => {
             setIsCreateModalOpen(false);
+            fetchAppointments(selectedDate);
+          }}
+        />
+      )}
+
+      {rescheduleItem && !isCreateModalOpen && (
+        <AppointmentRescheduleModal
+          scope={scope}
+          item={rescheduleItem}
+          onClose={() => setRescheduleItem(null)}
+          onSuccess={() => {
+            setRescheduleItem(null);
             fetchAppointments(selectedDate);
           }}
         />
