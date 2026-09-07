@@ -17,13 +17,88 @@ function assert(condition, message) {
 }
 
 // ---------------------------------------------------------
+// Helper: Find index of a token outside strings and comments
+// ---------------------------------------------------------
+function indexOfOutsideStringsAndComments(code, searchString, startFrom = 0) {
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+
+    for (let i = startFrom; i < code.length; i++) {
+        if (!inSingleQuote && !inDoubleQuote && !inLineComment && !inBlockComment) {
+            if (code.startsWith(searchString, i)) {
+                return i;
+            }
+        }
+
+        const c = code[i];
+        const next = code[i + 1] || '';
+
+        if ((inSingleQuote || inDoubleQuote) && c === '\\') {
+            i++;
+            continue;
+        }
+
+        if (inLineComment) {
+            if (c === '\n' || c === '\r') {
+                inLineComment = false;
+            }
+            continue;
+        }
+
+        if (inBlockComment) {
+            if (c === '*' && next === '/') {
+                inBlockComment = false;
+                i++;
+            }
+            continue;
+        }
+
+        if (inSingleQuote) {
+            if (c === "'") inSingleQuote = false;
+            continue;
+        }
+
+        if (inDoubleQuote) {
+            if (c === '"') inDoubleQuote = false;
+            continue;
+        }
+
+        if (c === '/' && next === '/') {
+            inLineComment = true;
+            i++;
+            continue;
+        }
+        if (c === '#') {
+            inLineComment = true;
+            continue;
+        }
+        if (c === '/' && next === '*') {
+            inBlockComment = true;
+            i++;
+            continue;
+        }
+        if (c === "'") {
+            inSingleQuote = true;
+            continue;
+        }
+        if (c === '"') {
+            inDoubleQuote = true;
+            continue;
+        }
+    }
+    return -1;
+}
+
+// ---------------------------------------------------------
 // Helper: String/Comment Safe Balanced Bracket Extraction
 // ---------------------------------------------------------
 function getMethodBlock(code, searchString, braceStartSearchStr = '{') {
-    const startIndex = code.indexOf(searchString);
+    const startIndex = indexOfOutsideStringsAndComments(code, searchString);
     if (startIndex === -1) return null;
     
-    const braceIndex = code.indexOf(braceStartSearchStr, startIndex);
+    const braceIndex = indexOfOutsideStringsAndComments(code, braceStartSearchStr, startIndex);
     if (braceIndex === -1) return null;
 
     const braceEndSearchStr = braceStartSearchStr === '{' ? '}' : (braceStartSearchStr === '[' ? ']' : ')');
@@ -129,7 +204,8 @@ function checkInvariants(controllerCode, indexCode) {
         return { success: false, reason: 'Route closure content invalid or has extra role' };
     }
     
-    const aliases = ["'/api/public/appointment-trainers'", "'/api/trainer/appointment-trainers'", "'/api/admin/appointment-trainers'"];
+    // Dynamic namespace aliases check (all styles)
+    const aliases = ["/api/public/appointment-trainers", "/api/trainer/appointment-trainers", "/api/admin/appointment-trainers"];
     for (const a of aliases) {
         if (indexCode.includes(a)) return { success: false, reason: `Forbidden namespace alias found: ${a}` };
     }
@@ -142,7 +218,24 @@ function checkInvariants(controllerCode, indexCode) {
     if (patchBucketCode && patchBucketCode.includes("'/api/reception/appointment-trainers'")) return { success: false, reason: 'Static PATCH alias' };
     if (deleteBucketCode && deleteBucketCode.includes("'/api/reception/appointment-trainers'")) return { success: false, reason: 'Static DELETE alias' };
     
-    if (indexCode.match(/#\^\/api\/reception\/appointment-trainers\$#/)) return { success: false, reason: 'Dynamic mutation alias' };
+    // Dynamic mutation alias
+    const pathStr = '/api/reception/appointment-trainers';
+    if (indexCode.includes("preg_match('#^/api/reception/appointment-trainers$#'") || indexCode.includes(`=== '${pathStr}'`)) {
+        return { success: false, reason: 'Dynamic mutation alias block detected' };
+    }
+
+    // Full method sensitive field guard
+    const sensitiveFields = ['admin_id', 'email', 'bio', 'instagram_username', 'role_title', 'branch_id', 'profile_media_id', 'credentials', 'password'];
+    for (const sf of sensitiveFields) {
+        if (methodCode.includes(sf)) return { success: false, reason: `Sensitive field found in method: ${sf}` };
+    }
+
+    // Read-only guard case-insensitive (mutations)
+    const lowerMethod = methodCode.toLowerCase();
+    const mutations = ['insert into', 'update trainers', 'delete from', 'begintransaction', 'commit', 'rollback', 'auditlogger', 'appointment_reschedules', 'member_visits'];
+    for (const mut of mutations) {
+        if (lowerMethod.includes(mut)) return { success: false, reason: `Mutation detected: ${mut}` };
+    }
 
     const sqlMatch = methodCode.match(/SELECT\s+(.+?)\s+FROM\s+trainers\s+WHERE\s+(.+?)\s*"/s);
     if (!sqlMatch) return { success: false, reason: 'SQL SELECT statement missing or malformed' };
@@ -160,16 +253,18 @@ function checkInvariants(controllerCode, indexCode) {
     const arrayMapReturn = getMethodBlock(arrayMapBlock, 'return [', '[');
     if (!arrayMapReturn) return { success: false, reason: 'Response item return missing' };
     
+    if (!arrayMapReturn.includes("'id' => (int)$t['id']")) return { success: false, reason: 'Response item id missing exact cast' };
+    if (!arrayMapReturn.includes("'name' => (string)$t['name']")) return { success: false, reason: 'Response item name missing exact cast' };
+    
     const keyMatches = arrayMapReturn.match(/=>/g);
     if (!keyMatches || keyMatches.length !== 2) return { success: false, reason: 'Response item contains extra or missing keys' };
-    if (!arrayMapReturn.includes("'id' =>") || !arrayMapReturn.includes("'name' =>")) return { success: false, reason: 'Response item keys not exactly id and name' };
     
-    if (!methodCode.includes("Response::json(['items' => $")) return { success: false, reason: 'Response root not exact items' };
-    
-    const mutations = ['INSERT', 'UPDATE', 'DELETE FROM', 'beginTransaction', 'commit', 'rollBack', 'AuditLogger', 'appointment_reschedules', 'member_visits'];
-    for (const mut of mutations) {
-        if (methodCode.includes(mut)) return { success: false, reason: `Mutation detected: ${mut}` };
-    }
+    // Response root exact items-only check
+    const jsonBlock = getMethodBlock(methodCode, 'Response::json([', '[');
+    if (!jsonBlock) return { success: false, reason: 'Response::json block missing' };
+    const rootMatches = jsonBlock.match(/=>/g);
+    if (!rootMatches || rootMatches.length !== 1) return { success: false, reason: 'Response root has extra or missing keys' };
+    if (!jsonBlock.includes("'items' =>")) return { success: false, reason: 'Response root does not contain exactly items key' };
     
     if (!methodCode.includes("if (!empty($_GET)) {")) return { success: false, reason: 'nonempty $_GET check missing' };
     if (!methodCode.includes("Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);")) return { success: false, reason: 'Query error exact positional args invalid' };
@@ -185,6 +280,15 @@ console.log('--- Starting Negative Self-Tests ---');
 
 const controllerPath = path.resolve(process.cwd(), 'api/controllers/AppointmentController.php');
 const indexPath = path.resolve(process.cwd(), 'api/index.php');
+
+if (fs.existsSync('test-braces.js')) {
+    console.error("❌ FAIL: forbidden test-braces.js artifact found.");
+    process.exit(1);
+}
+if (fs.existsSync('test-mods.js')) {
+    console.error("❌ FAIL: forbidden test-mods.js artifact found.");
+    process.exit(1);
+}
 
 const rawControllerCode = fs.readFileSync(controllerPath, 'utf8');
 const rawIndexCode = fs.readFileSync(indexPath, 'utf8');
@@ -212,7 +316,19 @@ const negatives = [
     { name: 'AuditLogger injection', controllerMod: c => c.replace("Response::json(['items' => $normalizedTrainers]);", "AuditLogger::log(); Response::json(['items' => $normalizedTrainers]);"), indexMod: i => i },
     { name: 'query error args swapped', controllerMod: c => c.replace("Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);", "Response::error('VALIDATION_ERROR', 'Query parameter kabul edilmez.', 422);"), indexMod: i => i },
     { name: 'internal error args swapped', controllerMod: c => c.replace("Response::error('Eğitmen listesi alınırken beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);", "Response::error('INTERNAL_ERROR', 'Eğitmen listesi alınırken beklenmedik bir hata oluştu.', 500);"), indexMod: i => i },
-    { name: 'raw exception response leak', controllerMod: c => c.replace("Response::error('Eğitmen listesi alınırken beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);", "Response::error($e->getMessage(), 'INTERNAL_ERROR', 500);"), indexMod: i => i }
+    { name: 'raw exception response leak', controllerMod: c => c.replace("Response::error('Eğitmen listesi alınırken beklenmedik bir hata oluştu.', 'INTERNAL_ERROR', 500);", "Response::error($e->getMessage(), 'INTERNAL_ERROR', 500);"), indexMod: i => i },
+    // NEW CHECKS
+    { name: 'commented fake method', controllerMod: c => c.replace('public function getReceptionAppointmentTrainers()', '// public function getReceptionAppointmentTrainers()\npublic function someOther()'), indexMod: i => i },
+    { name: 'string fake method', controllerMod: c => c.replace('public function getReceptionAppointmentTrainers()', '"public function getReceptionAppointmentTrainers()"\npublic function someOther()'), indexMod: i => i },
+    { name: 'commented fake GET route', controllerMod: c => c, indexMod: i => i.replace("'GET' => [", "// 'GET' => [\n'GET' => []") },
+    { name: 'extra response root key', controllerMod: c => c.replace("Response::json(['items' => $normalizedTrainers]);", "Response::json(['items' => $normalizedTrainers, 'metadata' => []]);"), indexMod: i => i },
+    { name: 'direct equality DELETE', controllerMod: c => c, indexMod: i => i + "\nif ($requestUri === '/api/reception/appointment-trainers' && $method === 'DELETE') {}" },
+    { name: 'direct equality POST', controllerMod: c => c, indexMod: i => i + "\nif ($requestUri === '/api/reception/appointment-trainers' && $method === 'POST') {}" },
+    { name: 'dynamic public preg_match alias', controllerMod: c => c, indexMod: i => i + "\nif (preg_match('#^/api/public/appointment-trainers$#', $requestUri)) {}" },
+    { name: 'dynamic admin equality alias', controllerMod: c => c, indexMod: i => i + "\nif ($requestUri === '/api/admin/appointment-trainers') {}" },
+    { name: 'second SELECT admin_id', controllerMod: c => c.replace(/SELECT id, name\s+FROM trainers/, 'SELECT admin_id FROM foo; SELECT id, name\n            FROM trainers'), indexMod: i => i },
+    { name: 'hidden role_title read', controllerMod: c => c.replace(/SELECT id, name\s+FROM trainers/, 'SELECT id, name\n            FROM trainers; $x = $t["role_title"];'), indexMod: i => i },
+    { name: 'lowercase UPDATE trainers', controllerMod: c => c.replace(/SELECT id, name\s+FROM trainers/, 'update trainers set foo=1; SELECT id, name\n            FROM trainers'), indexMod: i => i }
 ];
 
 let negativePassed = 0;
