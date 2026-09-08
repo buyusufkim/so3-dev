@@ -106,30 +106,14 @@ class AdminController
     {
         \Middleware\AuthMiddleware::hasRole(['super_admin', 'admin']);
 
-        $dbStatus = 'unavailable';
         try {
             $db = \Core\Database::getInstance()->getConnection();
-            $stmt = $db->query("SELECT 1");
-            if ($stmt && (int)$stmt->fetchColumn() === 1) {
-                $dbStatus = 'connected';
-            }
         } catch (\Exception $e) {
-            $dbStatus = 'unavailable';
+            \Core\Response::error('Veritabanı bağlantısı kurulamadı', 'DB_ERROR', 503);
+            return;
         }
 
-        $activeMembers = 0;
-        $currentOccupancy = 0;
-        $visitsToday = 0;
-        $renewalsToday = 0;
-        $appointmentsToday = [
-            'total' => 0,
-            'scheduled' => 0,
-            'completed' => 0,
-            'cancelled' => 0,
-            'no_show' => 0
-        ];
-
-        if ($dbStatus === 'connected') {
+        try {
             $tz = new \DateTimeZone('Europe/Istanbul');
             $startOfDay = new \DateTime('today', $tz);
             $endOfDay = new \DateTime('tomorrow', $tz);
@@ -137,61 +121,56 @@ class AdminController
             $startStr = $startOfDay->format('Y-m-d H:i:s');
             $endStr = $endOfDay->format('Y-m-d H:i:s');
 
-            try {
-                $stmt = $db->query("SELECT COUNT(*) FROM members WHERE status = 'active' AND deleted_at IS NULL");
-                if ($stmt) $activeMembers = (int)$stmt->fetchColumn();
-            } catch (\Exception $e) {}
+            $stmt1 = $db->query("SELECT COUNT(*) FROM members WHERE status = 'active' AND deleted_at IS NULL");
+            if (!$stmt1) throw new \Exception("Query failed");
+            $activeMembers = (int)$stmt1->fetchColumn();
 
-            try {
-                $stmt = $db->query("SELECT COUNT(*) FROM member_visits WHERE checked_out_at IS NULL");
-                if ($stmt) $currentOccupancy = (int)$stmt->fetchColumn();
-            } catch (\Exception $e) {}
+            $stmt2 = $db->query("SELECT COUNT(*) FROM member_visits WHERE checked_out_at IS NULL");
+            if (!$stmt2) throw new \Exception("Query failed");
+            $currentOccupancy = (int)$stmt2->fetchColumn();
 
-            try {
-                $stmt = $db->prepare("SELECT COUNT(*) FROM member_visits WHERE checked_in_at >= ? AND checked_in_at < ?");
-                $stmt->execute([$startStr, $endStr]);
-                $visitsToday = (int)$stmt->fetchColumn();
-            } catch (\Exception $e) {}
+            $stmt3 = $db->prepare("SELECT COUNT(*) FROM member_visits WHERE checked_in_at >= ? AND checked_in_at < ?");
+            if (!$stmt3->execute([$startStr, $endStr])) throw new \Exception("Query failed");
+            $visitsToday = (int)$stmt3->fetchColumn();
 
-            try {
-                $stmt = $db->prepare("SELECT COUNT(*) FROM membership_renewals WHERE created_at >= ? AND created_at < ?");
-                $stmt->execute([$startStr, $endStr]);
-                $renewalsToday = (int)$stmt->fetchColumn();
-            } catch (\Exception $e) {}
+            $stmt4 = $db->prepare("SELECT COUNT(*) FROM membership_renewals WHERE created_at >= ? AND created_at < ?");
+            if (!$stmt4->execute([$startStr, $endStr])) throw new \Exception("Query failed");
+            $renewalsToday = (int)$stmt4->fetchColumn();
 
-            try {
-                $stmt = $db->prepare("
-                    SELECT 
-                        SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) as scheduled_count,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
-                        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
-                        SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show_count,
-                        COUNT(*) as total_count
-                    FROM appointments 
-                    WHERE starts_at >= ? AND starts_at < ?
-                ");
-                $stmt->execute([$startStr, $endStr]);
-                $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-                if ($row) {
-                    $appointmentsToday = [
-                        'total' => (int)($row['total_count'] ?? 0),
-                        'scheduled' => (int)($row['scheduled_count'] ?? 0),
-                        'completed' => (int)($row['completed_count'] ?? 0),
-                        'cancelled' => (int)($row['cancelled_count'] ?? 0),
-                        'no_show' => (int)($row['no_show_count'] ?? 0),
-                    ];
-                }
-            } catch (\Exception $e) {}
+            $stmt5 = $db->prepare("
+                SELECT 
+                    SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) as scheduled_count,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+                    SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show_count,
+                    COUNT(*) as total_count
+                FROM appointments 
+                WHERE starts_at >= ? AND starts_at < ?
+            ");
+            if (!$stmt5->execute([$startStr, $endStr])) throw new \Exception("Query failed");
+            
+            $row = $stmt5->fetch(\PDO::FETCH_ASSOC);
+            if (!$row) throw new \Exception("Query failed");
+
+            $appointmentsToday = [
+                'total' => (int)($row['total_count'] ?? 0),
+                'scheduled' => (int)($row['scheduled_count'] ?? 0),
+                'completed' => (int)($row['completed_count'] ?? 0),
+                'cancelled' => (int)($row['cancelled_count'] ?? 0),
+                'no_show' => (int)($row['no_show_count'] ?? 0),
+            ];
+
+            \Core\Response::json([
+                'metrics' => [
+                    'active_members' => $activeMembers,
+                    'current_occupancy' => $currentOccupancy,
+                    'visits_today' => $visitsToday,
+                    'renewals_today' => $renewalsToday,
+                    'appointments_today' => $appointmentsToday,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Core\Response::error('Operasyonel veriler alınamadı: ' . $e->getMessage(), 'METRICS_FETCH_ERROR', 500);
         }
-
-        \Core\Response::json([
-            'metrics' => [
-                'active_members' => $activeMembers,
-                'current_occupancy' => $currentOccupancy,
-                'visits_today' => $visitsToday,
-                'renewals_today' => $renewalsToday,
-                'appointments_today' => $appointmentsToday,
-            ]
-        ]);
     }
-\n}\n
+}
