@@ -170,7 +170,7 @@ class AdminController
                 ]
             ]);
         } catch (\Exception $e) {
-            \Core\Response::error('Operasyonel veriler alınamadı: ' . $e->getMessage(), 'METRICS_FETCH_ERROR', 500);
+            \Core\Response::error('Operasyonel veriler alınamadı', 'METRICS_FETCH_ERROR', 500);
         }
     }
 }

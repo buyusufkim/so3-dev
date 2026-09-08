@@ -192,6 +192,28 @@ checkInvariant("No literal escaped newline artifact at the end of the file", () 
     }
 });
 
+
+checkInvariant("No exception detail leakage in Response::error", () => {
+    const fnIdx = controllerSource.indexOf('public function operationalDashboard()');
+    const fnBody = extractBalanced(controllerSource, fnIdx);
+    
+    if (fnBody && fnBody.includes('$e->getMessage()') && fnBody.includes('Response::error')) {
+        throw new Error("Exception details leaked in client-facing Response::error");
+    }
+});
+
+checkInvariant("fix_admin_controller.cjs does not exist", () => {
+    if (fs.existsSync(path.resolve(rootDir, 'fix_admin_controller.cjs'))) {
+        throw new Error("fix_admin_controller.cjs must be removed");
+    }
+});
+
+checkInvariant("update_verifier.cjs does not exist", () => {
+    if (fs.existsSync(path.resolve(rootDir, 'update_verifier.cjs'))) {
+        throw new Error("update_verifier.cjs must be removed");
+    }
+});
+
 // 3. FRONTEND INTEGRATION
 const dashboardSource = fs.readFileSync(path.resolve(rootDir, 'src/admin/pages/Dashboard.tsx'), 'utf8');
 
