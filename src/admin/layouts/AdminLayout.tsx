@@ -125,7 +125,16 @@ export function AdminLayout() {
               </div>
             </div>
           )}
-          
+
+          {admin?.role === 'super_admin' && (
+            <div>
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Güvenlik</h3>
+              <div className="space-y-1">
+                <NavLink to="/admin/audit-logs" className={navLinkClass}>Denetim Kayıtları</NavLink>
+              </div>
+            </div>
+          )}
+
           {isTrainer && (
             <div>
               <h3 className="text-[10px] uppercase tracking-widest text-white/40 mb-3 px-2">Eğitmen</h3>

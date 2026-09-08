@@ -41,6 +41,11 @@ export const getRoleStartRoute = (role: AdminRole): string => {
 };
 
 export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
+  // Special route for super_admin only
+  if (pathname === '/admin/audit-logs' || pathname.startsWith('/admin/audit-logs/')) {
+    return role === 'super_admin';
+  }
+
   if (role === 'super_admin' || role === 'admin') return true;
   
   if (role === 'trainer') {

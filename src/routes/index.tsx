@@ -23,6 +23,7 @@ const AdminMembersList = lazy(() => import("../admin/pages/members/AdminMembersL
 const AdminMemberEditor = lazy(() => import("../admin/pages/members/AdminMemberEditor").then(m => ({ default: m.AdminMemberEditor })));
 const AdminMemberProgressPage = lazy(() => import("../admin/pages/member-progress/AdminMemberProgressPage").then(m => ({ default: m.AdminMemberProgressPage })));
 const AdminSettings = lazy(() => import("../admin/pages/settings/AdminSettings").then(m => ({ default: m.AdminSettings })));
+const AuditLogsPage = lazy(() => import("../admin/pages/audit-logs/AuditLogsPage").then(m => ({ default: m.AuditLogsPage })));
 const TrainerAccountsPage = lazy(() => import("../admin/pages/trainer-accounts/TrainerAccountsPage").then(m => ({ default: m.TrainerAccountsPage })));
 const TrainerMembersList = lazy(() => import("../admin/pages/trainer-members/TrainerMembersList").then(m => ({ default: m.TrainerMembersList })));
 const TrainingProgramsList = lazy(() => import("../admin/pages/training-programs/TrainingProgramsList").then(m => ({ default: m.TrainingProgramsList })));
@@ -193,6 +194,10 @@ const router = createBrowserRouter([
       {
         path: "settings",
         element: <AdminSuspense><AdminSettings /></AdminSuspense>,
+      },
+      {
+        path: "audit-logs",
+        element: <AdminSuspense><AuditLogsPage /></AdminSuspense>,
       },
       {
         path: "trainer",

@@ -52,6 +52,10 @@ $routes = [
             AuthMiddleware::handle();
             (new AdminController())->dashboard();
         },
+        '/api/admin/audit-logs' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\AuditLogController())->index();
+        },
         '/api/admin/media' => function() {
             AuthMiddleware::handle();
             (new \Controllers\MediaController())->index();
