@@ -4,6 +4,8 @@ import { ArrowLeft, Save, Trash2, TrendingUp } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { Member } from "./types";
 import { AdminTrainerListItem } from "../trainers/types";
+import { MemberVisitsPanel } from "./MemberVisitsPanel";
+import { MemberRenewalsPanel } from "./MemberRenewalsPanel";
 
 export function AdminMemberEditor() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +18,7 @@ export function AdminMemberEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"info" | "visits" | "renewals">("info");
   
   const [trainers, setTrainers] = useState<AdminTrainerListItem[]>([]);
   const [initialConsent, setInitialConsent] = useState<string | null>(null);
@@ -272,6 +275,30 @@ export function AdminMemberEditor() {
         </div>
       )}
 
+      {!isNew && (
+        <div className="flex border-b border-white/10 gap-6">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'info' ? 'border-white text-white' : 'border-transparent text-white/50 hover:text-white/70'}`}
+          >
+            Genel Bilgiler
+          </button>
+          <button
+            onClick={() => setActiveTab('visits')}
+            className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'visits' ? 'border-white text-white' : 'border-transparent text-white/50 hover:text-white/70'}`}
+          >
+            Ziyaret Geçmişi
+          </button>
+          <button
+            onClick={() => setActiveTab('renewals')}
+            className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'renewals' ? 'border-white text-white' : 'border-transparent text-white/50 hover:text-white/70'}`}
+          >
+            Yenileme Geçmişi
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'info' && (
       <form id="member-form" onSubmit={handleSubmit} className="bg-[#121212] border border-white/10 rounded-lg p-6 space-y-8">
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -420,6 +447,20 @@ export function AdminMemberEditor() {
         </div>
 
       </form>
+      )}
+
+      {activeTab === 'visits' && id && (
+        <div className="bg-[#121212] border border-white/10 rounded-lg">
+          <MemberVisitsPanel memberId={id} />
+        </div>
+      )}
+
+      {activeTab === 'renewals' && id && (
+        <div className="bg-[#121212] border border-white/10 rounded-lg">
+          <MemberRenewalsPanel memberId={id} />
+        </div>
+      )}
+
     </div>
   );
 }

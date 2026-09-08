@@ -422,6 +422,22 @@ if (isset($routes[$method][$requestUri])) {
             $matched = true;
         }
     }
+    
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/visits$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'GET') {
+            (new \Controllers\MemberController())->getVisits((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/renewals$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'GET') {
+            (new \Controllers\MemberController())->getRenewals((int)$matches[1]);
+            $matched = true;
+        }
+    }
 
     if (preg_match('#^/api/admin/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::handle();

@@ -707,4 +707,81 @@ class MemberController {
             Response::error('Sunucu hatası, üye geri yüklenemedi.', 'INTERNAL_ERROR', 500);
         }
     }
+
+    public function getVisits($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $id = (int)$id;
+
+        $stmt = $this->db->prepare("SELECT id, deleted_at FROM members WHERE id = ?");
+        $stmt->execute([$id]);
+        $member = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$member) {
+            Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
+        }
+
+        try {
+            $sql = "
+                SELECT 
+                    mv.id, 
+                    mv.uuid, 
+                    mv.checked_in_at, 
+                    mv.checked_out_at,
+                    ci.display_name as checked_in_by_name,
+                    co.display_name as checked_out_by_name
+                FROM member_visits mv
+                LEFT JOIN admins ci ON mv.checked_in_by = ci.id
+                LEFT JOIN admins co ON mv.checked_out_by = co.id
+                WHERE mv.member_id = ?
+                ORDER BY mv.checked_in_at DESC
+                LIMIT 100
+            ";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$id]);
+            $visits = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            Response::json($visits);
+        } catch (\Throwable $e) {
+            Response::error('Ziyaret geçmişi alınamadı.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    public function getRenewals($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $id = (int)$id;
+
+        $stmt = $this->db->prepare("SELECT id, deleted_at FROM members WHERE id = ?");
+        $stmt->execute([$id]);
+        $member = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$member) {
+            Response::error('Üye bulunamadı.', 'NOT_FOUND', 404);
+        }
+
+        try {
+            $sql = "
+                SELECT 
+                    mr.id, 
+                    mr.uuid, 
+                    mr.previous_start_date, 
+                    mr.previous_end_date,
+                    mr.new_start_date,
+                    mr.new_end_date,
+                    mr.created_at,
+                    a.display_name as renewed_by_name
+                FROM membership_renewals mr
+                LEFT JOIN admins a ON mr.renewed_by = a.id
+                WHERE mr.member_id = ?
+                ORDER BY mr.created_at DESC
+                LIMIT 100
+            ";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$id]);
+            $renewals = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            Response::json($renewals);
+        } catch (\Throwable $e) {
+            Response::error('Yenileme geçmişi alınamadı.', 'INTERNAL_ERROR', 500);
+        }
+    }
 }
