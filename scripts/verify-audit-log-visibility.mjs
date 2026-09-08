@@ -128,6 +128,14 @@ checkInvariant("actor join audit row'u düşürmüyor", () => {
     }
 });
 
+checkInvariant("AuditLogController doesn't use non-existent admins columns (first_name, last_name)", () => {
+    const fnIdx = auditControllerSource.indexOf('public function index()');
+    const fnBody = extractBalanced(auditControllerSource, fnIdx);
+    if (/first_name|last_name/.test(fnBody)) {
+        throw new Error("AuditLogController references first_name or last_name which do not exist in admins schema");
+    }
+});
+
 checkInvariant("response IP/user_agent/raw metadata/email/phone içermiyor", () => {
     const fnIdx = auditControllerSource.indexOf('public function index()');
     const fnBody = extractBalanced(auditControllerSource, fnIdx);

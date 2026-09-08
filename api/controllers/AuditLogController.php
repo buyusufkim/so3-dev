@@ -57,8 +57,7 @@ class AuditLogController
                     a.entity_type, 
                     a.entity_id, 
                     a.admin_id,
-                    ad.first_name,
-                    ad.last_name,
+                    ad.display_name,
                     a.created_at
                 FROM audit_logs a
                 LEFT JOIN admins ad ON a.admin_id = ad.id
@@ -85,7 +84,7 @@ class AuditLogController
             foreach ($rows as $row) {
                 $actor = null;
                 if ($row['admin_id']) {
-                    $displayName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                    $displayName = trim($row['display_name'] ?? '');
                     if (empty($displayName)) $displayName = 'Bilinmeyen';
                     $actor = [
                         'admin_id' => (int)$row['admin_id'],
