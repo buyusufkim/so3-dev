@@ -8,18 +8,25 @@ interface MemberRenewalsPanelProps {
 
 function formatSafeDate(dateString: string | null | undefined): string {
   if (!dateString) return "-";
-  if (dateString.length === 10) {
-    const [y, m, d] = dateString.split("-");
+  
+  const dateRegex = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const dateMatch = dateString.match(dateRegex);
+  if (dateMatch) {
+    const [, y, m, d] = dateMatch;
+    if (Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return "-";
     return `${d}.${m}.${y}`;
   }
-  try {
-    const normalized = dateString.replace(" ", "T");
-    const d = new Date(normalized);
-    if (isNaN(d.getTime())) return "-";
-    return d.toLocaleString("tr-TR");
-  } catch {
-    return "-";
+
+  const datetimeRegex = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+  const datetimeMatch = dateString.match(datetimeRegex);
+  if (datetimeMatch) {
+    const [, y, m, d, hh, mm, ss] = datetimeMatch;
+    if (Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return "-";
+    if (Number(hh) > 23 || Number(mm) > 59 || Number(ss) > 59) return "-";
+    return `${d}.${m}.${y} ${hh}:${mm}:${ss}`;
   }
+
+  return "-";
 }
 
 export function MemberRenewalsPanel({ memberId }: MemberRenewalsPanelProps) {

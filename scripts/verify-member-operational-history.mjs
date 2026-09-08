@@ -164,7 +164,31 @@ checkInvariant("Frontend panel API calls and states", () => {
         throw new Error("Renewals panel API path incorrect");
     }
     if (!visitsPanelSource.includes("formatSafeDate") || !renewalsPanelSource.includes("formatSafeDate")) {
-        throw new Error("Missing safe date formatting");
+        throw new Error("Missing safe date formatting usage");
+    }
+    
+    // Strict datetime parser check (without new Date() conversion risk)
+    const strictRegex1 = `/^(\\d{4})-(\\d{2})-(\\d{2})$/`;
+    const strictRegex2 = `/^(\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/`;
+    
+    if (!visitsPanelSource.includes(strictRegex1) || !visitsPanelSource.includes(strictRegex2)) {
+         throw new Error("Visits panel missing strict DATE/DATETIME regex formatting");
+    }
+    if (!renewalsPanelSource.includes(strictRegex1) || !renewalsPanelSource.includes(strictRegex2)) {
+         throw new Error("Renewals panel missing strict DATE/DATETIME regex formatting");
+    }
+    
+    // Check absence of new Date( inside the formatter
+    const visitsFormatterIdx = visitsPanelSource.indexOf("function formatSafeDate");
+    const visitsFormatterBody = extractBalanced(visitsPanelSource, visitsFormatterIdx);
+    if (visitsFormatterBody && visitsFormatterBody.includes("new Date(")) {
+        throw new Error("Visits panel formatSafeDate uses raw new Date() parsing, breaking timezone determinism");
+    }
+    
+    const renewalsFormatterIdx = renewalsPanelSource.indexOf("function formatSafeDate");
+    const renewalsFormatterBody = extractBalanced(renewalsPanelSource, renewalsFormatterIdx);
+    if (renewalsFormatterBody && renewalsFormatterBody.includes("new Date(")) {
+        throw new Error("Renewals panel formatSafeDate uses raw new Date() parsing, breaking timezone determinism");
     }
 });
 
