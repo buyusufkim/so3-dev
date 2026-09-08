@@ -23,86 +23,148 @@ function checkInvariant(name, fn) {
     }
 }
 
-// Check Backend
+function extractBalanced(source, startIndex, openChar = '{', closeChar = '}') {
+    if (startIndex < 0) return null;
+    let braceCount = 0;
+    let inString = false;
+    let stringChar = '';
+    let inLineComment = false;
+    let inBlockComment = false;
+    
+    let blockStart = source.indexOf(openChar, startIndex);
+    if (blockStart === -1) return null;
+    
+    for (let i = blockStart; i < source.length; i++) {
+        let c = source[i];
+        let nextC = source[i+1];
+        
+        if (inLineComment) {
+            if (c === '\n') inLineComment = false;
+            continue;
+        }
+        if (inBlockComment) {
+            if (c === '*' && nextC === '/') {
+                inBlockComment = false;
+                i++;
+            }
+            continue;
+        }
+        if (inString) {
+            if (c === '\\') i++;
+            else if (c === stringChar) inString = false;
+            continue;
+        }
+        
+        if (c === '/' && nextC === '/') {
+            inLineComment = true;
+            i++;
+            continue;
+        }
+        if (c === '/' && nextC === '*') {
+            inBlockComment = true;
+            i++;
+            continue;
+        }
+        if (c === '"' || c === "'" || c === '`') {
+            inString = true;
+            stringChar = c;
+            continue;
+        }
+        
+        if (c === openChar) braceCount++;
+        if (c === closeChar) {
+            braceCount--;
+            if (braceCount === 0) return source.substring(blockStart, i + 1);
+        }
+    }
+    return null;
+}
+
 const memberControllerPath = path.resolve(rootDir, 'api/controllers/MemberController.php');
 const memberSource = fs.readFileSync(memberControllerPath, 'utf8');
 
-checkInvariant("MemberController has getVisits", () => {
-    if (!memberSource.includes("public function getVisits")) {
-        throw new Error("Missing getVisits in MemberController");
+checkInvariant("getVisits policy exact match", () => {
+    const fnIdx = memberSource.indexOf('public function getVisits');
+    if (fnIdx === -1) throw new Error("Missing getVisits in MemberController");
+    const fnBody = extractBalanced(memberSource, fnIdx);
+    
+    if (!/AuthMiddleware::hasRole\(\['super_admin',\s*'admin'\]\)/.test(fnBody)) {
+        throw new Error("Missing exact role guard in getVisits");
+    }
+    if (!/SELECT\s+id\s+FROM\s+members\s+WHERE\s+id\s+=\s+\?\s+AND\s+deleted_at\s+IS\s+NULL/.test(fnBody)) {
+        throw new Error("Missing exact deleted_at IS NULL member policy in getVisits");
+    }
+    if (!/WHERE\s+mv\.member_id\s+=\s+\?/.test(fnBody)) {
+        throw new Error("Missing member scope in getVisits query");
+    }
+    if (!/ORDER\s+BY\s+mv\.checked_in_at\s+DESC/.test(fnBody)) {
+        throw new Error("Missing deterministic ordering in getVisits");
+    }
+    if (!/LIMIT\s+\d+/.test(fnBody)) {
+        throw new Error("Missing bounds (LIMIT) in getVisits");
     }
 });
 
-checkInvariant("MemberController has getRenewals", () => {
-    if (!memberSource.includes("public function getRenewals")) {
-        throw new Error("Missing getRenewals in MemberController");
+checkInvariant("getRenewals policy exact match", () => {
+    const fnIdx = memberSource.indexOf('public function getRenewals');
+    if (fnIdx === -1) throw new Error("Missing getRenewals in MemberController");
+    const fnBody = extractBalanced(memberSource, fnIdx);
+    
+    if (!/AuthMiddleware::hasRole\(\['super_admin',\s*'admin'\]\)/.test(fnBody)) {
+        throw new Error("Missing exact role guard in getRenewals");
+    }
+    if (!/SELECT\s+id\s+FROM\s+members\s+WHERE\s+id\s+=\s+\?\s+AND\s+deleted_at\s+IS\s+NULL/.test(fnBody)) {
+        throw new Error("Missing exact deleted_at IS NULL member policy in getRenewals");
+    }
+    if (!/WHERE\s+mr\.member_id\s+=\s+\?/.test(fnBody)) {
+        throw new Error("Missing member scope in getRenewals query");
+    }
+    if (!/ORDER\s+BY\s+mr\.created_at\s+DESC/.test(fnBody)) {
+        throw new Error("Missing deterministic ordering in getRenewals");
+    }
+    if (!/LIMIT\s+\d+/.test(fnBody)) {
+        throw new Error("Missing bounds (LIMIT) in getRenewals");
     }
 });
 
-checkInvariant("getVisits query is member scoped", () => {
-    if (!memberSource.match(/SELECT.*?FROM member_visits.*?WHERE mv\.member_id = \?/s)) {
-        throw new Error("Missing member_id scope in getVisits");
-    }
-});
-
-checkInvariant("getRenewals query is member scoped", () => {
-    if (!memberSource.match(/SELECT.*?FROM membership_renewals.*?WHERE mr\.member_id = \?/s)) {
-        throw new Error("Missing member_id scope in getRenewals");
-    }
-});
-
-checkInvariant("Role protection exists for new endpoints", () => {
-    const visitsBlock = memberSource.substring(memberSource.indexOf("public function getVisits"));
-    const renewalsBlock = memberSource.substring(memberSource.indexOf("public function getRenewals"));
-    if (!visitsBlock.includes("AuthMiddleware::hasRole(['super_admin', 'admin'])")) {
-        throw new Error("Missing AuthMiddleware for getVisits");
-    }
-    if (!renewalsBlock.includes("AuthMiddleware::hasRole(['super_admin', 'admin'])")) {
-        throw new Error("Missing AuthMiddleware for getRenewals");
-    }
-});
-
-// Check Router
 const indexPath = path.resolve(rootDir, 'api/index.php');
 const indexSource = fs.readFileSync(indexPath, 'utf8');
 
-checkInvariant("Router contains new history endpoints", () => {
-    if (!indexSource.includes("/api/admin/members/([1-9]\\d*)/visits")) {
-        throw new Error("Missing visits route");
+checkInvariant("Router exact endpoint definitions", () => {
+    if (!indexSource.includes("preg_match('#^/api/admin/members/([1-9]\\d*)/visits$#', $requestUri")) {
+        throw new Error("Missing exact visits GET route regex");
     }
-    if (!indexSource.includes("/api/admin/members/([1-9]\\d*)/renewals")) {
-        throw new Error("Missing renewals route");
+    if (!indexSource.includes("preg_match('#^/api/admin/members/([1-9]\\d*)/renewals$#', $requestUri")) {
+        throw new Error("Missing exact renewals GET route regex");
     }
 });
 
-// Check Frontend
 const adminMemberEditorPath = path.resolve(rootDir, 'src/admin/pages/members/AdminMemberEditor.tsx');
 const adminMemberEditorSource = fs.readFileSync(adminMemberEditorPath, 'utf8');
 
-checkInvariant("AdminMemberEditor has activeTab state", () => {
-    if (!adminMemberEditorSource.includes("const [activeTab, setActiveTab] = useState")) {
-        throw new Error("Missing activeTab state");
+checkInvariant("AdminMemberEditor integration", () => {
+    if (!adminMemberEditorSource.includes("MemberVisitsPanel memberId={id}")) {
+        throw new Error("MemberVisitsPanel not mounted with memberId");
     }
-});
-
-checkInvariant("AdminMemberEditor imports panels", () => {
-    if (!adminMemberEditorSource.includes("MemberVisitsPanel") || !adminMemberEditorSource.includes("MemberRenewalsPanel")) {
-        throw new Error("Missing panel imports or usage");
+    if (!adminMemberEditorSource.includes("MemberRenewalsPanel memberId={id}")) {
+        throw new Error("MemberRenewalsPanel not mounted with memberId");
     }
 });
 
 const visitsPanelPath = path.resolve(rootDir, 'src/admin/pages/members/MemberVisitsPanel.tsx');
 const renewalsPanelPath = path.resolve(rootDir, 'src/admin/pages/members/MemberRenewalsPanel.tsx');
+const visitsPanelSource = fs.readFileSync(visitsPanelPath, 'utf8');
+const renewalsPanelSource = fs.readFileSync(renewalsPanelPath, 'utf8');
 
-checkInvariant("Panels handle loading and error states", () => {
-    const visitsPanelSource = fs.readFileSync(visitsPanelPath, 'utf8');
-    const renewalsPanelSource = fs.readFileSync(renewalsPanelPath, 'utf8');
-    
-    if (!visitsPanelSource.includes("if (loading)") || !visitsPanelSource.includes("if (error)")) {
-        throw new Error("Missing loading/error handling in visits panel");
+checkInvariant("Frontend panel API calls and states", () => {
+    if (!visitsPanelSource.includes("`/api/admin/members/${memberId}/visits`")) {
+        throw new Error("Visits panel API path incorrect");
     }
-    if (!renewalsPanelSource.includes("if (loading)") || !renewalsPanelSource.includes("if (error)")) {
-        throw new Error("Missing loading/error handling in renewals panel");
+    if (!renewalsPanelSource.includes("`/api/admin/members/${memberId}/renewals`")) {
+        throw new Error("Renewals panel API path incorrect");
+    }
+    if (!visitsPanelSource.includes("formatSafeDate") || !renewalsPanelSource.includes("formatSafeDate")) {
+        throw new Error("Missing safe date formatting");
     }
 });
 

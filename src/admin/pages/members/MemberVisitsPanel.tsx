@@ -6,6 +6,22 @@ interface MemberVisitsPanelProps {
   memberId: string;
 }
 
+function formatSafeDate(dateString: string | null | undefined): string {
+  if (!dateString) return "-";
+  if (dateString.length === 10) {
+    const [y, m, d] = dateString.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  try {
+    const normalized = dateString.replace(" ", "T");
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return "-";
+    return d.toLocaleString("tr-TR");
+  } catch {
+    return "-";
+  }
+}
+
 export function MemberVisitsPanel({ memberId }: MemberVisitsPanelProps) {
   const [visits, setVisits] = useState<MemberVisit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +35,7 @@ export function MemberVisitsPanel({ memberId }: MemberVisitsPanelProps) {
     try {
       setLoading(true);
       setError(null);
-      const data = (await apiClient.get(`/admin/members/${memberId}/visits`)) as MemberVisit[];
+      const data = (await apiClient.get(`/api/admin/members/${memberId}/visits`)) as MemberVisit[];
       setVisits(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -60,13 +76,13 @@ export function MemberVisitsPanel({ memberId }: MemberVisitsPanelProps) {
           {visits.map((visit) => (
             <tr key={visit.id} className="hover:bg-white/5 transition-colors">
               <td className="p-4 whitespace-nowrap text-white">
-                {new Date(visit.checked_in_at).toLocaleString("tr-TR")}
+                {formatSafeDate(visit.checked_in_at)}
               </td>
               <td className="p-4 whitespace-nowrap text-white/70">
                 {visit.checked_in_by_name || "-"}
               </td>
               <td className="p-4 whitespace-nowrap text-white">
-                {visit.checked_out_at ? new Date(visit.checked_out_at).toLocaleString("tr-TR") : "-"}
+                {formatSafeDate(visit.checked_out_at)}
               </td>
               <td className="p-4 whitespace-nowrap text-white/70">
                 {visit.checked_out_by_name || "-"}

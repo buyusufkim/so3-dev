@@ -712,7 +712,7 @@ class MemberController {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         $id = (int)$id;
 
-        $stmt = $this->db->prepare("SELECT id, deleted_at FROM members WHERE id = ?");
+        $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND deleted_at IS NULL");
         $stmt->execute([$id]);
         $member = $stmt->fetch(\PDO::FETCH_ASSOC);
 
@@ -750,7 +750,7 @@ class MemberController {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         $id = (int)$id;
 
-        $stmt = $this->db->prepare("SELECT id, deleted_at FROM members WHERE id = ?");
+        $stmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND deleted_at IS NULL");
         $stmt->execute([$id]);
         $member = $stmt->fetch(\PDO::FETCH_ASSOC);
 

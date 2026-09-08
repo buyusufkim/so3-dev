@@ -6,6 +6,22 @@ interface MemberRenewalsPanelProps {
   memberId: string;
 }
 
+function formatSafeDate(dateString: string | null | undefined): string {
+  if (!dateString) return "-";
+  if (dateString.length === 10) {
+    const [y, m, d] = dateString.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  try {
+    const normalized = dateString.replace(" ", "T");
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return "-";
+    return d.toLocaleString("tr-TR");
+  } catch {
+    return "-";
+  }
+}
+
 export function MemberRenewalsPanel({ memberId }: MemberRenewalsPanelProps) {
   const [renewals, setRenewals] = useState<MembershipRenewal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +35,7 @@ export function MemberRenewalsPanel({ memberId }: MemberRenewalsPanelProps) {
     try {
       setLoading(true);
       setError(null);
-      const data = (await apiClient.get(`/admin/members/${memberId}/renewals`)) as MembershipRenewal[];
+      const data = (await apiClient.get(`/api/admin/members/${memberId}/renewals`)) as MembershipRenewal[];
       setRenewals(data);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -61,19 +77,19 @@ export function MemberRenewalsPanel({ memberId }: MemberRenewalsPanelProps) {
           {renewals.map((renewal) => (
             <tr key={renewal.id} className="hover:bg-white/5 transition-colors">
               <td className="p-4 whitespace-nowrap text-white">
-                {new Date(renewal.created_at).toLocaleString("tr-TR")}
+                {formatSafeDate(renewal.created_at)}
               </td>
               <td className="p-4 whitespace-nowrap text-white/70">
-                {renewal.previous_start_date ? new Date(renewal.previous_start_date).toLocaleDateString("tr-TR") : "-"}
+                {formatSafeDate(renewal.previous_start_date)}
               </td>
               <td className="p-4 whitespace-nowrap text-white/70">
-                {renewal.previous_end_date ? new Date(renewal.previous_end_date).toLocaleDateString("tr-TR") : "-"}
+                {formatSafeDate(renewal.previous_end_date)}
               </td>
               <td className="p-4 whitespace-nowrap text-white">
-                {new Date(renewal.new_start_date).toLocaleDateString("tr-TR")}
+                {formatSafeDate(renewal.new_start_date)}
               </td>
               <td className="p-4 whitespace-nowrap text-white font-medium">
-                {new Date(renewal.new_end_date).toLocaleDateString("tr-TR")}
+                {formatSafeDate(renewal.new_end_date)}
               </td>
               <td className="p-4 whitespace-nowrap text-white/70">
                 {renewal.renewed_by_name || "-"}
