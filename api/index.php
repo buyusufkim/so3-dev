@@ -80,6 +80,10 @@ $routes = [
             AuthMiddleware::handle();
             (new \Controllers\TrainerAccountController())->index();
         },
+        '/api/admin/staff-accounts' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\StaffAccountController())->index();
+        },
         '/api/admin/members' => function() {
             AuthMiddleware::handle();
             (new \Controllers\MemberController())->index();
@@ -163,6 +167,10 @@ $routes = [
         '/api/admin/trainer-accounts' => function() {
             AuthMiddleware::handle();
             (new \Controllers\TrainerAccountController())->create();
+        },
+        '/api/admin/staff-accounts' => function() {
+            AuthMiddleware::handle();
+            (new \Controllers\StaffAccountController())->create();
         },
         '/api/admin/members' => function() {
             AuthMiddleware::handle();
@@ -402,6 +410,30 @@ if (isset($routes[$method][$requestUri])) {
         AuthMiddleware::handle();
         if ($method === 'POST') {
             (new \Controllers\TrainerAccountController())->resetPassword((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/staff-accounts/([1-9]\d*)/status$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\StaffAccountController())->updateStatus((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/staff-accounts/([1-9]\d*)/role$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            (new \Controllers\StaffAccountController())->updateRole((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/staff-accounts/([1-9]\d*)/reset-password$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST') {
+            (new \Controllers\StaffAccountController())->resetPassword((int)$matches[1]);
             $matched = true;
         }
     }

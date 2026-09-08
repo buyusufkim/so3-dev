@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "verify:runtime-seo": "node scripts/verify-runtime-seo.mjs",
+    "verify:staff-account-management": "node scripts/verify-staff-account-management.mjs",
     "verify:trainer-progress-notes": "node scripts/verify-trainer-progress-notes.mjs",
     "verify:trainer-program-exercises": "node scripts/verify-trainer-program-exercises.mjs",
     "verify:trainer-training-programs": "node scripts/verify-trainer-training-programs.mjs",
