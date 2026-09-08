@@ -542,8 +542,53 @@ class TrainerController {
             $stmt = $this->db->prepare("DELETE FROM media_usages WHERE entity_type = 'trainer' AND entity_id = ?");
             $stmt->execute([$id]);
 
+            $now = new \DateTime('now', new \DateTimeZone('Europe/Istanbul'));
+            $nowStr = $now->format('Y-m-d H:i:s');
+            
+            $appStmt = $this->db->prepare("SELECT id, status FROM appointments WHERE trainer_id = ? AND status = 'scheduled' AND ends_at > ? FOR UPDATE");
+            $appStmt->execute([$id, $nowStr]);
+            $appsToCancel = $appStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            if (!empty($appsToCancel)) {
+                $cancelReason = "Eğitmenin sistemden kaldırılması";
+                
+                $updStmt = $this->db->prepare("
+                    UPDATE appointments 
+                    SET status = 'cancelled', 
+                        cancellation_reason = ?, 
+                        cancelled_by = ?, 
+                        cancelled_at = ?, 
+                        updated_by = ?
+                    WHERE trainer_id = ? 
+                      AND status = 'scheduled' 
+                      AND ends_at > ?
+                ");
+                $updStmt->execute([$cancelReason, $adminId, $nowStr, $adminId, $id, $nowStr]);
+            }
+
             $this->db->commit();
             $this->logAudit('trainer.delete', $id, $adminId);
+
+            if (!empty($appsToCancel)) {
+                foreach ($appsToCancel as $app) {
+                    try {
+                        \Core\AuditLogger::log(
+                            'appointment.cancelled',
+                            $adminId,
+                            'appointment',
+                            $app['id'],
+                            [
+                                'previous_status' => $app['status'],
+                                'new_status' => 'cancelled',
+                                'cancelled_at' => $nowStr,
+                                'reason' => 'trainer_deleted'
+                            ]
+                        );
+                    } catch (\Throwable $e) {
+                        error_log('AuditLogger failed during trainer delete appointment cascade: ' . $e->getMessage());
+                    }
+                }
+            }
 
             Response::json(['message' => 'Eğitmen silindi.']);
         } catch (Throwable $e) {
