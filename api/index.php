@@ -44,6 +44,10 @@ $routes = [
         },
         '/api/auth/csrf' => [AuthController::class, 'getCsrf'],
         '/api/auth/me' => [AuthController::class, 'me'],
+        '/api/admin/dashboard/operations' => function() {
+            AuthMiddleware::handle();
+            (new AdminController())->operationalDashboard();
+        },
         '/api/admin/dashboard' => function() {
             AuthMiddleware::handle();
             (new AdminController())->dashboard();

@@ -27,7 +27,8 @@
     "verify:appointment-terminalization": "node scripts/verify-appointment-terminalization.mjs",
     "verify:appointment-lifecycle": "node scripts/verify-appointment-lifecycle.mjs",
     "verify:appointment-create-options": "node scripts/verify-appointment-create-options.mjs",
-    "verify:member-operational-history": "node scripts/verify-member-operational-history.mjs"
+    "verify:member-operational-history": "node scripts/verify-member-operational-history.mjs",
+    "verify:operational-admin-dashboard": "node scripts/verify-operational-admin-dashboard.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
