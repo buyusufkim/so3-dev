@@ -26,10 +26,13 @@ class SessionPackageController
         if (!empty($unknownParams)) {
             Response::error('Unknown query parameter(s): ' . implode(', ', $unknownParams), 'VALIDATION_ERROR', 422);
         }
+        if (!empty($unknownParams)) {
+            Response::error('Unknown query parameter(s): ' . implode(', ', $unknownParams), 'VALIDATION_ERROR', 422);
+        }
 
         $page = 1;
         if (isset($_GET['page'])) {
-            if (!ctype_digit((string)$_GET['page']) || (int)$_GET['page'] < 1) {
+            if (is_array($_GET['page']) || !is_scalar($_GET['page']) || !ctype_digit((string)$_GET['page']) || (int)$_GET['page'] < 1) {
                 Response::error('Page must be a positive integer', 'VALIDATION_ERROR', 422);
             }
             $page = (int)$_GET['page'];
@@ -37,7 +40,7 @@ class SessionPackageController
 
         $perPage = 20;
         if (isset($_GET['per_page'])) {
-            if (!ctype_digit((string)$_GET['per_page']) || (int)$_GET['per_page'] < 1 || (int)$_GET['per_page'] > 100) {
+            if (is_array($_GET['per_page']) || !is_scalar($_GET['per_page']) || !ctype_digit((string)$_GET['per_page']) || (int)$_GET['per_page'] < 1 || (int)$_GET['per_page'] > 100) {
                 Response::error('Per page must be a positive integer between 1 and 100', 'VALIDATION_ERROR', 422);
             }
             $perPage = (int)$_GET['per_page'];
@@ -49,7 +52,7 @@ class SessionPackageController
         $params = [];
 
         if (isset($_GET['status'])) {
-            if (!in_array($_GET['status'], ['active', 'inactive'])) {
+            if (!is_string($_GET['status']) || !in_array($_GET['status'], ['active', 'inactive'])) {
                 Response::error('Status must be exact active or inactive', 'VALIDATION_ERROR', 422);
             }
             $conditions[] = "status = :status";
@@ -57,17 +60,19 @@ class SessionPackageController
         }
 
         if (isset($_GET['q'])) {
+            if (!is_string($_GET['q'])) {
+                Response::error('Search query must be a string', 'VALIDATION_ERROR', 422);
+            }
             $q = trim($_GET['q']);
             if (strlen($q) > 255) {
                 Response::error('Search query is too long', 'VALIDATION_ERROR', 422);
             }
             if ($q !== '') {
-                $conditions[] = "name LIKE :q";
+                $conditions[] = "name LIKE :q ESCAPE '\\'";
                 $params[':q'] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
             }
         }
-
-        $whereClause = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
+$whereClause = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
         $countStmt = $this->db->prepare("SELECT COUNT(*) FROM session_packages $whereClause");
         $countStmt->execute($params);
@@ -128,7 +133,11 @@ class SessionPackageController
             }
         }
 
-        $name = isset($input['name']) ? trim($input['name']) : '';
+        
+        if (!isset($input['name']) || !is_string($input['name'])) {
+            Response::error('Name must be a string', 'VALIDATION_ERROR', 422);
+        }
+        $name = trim($input['name']);
         if (strlen($name) < 1 || strlen($name) > 150) {
             Response::error('Name must be between 1 and 150 characters', 'VALIDATION_ERROR', 422);
         }
@@ -148,13 +157,12 @@ class SessionPackageController
 
         $status = 'active';
         if (isset($input['status'])) {
-            if (!in_array($input['status'], ['active', 'inactive'])) {
+            if (!is_string($input['status']) || !in_array($input['status'], ['active', 'inactive'], true)) {
                 Response::error('Status must be active or inactive', 'VALIDATION_ERROR', 422);
             }
             $status = $input['status'];
         }
-
-        try {
+try {
             $this->db->beginTransaction();
 
             $uuid = $this->generateUuid();
@@ -227,7 +235,11 @@ class SessionPackageController
         $params = [':id' => $id, ':updated_by' => $adminId];
         $changedFields = [];
 
-        if (isset($input['name'])) {
+        
+        if (array_key_exists('name', $input)) {
+            if (!is_string($input['name'])) {
+                Response::error('Name must be a string', 'VALIDATION_ERROR', 422);
+            }
             $name = trim($input['name']);
             if (strlen($name) < 1 || strlen($name) > 150) {
                 Response::error('Name must be between 1 and 150 characters', 'VALIDATION_ERROR', 422);
@@ -239,7 +251,7 @@ class SessionPackageController
             }
         }
 
-        if (isset($input['session_count'])) {
+        if (array_key_exists('session_count', $input)) {
             if (!is_int($input['session_count']) || $input['session_count'] <= 0) {
                 Response::error('Session count must be a positive integer', 'VALIDATION_ERROR', 422);
             }
@@ -262,8 +274,8 @@ class SessionPackageController
             }
         }
 
-        if (isset($input['status'])) {
-            if (!in_array($input['status'], ['active', 'inactive'])) {
+        if (array_key_exists('status', $input)) {
+            if (!is_string($input['status']) || !in_array($input['status'], ['active', 'inactive'], true)) {
                 Response::error('Status must be active or inactive', 'VALIDATION_ERROR', 422);
             }
             if ($input['status'] !== $package['status']) {
@@ -272,8 +284,7 @@ class SessionPackageController
                 $changedFields['status'] = $input['status'];
             }
         }
-
-        if (empty($updates)) {
+if (empty($updates)) {
             $this->returnPackage($id);
             return;
         }
@@ -319,11 +330,7 @@ class SessionPackageController
             $package['validity_days'] = $package['validity_days'] !== null ? (int)$package['validity_days'] : null;
         }
 
-        if ($statusCode === 201) {
-            http_response_code(201);
-        }
-        
-        Response::json($package);
+        Response::json($package, $statusCode);
     }
 
     private function generateUuid() {

@@ -117,12 +117,13 @@ class MemberSessionPackageController
             }
         }
 
-        if (empty($input['session_package_id']) || !is_int($input['session_package_id'])) {
-            Response::error('session_package_id must be an integer', 'VALIDATION_ERROR', 422);
+        
+        if (!isset($input['session_package_id']) || !is_int($input['session_package_id']) || $input['session_package_id'] <= 0) {
+            Response::error('session_package_id must be a positive integer', 'VALIDATION_ERROR', 422);
         }
         
-        if (empty($input['valid_from'])) {
-            Response::error('valid_from must be a valid date YYYY-MM-DD', 'VALIDATION_ERROR', 422);
+        if (!isset($input['valid_from']) || !is_string($input['valid_from'])) {
+            Response::error('valid_from must be a string', 'VALIDATION_ERROR', 422);
         }
 
         // Strict date validation
@@ -130,6 +131,7 @@ class MemberSessionPackageController
         if (!$d || $d->format('Y-m-d') !== $input['valid_from']) {
             Response::error('valid_from must be a valid calendar date YYYY-MM-DD', 'VALIDATION_ERROR', 422);
         }
+
 
         try {
             $this->db->beginTransaction();
@@ -219,14 +221,16 @@ class MemberSessionPackageController
             }
         }
 
-        if (empty($input['reason']) || !is_string($input['reason'])) {
-            Response::error('Reason is required', 'VALIDATION_ERROR', 422);
+        
+        if (!isset($input['reason']) || !is_string($input['reason'])) {
+            Response::error('Reason is required and must be a string', 'VALIDATION_ERROR', 422);
         }
         
         $reason = trim($input['reason']);
-        if (strlen($reason) < 1 || strlen($reason) > 255) {
+        if (mb_strlen($reason, 'UTF-8') < 1 || mb_strlen($reason, 'UTF-8') > 255) {
             Response::error('Reason must be between 1 and 255 characters', 'VALIDATION_ERROR', 422);
         }
+
 
         try {
             $this->db->beginTransaction();
@@ -370,11 +374,7 @@ class MemberSessionPackageController
             $pkg['effective_status'] = $effectiveStatus;
         }
 
-        if ($statusCode === 201) {
-            http_response_code(201);
-        }
-        
-        Response::json($pkg);
+        Response::json($pkg, $statusCode);
     }
 
     private function generateUuid() {

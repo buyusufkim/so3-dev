@@ -42,6 +42,14 @@ if (fs.existsSync(sessionPackageCtrl)) {
     check(spContent.includes('catch (\\Throwable $e)'), 'SessionPackageController mutations catch \\Throwable');
     check(spContent.includes('if ($this->db->inTransaction()) {'), 'SessionPackageController rollback guarded by inTransaction()');
     check(spContent.includes('random_bytes(16)'), 'SessionPackageController UUID generation uses random_bytes(16)');
+
+    // F.17B.1.2 NEW CHECKS (SessionPackageController)
+    check(!spContent.includes('http_response_code(201)'), 'SessionPackageController does not use manual http_response_code(201)');
+    check(spContent.includes('Response::json($package, $statusCode)'), 'SessionPackageController uses canonical Response::json with status code');
+    check(spContent.match(/is_array\(\$_GET\[.*?\]\)/) !== null || spContent.match(/!is_string\(\$_GET\[.*?\]\)/) !== null || spContent.match(/!is_scalar\(\$_GET\[.*?\]\)/) !== null, 'SessionPackageController GET validation checks for scalar/string to avoid array inputs');
+    check(spContent.match(/!isset\(\$input\['name'\]\)\s*\|\|\s*!is_string\(\$input\['name'\]\)/) !== null, 'SessionPackageController POST validation strictly checks if name is string before trimming');
+    check(spContent.match(/!is_string\(\$input\['status'\]\)\s*\|\|\s*!in_array\(\$input\['status'\]/) !== null, 'SessionPackageController POST validation strictly checks if status is string');
+
 }
 
 check(fs.existsSync(memberSessionPackageCtrl), 'MemberSessionPackageController exists');
@@ -77,6 +85,15 @@ if (fs.existsSync(memberSessionPackageCtrl)) {
     check(mspContent.includes('if ($this->db->inTransaction()) {'), 'MemberSessionPackageController rollback guarded by inTransaction()');
     check(mspContent.includes('SELECT id FROM member_session_packages WHERE id = :id'), 'Ledger endpoint checks package existence (404 behavior)');
     check(mspContent.includes('random_bytes(16)'), 'MemberSessionPackageController UUID generation uses random_bytes(16)');
+
+    // F.17B.1.2 NEW CHECKS (MemberSessionPackageController)
+    check(!mspContent.includes('http_response_code(201)'), 'MemberSessionPackageController does not use manual http_response_code(201)');
+    check(mspContent.includes('Response::json($pkg, $statusCode)'), 'MemberSessionPackageController uses canonical Response::json with status code');
+    check(mspContent.match(/!isset\(\$input\['session_package_id'\]\)\s*\|\|\s*!is_int\(\$input\['session_package_id'\]\)\s*\|\|\s*\$input\['session_package_id'\]\s*<=\s*0/) !== null, 'MemberSessionPackageController validation strictly checks if session_package_id is positive integer');
+    check(mspContent.match(/!isset\(\$input\['valid_from'\]\)\s*\|\|\s*!is_string\(\$input\['valid_from'\]\)/) !== null, 'MemberSessionPackageController validation strictly checks if valid_from is string before DateTime');
+    check(mspContent.match(/!isset\(\$input\['reason'\]\)\s*\|\|\s*!is_string\(\$input\['reason'\]\)/) !== null, 'MemberSessionPackageController validation strictly checks if reason is string before trimming');
+    check(mspContent.includes('mb_strlen($reason, \'UTF-8\')'), 'MemberSessionPackageController uses mb_strlen for cancel reason');
+
 }
 
 if (fs.existsSync(indexPhp)) {
