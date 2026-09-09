@@ -36,14 +36,21 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
                      endpoint.startsWith('/api/admin/members') ||
                      endpoint.match(/^\/api\/admin\/member-measurements(?:\/|$)/) ||
                      endpoint.match(/^\/api\/admin\/member-progress-notes(?:\/|$)/) ||
+                     endpoint.match(/^\/api\/trainer\/member-measurements(?:\/|$)/) ||
+                     endpoint.match(/^\/api\/trainer\/member-progress-notes(?:\/|$)/) ||
                      endpoint.startsWith('/api/admin/trainers') ||
                      endpoint.startsWith('/api/admin/trainer-accounts') ||
+                     endpoint.startsWith('/api/admin/staff-accounts') ||
                      endpoint.startsWith('/api/admin/dashboard') ||
                      endpoint.startsWith('/api/trainer/members') ||
                      endpoint.startsWith('/api/trainer/training-programs') ||
                      endpoint.startsWith('/api/trainer/program-exercises') ||
                      endpoint.startsWith('/api/admin/training-programs') ||
-                     endpoint.startsWith('/api/admin/program-exercises');
+                     endpoint.startsWith('/api/admin/program-exercises') ||
+                     endpoint.startsWith('/api/reception/') ||
+                     endpoint.startsWith('/api/admin/appointments') ||
+                     endpoint.startsWith('/api/trainer/appointments');
+                     
                      
     if (isTarget) {
       const modulePath = "./adminDevFixtures.ts";

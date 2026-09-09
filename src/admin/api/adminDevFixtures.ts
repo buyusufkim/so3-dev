@@ -966,12 +966,13 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     return createResponse({ data: { success: true } });
   }
   // --- Member Measurements Endpoints ---
-  const measurementListMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/measurements$/);
+  const measurementListMatch = path.match(/^\/api\/(admin|trainer)\/members\/([1-9]\d*)\/measurements$/);
   if (measurementListMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+    const scope = measurementListMatch[1];
+    if (scope === 'admin' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
       return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
     }
-    const memberId = parseInt(measurementListMatch[1], 10);
+    const memberId = parseInt(measurementListMatch[2], 10);
     const member = mockMembers.find(m => m.id === memberId);
     if (!member || member.deleted_at) {
       return createError('Member not found', 404, 'NOT_FOUND');
@@ -1096,13 +1097,14 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
-  const measurementActionMatch = path.match(/^\/api\/admin\/member-measurements\/([1-9]\d*)(?:\/([^/]+))?$/);
+  const measurementActionMatch = path.match(/^\/api\/(admin|trainer)\/member-measurements\/([1-9]\d*)(?:\/([^/]+))?$/);
   if (measurementActionMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+    const scope = measurementActionMatch[1];
+    if (scope === 'admin' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
       return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
     }
-    const id = parseInt(measurementActionMatch[1], 10);
-    const action = measurementActionMatch[2];
+    const id = parseInt(measurementActionMatch[2], 10);
+    const action = measurementActionMatch[3];
     const itemIndex = mockMeasurements.findIndex(m => m.id === id);
     if (itemIndex === -1) return createError('Measurement not found', 404, 'NOT_FOUND');
     const item = mockMeasurements[itemIndex];
@@ -1201,12 +1203,13 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
 
   // --- Member Progress Notes Endpoints ---
-  const pnListMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/progress-notes$/);
+  const pnListMatch = path.match(/^\/api\/(admin|trainer)\/members\/([1-9]\d*)\/progress-notes$/);
   if (pnListMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+    const scope = pnListMatch[1];
+    if (scope === 'admin' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
       return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
     }
-    const memberId = parseInt(pnListMatch[1], 10);
+    const memberId = parseInt(pnListMatch[2], 10);
     const member = mockMembers.find(m => m.id === memberId);
     if (!member || member.deleted_at) {
       return createError('Member not found', 404, 'NOT_FOUND');
@@ -1299,13 +1302,14 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
   }
 
-  const pnActionMatch = path.match(/^\/api\/admin\/member-progress-notes\/([1-9]\d*)(?:\/([^/]+))?$/);
+  const pnActionMatch = path.match(/^\/api\/(admin|trainer)\/member-progress-notes\/([1-9]\d*)(?:\/([^/]+))?$/);
   if (pnActionMatch) {
-    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+    const scope = pnActionMatch[1];
+    if (scope === 'admin' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
       return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
     }
-    const id = parseInt(pnActionMatch[1], 10);
-    const action = pnActionMatch[2];
+    const id = parseInt(pnActionMatch[2], 10);
+    const action = pnActionMatch[3];
     const itemIndex = mockProgressNotes.findIndex(m => m.id === id);
     if (itemIndex === -1) return createError('Progress note not found', 404, 'NOT_FOUND');
     const item = mockProgressNotes[itemIndex];
@@ -1979,6 +1983,65 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   }
 
 
-  return createError('Not implemented in mock', 404);
 
+  // --- Reception Parity ---
+  if (path === '/api/reception/occupancy' && method === 'GET') {
+    return createResponse({ data: { current_count: 0, stale_count: 0, items: [] } });
+  }
+  if (path.startsWith('/api/reception/members') && !path.includes('check-in') && !path.includes('check-out') && !path.includes('renew') && method === 'GET') {
+    return createResponse({ data: { items: [] } });
+  }
+  const checkInMatch = path.match(/^\/api\/reception\/members\/([1-9]\d*)\/check-in$/);
+  if (checkInMatch && method === 'POST') {
+    return createResponse({ data: { visit: { id: 1, uuid: 'v-1', member_id: parseInt(checkInMatch[1], 10), checked_in_at: new Date().toISOString() } } });
+  }
+  const checkOutMatch = path.match(/^\/api\/reception\/members\/([1-9]\d*)\/check-out$/);
+  if (checkOutMatch && method === 'POST') {
+    return createResponse({ data: { visit: { id: 1, uuid: 'v-1', member_id: parseInt(checkOutMatch[1], 10), checked_in_at: new Date().toISOString(), checked_out_at: new Date().toISOString() } } });
+  }
+  const renewMatch = path.match(/^\/api\/reception\/members\/([1-9]\d*)\/renew$/);
+  if (renewMatch && method === 'POST') {
+    const payload = typeof reqBody === 'object' ? reqBody : {};
+    return createResponse({ data: { renewal: { id: 1, uuid: 'r-1', member_id: parseInt(renewMatch[1], 10), previous_start_date: null, previous_end_date: null, new_start_date: payload?.new_start_date || '2026-01-01', new_end_date: payload?.new_end_date || '2027-01-01', created_at: new Date().toISOString() } } });
+  }
+
+  // --- Appointments Parity ---
+  const appointmentMatch = path.match(/^\/api\/(admin|reception|trainer)\/appointments(?:\/([1-9]\d*))?(?:\/(reschedule|cancel|complete|no-show))?$/);
+  if (appointmentMatch) {
+    const action = appointmentMatch[3];
+    if (method === 'GET') {
+      return createResponse({ data: { items: [] } });
+    }
+    if (method === 'POST') {
+      return createResponse({ data: { appointment: { id: 1, uuid: 'a-1', member_id: 1, trainer_id: 1, starts_at: new Date().toISOString(), ends_at: new Date().toISOString(), status: 'scheduled' } } });
+    }
+    if (method === 'PATCH') {
+      return createResponse({ data: { appointment: { id: parseInt(appointmentMatch[2] || '1', 10), uuid: 'a-1', member_id: 1, trainer_id: 1, starts_at: new Date().toISOString(), ends_at: new Date().toISOString(), status: action === 'complete' ? 'completed' : action === 'cancel' ? 'cancelled' : 'scheduled' } } });
+    }
+  }
+  
+  if (path === '/api/reception/appointment-trainers' && method === 'GET') {
+     return createResponse({ data: [] });
+  }
+
+  // --- Staff Accounts Parity ---
+  const staffAccountMatch = path.match(/^\/api\/admin\/staff-accounts(?:\/([1-9]\d*))?(?:\/(status|role|reset-password))?$/);
+  if (staffAccountMatch) {
+    if (currentDevRole !== 'super_admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    if (method === 'GET') {
+      return createResponse({ data: { items: [] } });
+    }
+    if (method === 'POST' && !staffAccountMatch[2]) {
+      const p = typeof reqBody === 'object' ? reqBody : {};
+      return createResponse({ data: { id: Date.now(), username: p?.username || 'mock', email: p?.email || 'mock@mock.com', display_name: p?.display_name || 'Mock', role: p?.role || 'reception', status: 'active' } });
+    }
+    if (method === 'PATCH' || (method === 'POST' && staffAccountMatch[2] === 'reset-password')) {
+      return createResponse({ data: { message: 'İşlem başarılı' } });
+    }
+  }
+
+  return createError('Not implemented in mock', 404);
 }
+
