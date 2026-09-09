@@ -30,12 +30,12 @@ if (!adminDevFixturesContent.includes('return createResponse({ data: { items } }
 }
 
 // 4. appointment GET list canonical {items:[{appointment,member,trainer}]}
-if (!adminDevFixturesContent.includes('return { appointment: a, member:') || !adminDevFixturesContent.includes('trainer: { id: trainer.id')) {
+if (!adminDevFixturesContent.includes('return { appointment: a, member:') || !adminDevFixturesContent.includes('trainer: { id: trainer.id') || !adminDevFixturesContent.includes('uuid: (\'uuid\' in trainer') || !adminDevFixturesContent.includes('uuid: (\'uuid\' in member')) {
   errors.push("appointment list GET does not return proper {appointment, member, trainer} format.");
 }
 
 // 5. create request values to response
-if (!adminDevFixturesContent.includes('starts_at: p.starts_at') || !adminDevFixturesContent.includes('ends_at: p.ends_at')) {
+if (!adminDevFixturesContent.includes('starts_at: String(p.starts_at') || !adminDevFixturesContent.includes('ends_at: String(p.ends_at')) {
   errors.push("create does not map starts_at/ends_at properly.");
 }
 

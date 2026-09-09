@@ -2032,7 +2032,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       const items = mockAppointments.map(a => {
         const member = mockMembers.find(m => m.id === a.member_id) || { id: a.member_id, uuid: 'm1', first_name: 'Unknown', last_name: 'Unknown', phone: '000' };
         const trainer = mockTrainers.find(t => t.id === a.trainer_id) || { id: a.trainer_id, name: 'Unknown' };
-        return { appointment: a, member: { id: member.id, uuid: ('uuid' in member ? member.uuid : 'm1'), first_name: member.first_name, last_name: member.last_name, phone: member.phone }, trainer: { id: trainer.id, name: trainer.name } };
+        return { appointment: a, member: { id: member.id, uuid: ('uuid' in member ? member.uuid : 'm1'), first_name: member.first_name, last_name: member.last_name, phone: member.phone }, trainer: { id: trainer.id, uuid: ('uuid' in trainer ? trainer.uuid : 't1'), name: trainer.name } };
       });
       return createResponse({ data: { items } });
     }
