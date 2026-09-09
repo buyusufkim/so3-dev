@@ -4,6 +4,7 @@ namespace Controllers;
 use Core\Response;
 use Core\Database;
 use Core\AuditLogger;
+use Middleware\AuthMiddleware;
 
 class MediaController
 {
@@ -14,6 +15,7 @@ class MediaController
     }
     
     public function index() {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         $limit = isset($_GET['limit']) ? min(100, max(1, (int)$_GET['limit'])) : 20;
         $status = isset($_GET['status']) ? $_GET['status'] : 'active';
@@ -83,6 +85,7 @@ class MediaController
     }
 
     public function show($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $stmt = $this->db->prepare("
             SELECT a.id, a.uuid, a.original_name, a.storage_path, a.thumbnail_path, a.mime_type, a.extension, a.file_size, a.width, a.height, a.media_type, a.title, a.alt_text, a.caption, a.status, a.created_at,
                    u.username as uploaded_by_username
@@ -115,6 +118,7 @@ class MediaController
     }
     
     public function update($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $input = json_decode(file_get_contents('php://input'), true);
         
         $title = $input['title'] ?? null;
@@ -129,6 +133,7 @@ class MediaController
     }
 
     public function updateVideoPoster($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $input = json_decode(file_get_contents('php://input'), true);
         $posterMediaId = isset($input['poster_media_id']) ? (int)$input['poster_media_id'] : 0;
 
@@ -199,6 +204,7 @@ class MediaController
     }
     
     public function destroy($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         // Soft delete
         $usageStmt = $this->db->prepare("SELECT COUNT(*) FROM media_usages WHERE media_id = ?");
         $usageStmt->execute([$id]);
@@ -216,6 +222,7 @@ class MediaController
     }
 
     public function restore($id) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $stmt = $this->db->prepare("UPDATE media_assets SET status = 'active', deleted_at = NULL WHERE id = ?");
         $stmt->execute([$id]);
         
@@ -224,6 +231,7 @@ class MediaController
     }
 
     public function store() {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
             $err = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
             $msg = 'Upload failed';
