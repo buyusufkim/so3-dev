@@ -33,7 +33,8 @@
     "verify:operational-admin-dashboard": "node scripts/verify-operational-admin-dashboard.mjs",
     "verify:admin-dev-fallback-parity": "node scripts/verify-admin-dev-fallback-parity.mjs",
     "verify:audit-log-visibility": "node scripts/verify-audit-log-visibility.mjs",
-    "verify:media-controller-authorization": "node scripts/verify-media-controller-authorization.mjs"
+    "verify:media-controller-authorization": "node scripts/verify-media-controller-authorization.mjs",
+    "verify:session-package-foundation": "node scripts/verify-session-package-foundation.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

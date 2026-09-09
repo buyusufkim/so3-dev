@@ -31,3 +31,15 @@ Bu dosya, proje süresince alınan önemli mimari, teknolojik ve ürüne dair ka
 - **Bağlam:** SEO performansını artırmak ve sayfa bütünlüğünü korumak.
 - **Karar:** Dinamik ve indekslenebilir rotalar olarak sadece `/`, `/etkinlikler` ve `/etkinlikler/:slug` bırakılmıştır. Diğer rotalar (`/branslar`, `/egitmenler`, `/topluluk`, `/iletisim`, `/360-tur`) bağımsız içerik sayfaları olmak yerine ana sayfadaki ilgili bölümlere yönlendiren legacy noindex rotalara dönüştürülmüştür.
 - **Gerekçe:** Parçalanmış ve içerik açısından zayıf alt sayfalar (thin content) SEO performansını düşürdüğü için, tüm güç tek ve zengin bir ana sayfada (One-Page Experience) toplanmıştır. Sadece detaylı bilgi içeren Etkinlikler modülü ayrı sayfalara bölünmüştür.
+
+## Karar 6: Session Package Domain Foundation
+- **Tarih:** 2026-09-09
+- **Bağlam:** Üyelerin seans paketlerinin satın alımını, kullanılmasını ve kalan hakkın takibini doğru ve veri güvenliğini ihlal etmeden (auditable) yapmak.
+- **Karar:** 
+  - Membership dates ve Session Packages tamamen ayrı kavramlar olarak ele alınacaktır.
+  - Üyeler aynı anda veya tarihsel olarak birden çok `member_session_packages` instance'ına sahip olabilir.
+  - Catalog paketi (session_packages) değişse dahi, mevcut atanan üyelerin paketlerindeki session sayısı gibi snapshot bilgiler değişmeyecektir.
+  - Kalan kullanım hakkı (`remaining_sessions`), atanmış bir rakam üzerinden manual eksiltme/artırma (mutable update) ile değil, append-only bir defter/hareket (`member_session_package_ledger`) yapısı kullanılarak hesaplanacaktır (balance = total_sessions + SUM(delta)).
+  - Rezervasyon ve iadeler appointment ID ve explicit entry_type ile (`reserve`, `release`, `adjustment`) ledger üzerine işlenecektir.
+  - Finansal (payment/invoice) bilgiler bu fazda kapsama dahil edilmemiş, yalnızca seans yönetimi üzerine kurgulanmıştır.
+- **Gerekçe:** Paket (seans) hakları operasyonel değer taşır; güncel veya eski hareketlerin audit edilebilmesi, concurrency anında hatalı eksiltmeleri engellemek ve geçmiş kullanım hakkını tutarlı korumak için append-only ledger modeli tek güvenilir mimaridir.

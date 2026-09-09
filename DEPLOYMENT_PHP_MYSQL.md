@@ -16,7 +16,7 @@
 ### Path A: Fresh/Empty Database
 If you are deploying to a completely empty database for the first time:
 1. Import `database/fresh-install.sql` using phpMyAdmin or the MySQL CLI.
-   *Note: This file canonically represents migrations 001–036.*
+   *Note: This file canonically represents migrations 001–037.*
    *WARNING: Never import `fresh-install.sql` into a live database containing existing data.*
 2. Configure runtime credentials in `config.local.php`.
 3. Create the first admin **only** through the `php bin/create-admin.php` CLI tool.
