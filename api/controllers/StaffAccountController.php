@@ -91,6 +91,12 @@ class StaffAccountController
 
         $data = $this->getPayload();
 
+        $allowedKeys = ['username', 'email', 'display_name', 'password', 'role'];
+        $diff = array_diff(array_keys($data), $allowedKeys);
+        if (!empty($diff)) {
+            Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
+        }
+
         $username = isset($data['username']) ? $data['username'] : null;
         $email = isset($data['email']) ? $data['email'] : null;
         $display_name = isset($data['display_name']) ? $data['display_name'] : null;
@@ -179,6 +185,15 @@ class StaffAccountController
                 'status' => 'active'
             ], 201);
 
+        } catch (\PDOException $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            if ($e->getCode() == 23000 && isset($e->errorInfo[1]) && $e->errorInfo[1] == 1062) {
+                Response::error('Kullanıcı adı veya e-posta adresi zaten kullanımda.', 'ACCOUNT_IDENTITY_CONFLICT', 409);
+            }
+            error_log('StaffAccountController@create PDOException: ' . $e->getMessage());
+            Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);
         } catch (\Exception $e) {
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();

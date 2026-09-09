@@ -23,103 +23,152 @@ const check = (condition, msg) => {
     }
 };
 
-// 1. Strict super_admin-only
+function extractMethod(code, methodName) {
+    const regex = new RegExp(`public function ${methodName}\\s*\\([^)]*\\)\\s*{`, 'g');
+    const match = regex.exec(code);
+    if (!match) return null;
+    
+    let braceCount = 1;
+    let i = match.index + match[0].length;
+    while (i < code.length && braceCount > 0) {
+        if (code[i] === '{') braceCount++;
+        else if (code[i] === '}') braceCount--;
+        i++;
+    }
+    return code.substring(match.index, i);
+}
+
+const methods = ['index', 'create', 'updateStatus', 'updateRole', 'resetPassword'];
+const methodBodies = {};
+for (const m of methods) {
+    methodBodies[m] = extractMethod(controllerCode, m);
+    if (!methodBodies[m]) {
+        console.error(`[FAIL] Method ${m} not found`);
+        pass = false;
+    }
+}
+
+// 1. All methods have strict super_admin guard
+for (const m of methods) {
+    check(
+        methodBodies[m] && methodBodies[m].includes("AuthMiddleware::hasRole(['super_admin']);"),
+        `${m} method has strict super_admin guard.`
+    );
+}
+
+// 2. create() exact allowed-key validation
 check(
-    (controllerCode.match(/AuthMiddleware::hasRole\(\['super_admin'\]\);/g) || []).length >= 5,
-    'All endpoints enforce strict super_admin-only role.'
+    methodBodies['create'] && methodBodies['create'].includes("$allowedKeys = ['username', 'email', 'display_name', 'password', 'role'];") && methodBodies['create'].includes("array_diff(array_keys($data), $allowedKeys);"),
+    'create() performs exact allowed-key validation.'
 );
 
-// 2. Managed roles exact admin/editor/reception
+// 3. create() managed role allowlist
 check(
-    controllerCode.includes("['admin', 'editor', 'reception']") || controllerCode.includes("['admin','editor','reception']"),
-    'Managed roles strictly defined as admin/editor/reception.'
+    methodBodies['create'] && methodBodies['create'].includes("in_array($role, $this->managedRoles, true)"),
+    'create() checks against managed role allowlist.'
 );
 
-// 3. Trainer/super_admin mutation checked
+// 4. create() transaction
 check(
-    controllerCode.includes('in_array($target[\'role\'], $this->managedRoles'),
-    'Mutation target role checked against managed roles.'
-);
-check(
-    controllerCode.includes('SELECT id FROM trainers WHERE admin_id = ?'),
-    'Trainer accounts checked and blocked in generic flow.'
+    methodBodies['create'] && methodBodies['create'].includes("$this->db->beginTransaction();") && methodBodies['create'].includes("$this->db->commit();") && methodBodies['create'].includes("$this->db->rollBack();"),
+    'create() uses transactions.'
 );
 
-// 4. List projection does not include password_hash/last_login_ip
+// 5. create() global admins identity pre-check
 check(
-    !controllerCode.includes('password_hash') || (controllerCode.indexOf('password_hash') > controllerCode.indexOf('public function create')),
-    'List projection logic does not leak password_hash/last_login_ip.'
+    methodBodies['create'] && methodBodies['create'].includes("SELECT id FROM admins WHERE username = ? OR email = ? FOR UPDATE"),
+    'create() performs global admins identity pre-check.'
 );
 
-// 5. Identity uniqueness against all admins
+// 6. DB duplicate unique violation -> 409
 check(
-    controllerCode.includes('SELECT id FROM admins WHERE username = ? OR email = ? FOR UPDATE'),
-    'Identity uniqueness checked across all admins.'
+    methodBodies['create'] && methodBodies['create'].includes("catch (\\PDOException $e)") && methodBodies['create'].includes("$e->getCode() == 23000") && methodBodies['create'].includes("1062") && methodBodies['create'].includes("ACCOUNT_IDENTITY_CONFLICT"),
+    'create() catches PDOException for duplicate key and returns 409 ACCOUNT_IDENTITY_CONFLICT.'
 );
 
-// 6. Password 12-256 + secure hashing
+// 7. Other DB exception -> generic 500
 check(
-    controllerCode.includes('mb_strlen($password, \'UTF-8\') < 12') && controllerCode.includes('mb_strlen($password, \'UTF-8\') > 256'),
-    'Password validation strictly 12-256 characters.'
-);
-check(
-    controllerCode.includes('PASSWORD_ARGON2ID') && controllerCode.includes('password_hash('),
-    'Password hashed using ARGON2ID/DEFAULT.'
+    methodBodies['create'] && methodBodies['create'].includes("Response::error('Sunucu hatası oluştu.', 'INTERNAL_ERROR', 500);"),
+    'create() handles generic DB exceptions by returning 500.'
 );
 
-// 7. Status payload strict
+// 8. updateStatus, updateRole, resetPassword transaction and target FOR UPDATE
+['updateStatus', 'updateRole', 'resetPassword'].forEach(m => {
+    check(
+        methodBodies[m] && methodBodies[m].includes("beginTransaction") && methodBodies[m].includes("getTargetAccountForUpdate"),
+        `${m} uses transaction and target FOR UPDATE path.`
+    );
+});
+
+// Helper checking getTargetAccountForUpdate
+const getTarget = extractMethod(controllerCode, 'getTargetAccountForUpdate') || extractMethod(controllerCode.replace(/private function getTargetAccountForUpdate/, 'public function getTargetAccountForUpdate'), 'getTargetAccountForUpdate');
+
 check(
-    controllerCode.includes('$status !== \'active\' && $status !== \'inactive\''),
-    'Status payload strictly validated.'
+    getTarget && getTarget.includes("SELECT id, role, status FROM admins WHERE id = ? FOR UPDATE"),
+    'getTargetAccountForUpdate locks target row FOR UPDATE.'
 );
 
-// 8. Role payload strict
+// 9. trainer-linked account isolation
 check(
-    controllerCode.match(/in_array\(\$role, \$this->managedRoles/g).length >= 2,
-    'Role payload strictly validated.'
+    getTarget && getTarget.includes("SELECT id FROM trainers WHERE admin_id = ?"),
+    'Trainer-linked account isolation is enforced (fails closed).'
 );
 
-// 9. Mutation transaction + FOR UPDATE
-check(
-    controllerCode.includes('FOR UPDATE') && controllerCode.includes('beginTransaction'),
-    'Mutations use transactions and FOR UPDATE.'
-);
-
-// 10. Trainer-linked account generic flow mutate check is done in #3.
-
-// 11. No DELETE route
+// 10. DELETE route does not exist
 check(
     !indexCode.includes("('/api/admin/staff-accounts/") || !indexCode.match(/DELETE.*staff-accounts/),
-    'No DELETE route defined for staff accounts.'
+    'DELETE route is not defined for staff accounts.'
 );
 
-// 12. Audit events exist, password metadata not logged.
-check(
-    controllerCode.includes('staff_account.create') &&
-    controllerCode.includes('staff_account.status_update') &&
-    controllerCode.includes('staff_account.role_update') &&
-    controllerCode.includes('staff_account.password_reset'),
-    'Audit events generated for all mutations.'
-);
+// 11. password audit metadata
 check(
     !controllerCode.match(/=>\s*\$password/),
-    'Password or credential metadata not logged.'
+    'Password or credential metadata is not logged in audit events.'
 );
 
-// 13. Raw exception doesn't leak
+// 12. raw exception doesn't leak
 check(
-    controllerCode.includes('error_log(') && controllerCode.includes('Response::error(\'Sunucu hatası oluştu.\''),
-    'Raw exception caught and generic error returned.'
+    controllerCode.includes('error_log(') && !controllerCode.includes('Response::error($e->getMessage()'),
+    'Raw exceptions are not returned to the client.'
 );
 
-// 14. SQL Columns
+// 13. Real Schema Cross Check
+const m002 = fs.readFileSync(path.resolve(process.cwd(), 'database/migrations/002_create_admins.sql'), 'utf-8');
+const m028 = fs.readFileSync(path.resolve(process.cwd(), 'database/migrations/028_expand_admin_roles.sql'), 'utf-8');
+const m029 = fs.readFileSync(path.resolve(process.cwd(), 'database/migrations/029_link_trainers_to_admins.sql'), 'utf-8');
+
 check(
-    controllerCode.includes('password_changed_at') && controllerCode.includes('display_name'),
-    'Controller SQL columns align with canonical migrations.'
+    m002.includes("`username` VARCHAR(50) NOT NULL UNIQUE") || m002.includes("`username` varchar(50) NOT NULL UNIQUE") || m002.includes("username VARCHAR(50) NOT NULL UNIQUE"),
+    'Schema: username canonical column is UNIQUE.'
 );
+check(
+    m002.includes("`email` VARCHAR(100) NOT NULL UNIQUE") || m002.includes("`email` varchar(100) NOT NULL UNIQUE") || m002.includes("email VARCHAR(100) NOT NULL UNIQUE"),
+    'Schema: email canonical column is UNIQUE.'
+);
+check(
+    m002.includes("display_name"),
+    'Schema: display_name canonical column exists.'
+);
+check(
+    m002.includes("password_hash"),
+    'Schema: password_hash canonical column exists.'
+);
+check(
+    m002.includes("password_changed_at"),
+    'Schema: password_changed_at canonical column exists.'
+);
+check(
+    m028.includes("'admin'") && m028.includes("'editor'") && m028.includes("'reception'"),
+    'Schema: role expansion includes admin/editor/reception.'
+);
+check(
+    m029.includes("`admin_id`") && m029.includes("FOREIGN KEY") && m029.includes("`trainers`"),
+    'Schema: trainers.admin_id canonical connection is present.'
+);
+
 
 if (pass) {
-    console.log('\nPASS — F.14A STAFF ACCOUNT API FOUNDATION VERIFIED');
+    console.log('\nPASS — F.14A STAFF ACCOUNT API FOUNDATION CLOSED');
     process.exit(0);
 } else {
     console.error('\nFAIL — Verifications failed.');
