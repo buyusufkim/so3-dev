@@ -1,0 +1,382 @@
+<?php
+
+namespace Controllers;
+
+use Core\Database;
+use Core\Response;
+use Core\AuditLogger;
+use Middleware\AuthMiddleware;
+
+class MemberSessionPackageController
+{
+    private $db;
+
+    public function __construct()
+    {
+        $this->db = Database::getInstance();
+    }
+
+    public function index($memberId)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+
+        // Validate member
+        $stmt = $this->db->prepare("SELECT id FROM members WHERE id = :id AND deleted_at IS NULL");
+        $stmt->execute([':id' => $memberId]);
+        if (!$stmt->fetch()) {
+            Response::error('Member not found', 'NOT_FOUND', 404);
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT 
+                msp.id, msp.uuid, msp.session_package_id, msp.package_name_snapshot as package_name,
+                msp.total_sessions, msp.valid_from, msp.valid_until, msp.status as stored_status,
+                msp.created_at, msp.cancelled_at, msp.cancellation_reason,
+                COALESCE(SUM(mspl.delta), 0) as ledger_delta
+            FROM member_session_packages msp
+            LEFT JOIN member_session_package_ledger mspl ON mspl.member_session_package_id = msp.id
+            WHERE msp.member_id = :member_id
+            GROUP BY msp.id
+            ORDER BY msp.created_at DESC
+        ");
+        $stmt->execute([':member_id' => $memberId]);
+        $packages = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        $today = date('Y-m-d');
+
+        foreach ($packages as &$pkg) {
+            $pkg['id'] = (int)$pkg['id'];
+            $pkg['session_package_id'] = $pkg['session_package_id'] !== null ? (int)$pkg['session_package_id'] : null;
+            $pkg['total_sessions'] = (int)$pkg['total_sessions'];
+            
+            $delta = (int)$pkg['ledger_delta'];
+            unset($pkg['ledger_delta']);
+            
+            $pkg['remaining_sessions'] = $pkg['total_sessions'] + $delta;
+
+            // Calculate reserved_sessions safely
+            // reservations are negative deltas in ledger where entry_type = 'reserve'
+            // We could run another query, but since we need reserved_sessions specifically, 
+            // maybe it's better to calculate in PHP if we fetch the ledger or run a separate aggregate query.
+            // But we can do it via a correlated subquery in the main query or fetch separately.
+        }
+
+        // To calculate reserved sessions correctly:
+        $reservedStmt = $this->db->prepare("
+            SELECT member_session_package_id, COALESCE(SUM(ABS(delta)), 0) as reserved
+            FROM member_session_package_ledger
+            WHERE entry_type = 'reserve' AND member_session_package_id IN (
+                SELECT id FROM member_session_packages WHERE member_id = :member_id
+            )
+            GROUP BY member_session_package_id
+        ");
+        $reservedStmt->execute([':member_id' => $memberId]);
+        $reservedData = $reservedStmt->fetchAll(\PDO::FETCH_KEY_PAIR);
+
+        $releasedStmt = $this->db->prepare("
+            SELECT member_session_package_id, COALESCE(SUM(delta), 0) as released
+            FROM member_session_package_ledger
+            WHERE entry_type = 'release' AND member_session_package_id IN (
+                SELECT id FROM member_session_packages WHERE member_id = :member_id
+            )
+            GROUP BY member_session_package_id
+        ");
+        $releasedStmt->execute([':member_id' => $memberId]);
+        $releasedData = $releasedStmt->fetchAll(\PDO::FETCH_KEY_PAIR);
+
+        foreach ($packages as &$pkg) {
+            $res = isset($reservedData[$pkg['id']]) ? (int)$reservedData[$pkg['id']] : 0;
+            $rel = isset($releasedData[$pkg['id']]) ? (int)$releasedData[$pkg['id']] : 0;
+            $pkg['reserved_sessions'] = $res - $rel; // Net reservations
+
+            $storedStatus = $pkg['stored_status'];
+            $effectiveStatus = 'active';
+
+            if ($storedStatus === 'cancelled') {
+                $effectiveStatus = 'cancelled';
+            } elseif ($pkg['valid_until'] !== null && $pkg['valid_until'] < $today) {
+                $effectiveStatus = 'expired';
+            } elseif ($pkg['remaining_sessions'] <= 0) {
+                $effectiveStatus = 'exhausted';
+            }
+
+            $pkg['effective_status'] = $effectiveStatus;
+        }
+
+        Response::json($packages);
+    }
+
+    public function assign($memberId)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $adminId = $_SESSION['admin_id'];
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input || !is_array($input)) {
+            Response::error('Invalid JSON payload', 'INVALID_JSON', 422);
+        }
+
+        // Strict allowlist
+        $allowed = ['session_package_id', 'valid_from'];
+        foreach (array_keys($input) as $key) {
+            if (!in_array($key, $allowed)) {
+                Response::error("Unknown field: $key", 'UNKNOWN_FIELD', 422);
+            }
+        }
+
+        if (empty($input['session_package_id']) || !is_int($input['session_package_id'])) {
+            Response::error('session_package_id must be an integer', 'VALIDATION_ERROR', 422);
+        }
+        
+        if (empty($input['valid_from']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $input['valid_from'])) {
+            Response::error('valid_from must be a valid date YYYY-MM-DD', 'VALIDATION_ERROR', 422);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare("SELECT id FROM members WHERE id = :id AND deleted_at IS NULL");
+            $stmt->execute([':id' => $memberId]);
+            if (!$stmt->fetch()) {
+                throw new \Exception('Member not found', 404);
+            }
+
+            $stmt = $this->db->prepare("SELECT name, session_count, validity_days, status FROM session_packages WHERE id = :id FOR UPDATE");
+            $stmt->execute([':id' => $input['session_package_id']]);
+            $package = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$package) {
+                throw new \Exception('Session package not found', 404);
+            }
+
+            if ($package['status'] !== 'active') {
+                throw new \Exception('Session package is inactive', 400);
+            }
+
+            $validUntil = null;
+            if ($package['validity_days'] !== null) {
+                $validUntil = date('Y-m-d', strtotime($input['valid_from'] . ' + ' . ($package['validity_days'] - 1) . ' days'));
+            }
+
+            $uuid = $this->generateUuid();
+
+            $insertStmt = $this->db->prepare("
+                INSERT INTO member_session_packages 
+                (uuid, member_id, session_package_id, package_name_snapshot, total_sessions, valid_from, valid_until, status, assigned_by)
+                VALUES (:uuid, :member_id, :session_package_id, :package_name, :total_sessions, :valid_from, :valid_until, 'active', :assigned_by)
+            ");
+            $insertStmt->execute([
+                ':uuid' => $uuid,
+                ':member_id' => $memberId,
+                ':session_package_id' => $input['session_package_id'],
+                ':package_name' => $package['name'],
+                ':total_sessions' => $package['session_count'],
+                ':valid_from' => $input['valid_from'],
+                ':valid_until' => $validUntil,
+                ':assigned_by' => $adminId
+            ]);
+
+            $newId = (int)$this->db->lastInsertId();
+
+            AuditLogger::log('member_session_package.assign', 'member_session_package', $newId, [
+                'member_id' => $memberId,
+                'session_package_id' => $input['session_package_id'],
+                'total_sessions' => (int)$package['session_count'],
+                'valid_from' => $input['valid_from'],
+                'valid_until' => $validUntil
+            ]);
+
+            $this->db->commit();
+
+            $this->returnMemberPackage($newId, 201);
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            if ($e->getCode() === 404) {
+                Response::error($e->getMessage(), 'NOT_FOUND', 404);
+            } elseif ($e->getCode() === 400) {
+                Response::error($e->getMessage(), 'VALIDATION_ERROR', 400);
+            } else {
+                Response::error('An unexpected error occurred', 'SERVER_ERROR', 500);
+            }
+        }
+    }
+
+    public function cancel($id)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $adminId = $_SESSION['admin_id'];
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input || !is_array($input)) {
+            Response::error('Invalid JSON payload', 'INVALID_JSON', 422);
+        }
+
+        // Strict allowlist
+        foreach (array_keys($input) as $key) {
+            if ($key !== 'reason') {
+                Response::error("Unknown field: $key", 'UNKNOWN_FIELD', 422);
+            }
+        }
+
+        if (empty($input['reason']) || !is_string($input['reason'])) {
+            Response::error('Reason is required', 'VALIDATION_ERROR', 422);
+        }
+        
+        $reason = trim($input['reason']);
+        if (strlen($reason) < 1 || strlen($reason) > 255) {
+            Response::error('Reason must be between 1 and 255 characters', 'VALIDATION_ERROR', 422);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare("SELECT * FROM member_session_packages WHERE id = :id FOR UPDATE");
+            $stmt->execute([':id' => $id]);
+            $package = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$package) {
+                throw new \Exception('Member session package not found', 404);
+            }
+
+            if ($package['status'] === 'cancelled') {
+                throw new \Exception('Package is already cancelled', 409);
+            }
+
+            // Check for net active reservations
+            // net reservations = ABS(SUM(delta for reserve)) - SUM(delta for release)
+            $resStmt = $this->db->prepare("
+                SELECT 
+                    COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN ABS(delta) ELSE 0 END), 0) as reserved,
+                    COALESCE(SUM(CASE WHEN entry_type = 'release' THEN delta ELSE 0 END), 0) as released
+                FROM member_session_package_ledger 
+                WHERE member_session_package_id = :id
+            ");
+            $resStmt->execute([':id' => $id]);
+            $resData = $resStmt->fetch(\PDO::FETCH_ASSOC);
+            
+            $netReservations = (int)$resData['reserved'] - (int)$resData['released'];
+            if ($netReservations > 0) {
+                throw new \Exception('PACKAGE_HAS_ACTIVE_RESERVATIONS', 409);
+            }
+
+            $updateStmt = $this->db->prepare("
+                UPDATE member_session_packages 
+                SET status = 'cancelled', cancelled_by = :cancelled_by, cancelled_at = NOW(), cancellation_reason = :reason
+                WHERE id = :id
+            ");
+            $updateStmt->execute([
+                ':cancelled_by' => $adminId,
+                ':reason' => $reason,
+                ':id' => $id
+            ]);
+
+            AuditLogger::log('member_session_package.cancel', 'member_session_package', $id, [
+                'reason' => $reason
+            ]);
+
+            $this->db->commit();
+            $this->returnMemberPackage($id);
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            if ($e->getCode() === 404) {
+                Response::error($e->getMessage(), 'NOT_FOUND', 404);
+            } elseif ($e->getCode() === 409) {
+                Response::error($e->getMessage(), $e->getMessage() === 'PACKAGE_HAS_ACTIVE_RESERVATIONS' ? 'PACKAGE_HAS_ACTIVE_RESERVATIONS' : 'CONFLICT', 409);
+            } else {
+                Response::error('An unexpected error occurred', 'SERVER_ERROR', 500);
+            }
+        }
+    }
+    
+    public function ledger($id)
+    {
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        
+        $stmt = $this->db->prepare("
+            SELECT mspl.id, mspl.uuid, mspl.appointment_id, mspl.entry_type, mspl.delta, mspl.reason, mspl.created_at, a.name as created_by
+            FROM member_session_package_ledger mspl
+            JOIN admins a ON a.id = mspl.created_by
+            WHERE mspl.member_session_package_id = :id
+            ORDER BY mspl.created_at DESC, mspl.id DESC
+        ");
+        $stmt->execute([':id' => $id]);
+        $ledger = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        
+        foreach ($ledger as &$l) {
+            $l['id'] = (int)$l['id'];
+            $l['appointment_id'] = $l['appointment_id'] !== null ? (int)$l['appointment_id'] : null;
+            $l['delta'] = (int)$l['delta'];
+        }
+        
+        Response::json($ledger);
+    }
+
+    private function returnMemberPackage($id, $statusCode = 200)
+    {
+        $stmt = $this->db->prepare("
+            SELECT 
+                msp.id, msp.uuid, msp.session_package_id, msp.package_name_snapshot as package_name,
+                msp.total_sessions, msp.valid_from, msp.valid_until, msp.status as stored_status,
+                msp.created_at, msp.cancelled_at, msp.cancellation_reason,
+                COALESCE(SUM(mspl.delta), 0) as ledger_delta
+            FROM member_session_packages msp
+            LEFT JOIN member_session_package_ledger mspl ON mspl.member_session_package_id = msp.id
+            WHERE msp.id = :id
+            GROUP BY msp.id
+        ");
+        $stmt->execute([':id' => $id]);
+        $pkg = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($pkg) {
+            $pkg['id'] = (int)$pkg['id'];
+            $pkg['session_package_id'] = $pkg['session_package_id'] !== null ? (int)$pkg['session_package_id'] : null;
+            $pkg['total_sessions'] = (int)$pkg['total_sessions'];
+            
+            $delta = (int)$pkg['ledger_delta'];
+            unset($pkg['ledger_delta']);
+            
+            $pkg['remaining_sessions'] = $pkg['total_sessions'] + $delta;
+            
+            $resStmt = $this->db->prepare("
+                SELECT 
+                    COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN ABS(delta) ELSE 0 END), 0) as reserved,
+                    COALESCE(SUM(CASE WHEN entry_type = 'release' THEN delta ELSE 0 END), 0) as released
+                FROM member_session_package_ledger 
+                WHERE member_session_package_id = :id
+            ");
+            $resStmt->execute([':id' => $id]);
+            $resData = $resStmt->fetch(\PDO::FETCH_ASSOC);
+            $pkg['reserved_sessions'] = (int)$resData['reserved'] - (int)$resData['released'];
+
+            $storedStatus = $pkg['stored_status'];
+            $effectiveStatus = 'active';
+            $today = date('Y-m-d');
+
+            if ($storedStatus === 'cancelled') {
+                $effectiveStatus = 'cancelled';
+            } elseif ($pkg['valid_until'] !== null && $pkg['valid_until'] < $today) {
+                $effectiveStatus = 'expired';
+            } elseif ($pkg['remaining_sessions'] <= 0) {
+                $effectiveStatus = 'exhausted';
+            }
+
+            $pkg['effective_status'] = $effectiveStatus;
+        }
+
+        if ($statusCode === 201) {
+            http_response_code(201);
+        }
+        
+        Response::json($pkg);
+    }
+
+    private function generateUuid() {
+        return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+            mt_rand( 0, 0xffff ),
+            mt_rand( 0, 0x0fff ) | 0x4000,
+            mt_rand( 0, 0x3fff ) | 0x8000,
+            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
+        );
+    }
+}

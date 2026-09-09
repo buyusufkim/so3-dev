@@ -923,6 +923,57 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
     }
 }
 
+
+    if ($requestUri === '/api/admin/session-packages') {
+        AuthMiddleware::handle();
+        require_once __DIR__ . '/controllers/SessionPackageController.php';
+        $controller = new \Controllers\SessionPackageController();
+        if ($method === 'GET') {
+            $controller->index();
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->create();
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/admin/session-packages/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/SessionPackageController.php';
+            (new \Controllers\SessionPackageController())->update((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/session-packages$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        require_once __DIR__ . '/controllers/MemberSessionPackageController.php';
+        $controller = new \Controllers\MemberSessionPackageController();
+        if ($method === 'GET') {
+            $controller->index((int)$matches[1]);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->assign((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/admin/member-session-packages/([1-9]\d*)/cancel$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST' || $method === 'PATCH') {
+            require_once __DIR__ . '/controllers/MemberSessionPackageController.php';
+            (new \Controllers\MemberSessionPackageController())->cancel((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/admin/member-session-packages/([1-9]\d*)/ledger$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/MemberSessionPackageController.php';
+            (new \Controllers\MemberSessionPackageController())->ledger((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
 if (!$matched) {
     Response::error('Not Found', 'NOT_FOUND', 404);
 }
