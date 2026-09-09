@@ -13,7 +13,7 @@ class MemberSessionPackageController
 
     public function __construct()
     {
-        $this->db = Database::getInstance();
+        $this->db = Database::getInstance()->getConnection();
     }
 
     public function index($memberId)
@@ -53,15 +53,8 @@ class MemberSessionPackageController
             unset($pkg['ledger_delta']);
             
             $pkg['remaining_sessions'] = $pkg['total_sessions'] + $delta;
-
-            // Calculate reserved_sessions safely
-            // reservations are negative deltas in ledger where entry_type = 'reserve'
-            // We could run another query, but since we need reserved_sessions specifically, 
-            // maybe it's better to calculate in PHP if we fetch the ledger or run a separate aggregate query.
-            // But we can do it via a correlated subquery in the main query or fetch separately.
         }
 
-        // To calculate reserved sessions correctly:
         $reservedStmt = $this->db->prepare("
             SELECT member_session_package_id, COALESCE(SUM(ABS(delta)), 0) as reserved
             FROM member_session_package_ledger
@@ -128,8 +121,14 @@ class MemberSessionPackageController
             Response::error('session_package_id must be an integer', 'VALIDATION_ERROR', 422);
         }
         
-        if (empty($input['valid_from']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $input['valid_from'])) {
+        if (empty($input['valid_from'])) {
             Response::error('valid_from must be a valid date YYYY-MM-DD', 'VALIDATION_ERROR', 422);
+        }
+
+        // Strict date validation
+        $d = \DateTime::createFromFormat('Y-m-d', $input['valid_from']);
+        if (!$d || $d->format('Y-m-d') !== $input['valid_from']) {
+            Response::error('valid_from must be a valid calendar date YYYY-MM-DD', 'VALIDATION_ERROR', 422);
         }
 
         try {
@@ -178,7 +177,7 @@ class MemberSessionPackageController
 
             $newId = (int)$this->db->lastInsertId();
 
-            AuditLogger::log('member_session_package.assign', 'member_session_package', $newId, [
+            AuditLogger::log('member_session_package.assign', $adminId, 'member_session_package', $newId, [
                 'member_id' => $memberId,
                 'session_package_id' => $input['session_package_id'],
                 'total_sessions' => (int)$package['session_count'],
@@ -189,8 +188,10 @@ class MemberSessionPackageController
             $this->db->commit();
 
             $this->returnMemberPackage($newId, 201);
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             if ($e->getCode() === 404) {
                 Response::error($e->getMessage(), 'NOT_FOUND', 404);
             } elseif ($e->getCode() === 400) {
@@ -242,8 +243,6 @@ class MemberSessionPackageController
                 throw new \Exception('Package is already cancelled', 409);
             }
 
-            // Check for net active reservations
-            // net reservations = ABS(SUM(delta for reserve)) - SUM(delta for release)
             $resStmt = $this->db->prepare("
                 SELECT 
                     COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN ABS(delta) ELSE 0 END), 0) as reserved,
@@ -270,14 +269,16 @@ class MemberSessionPackageController
                 ':id' => $id
             ]);
 
-            AuditLogger::log('member_session_package.cancel', 'member_session_package', $id, [
+            AuditLogger::log('member_session_package.cancel', $adminId, 'member_session_package', $id, [
                 'reason' => $reason
             ]);
 
             $this->db->commit();
             $this->returnMemberPackage($id);
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             if ($e->getCode() === 404) {
                 Response::error($e->getMessage(), 'NOT_FOUND', 404);
             } elseif ($e->getCode() === 409) {
@@ -292,8 +293,14 @@ class MemberSessionPackageController
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         
+        $chk = $this->db->prepare("SELECT id FROM member_session_packages WHERE id = :id");
+        $chk->execute([':id' => $id]);
+        if (!$chk->fetch()) {
+            Response::error('Member session package not found', 'NOT_FOUND', 404);
+        }
+
         $stmt = $this->db->prepare("
-            SELECT mspl.id, mspl.uuid, mspl.appointment_id, mspl.entry_type, mspl.delta, mspl.reason, mspl.created_at, a.name as created_by
+            SELECT mspl.id, mspl.uuid, mspl.appointment_id, mspl.entry_type, mspl.delta, mspl.reason, mspl.created_at, a.display_name as created_by_name
             FROM member_session_package_ledger mspl
             JOIN admins a ON a.id = mspl.created_by
             WHERE mspl.member_session_package_id = :id
@@ -371,12 +378,9 @@ class MemberSessionPackageController
     }
 
     private function generateUuid() {
-        return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
-            mt_rand( 0, 0xffff ),
-            mt_rand( 0, 0x0fff ) | 0x4000,
-            mt_rand( 0, 0x3fff ) | 0x8000,
-            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
-        );
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 }

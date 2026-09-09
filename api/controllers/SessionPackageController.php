@@ -13,28 +13,58 @@ class SessionPackageController
 
     public function __construct()
     {
-        $this->db = Database::getInstance();
+        $this->db = Database::getInstance()->getConnection();
     }
 
     public function index()
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
 
-        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-        $perPage = isset($_GET['per_page']) ? max(1, (int)$_GET['per_page']) : 20;
+        // Strict GET parameters validation
+        $allowedParams = ['status', 'q', 'page', 'per_page'];
+        $unknownParams = array_diff(array_keys($_GET), $allowedParams);
+        if (!empty($unknownParams)) {
+            Response::error('Unknown query parameter(s): ' . implode(', ', $unknownParams), 'VALIDATION_ERROR', 422);
+        }
+
+        $page = 1;
+        if (isset($_GET['page'])) {
+            if (!ctype_digit((string)$_GET['page']) || (int)$_GET['page'] < 1) {
+                Response::error('Page must be a positive integer', 'VALIDATION_ERROR', 422);
+            }
+            $page = (int)$_GET['page'];
+        }
+
+        $perPage = 20;
+        if (isset($_GET['per_page'])) {
+            if (!ctype_digit((string)$_GET['per_page']) || (int)$_GET['per_page'] < 1 || (int)$_GET['per_page'] > 100) {
+                Response::error('Per page must be a positive integer between 1 and 100', 'VALIDATION_ERROR', 422);
+            }
+            $perPage = (int)$_GET['per_page'];
+        }
+        
         $offset = ($page - 1) * $perPage;
 
         $conditions = [];
         $params = [];
 
-        if (isset($_GET['status']) && in_array($_GET['status'], ['active', 'inactive'])) {
+        if (isset($_GET['status'])) {
+            if (!in_array($_GET['status'], ['active', 'inactive'])) {
+                Response::error('Status must be exact active or inactive', 'VALIDATION_ERROR', 422);
+            }
             $conditions[] = "status = :status";
             $params[':status'] = $_GET['status'];
         }
 
-        if (!empty($_GET['q'])) {
-            $conditions[] = "name LIKE :q";
-            $params[':q'] = '%' . $_GET['q'] . '%';
+        if (isset($_GET['q'])) {
+            $q = trim($_GET['q']);
+            if (strlen($q) > 255) {
+                Response::error('Search query is too long', 'VALIDATION_ERROR', 422);
+            }
+            if ($q !== '') {
+                $conditions[] = "name LIKE :q";
+                $params[':q'] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+            }
         }
 
         $whereClause = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
@@ -145,7 +175,7 @@ class SessionPackageController
 
             $id = (int)$this->db->lastInsertId();
 
-            AuditLogger::log('session_package.create', 'session_package', $id, [
+            AuditLogger::log('session_package.create', $adminId, 'session_package', $id, [
                 'name' => $name,
                 'session_count' => $sessionCount,
                 'validity_days' => $validityDays,
@@ -155,8 +185,10 @@ class SessionPackageController
             $this->db->commit();
 
             $this->returnPackage($id, 201);
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('An unexpected error occurred', 'SERVER_ERROR', 500);
         }
     }
@@ -255,14 +287,16 @@ class SessionPackageController
             $stmt = $this->db->prepare("UPDATE session_packages SET $setClause WHERE id = :id");
             $stmt->execute($params);
 
-            AuditLogger::log('session_package.update', 'session_package', $id, [
+            AuditLogger::log('session_package.update', $adminId, 'session_package', $id, [
                 'changed_fields' => $changedFields
             ]);
 
             $this->db->commit();
             $this->returnPackage($id);
-        } catch (\Exception $e) {
-            $this->db->rollBack();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             Response::error('An unexpected error occurred', 'SERVER_ERROR', 500);
         }
     }
@@ -293,12 +327,9 @@ class SessionPackageController
     }
 
     private function generateUuid() {
-        return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
-            mt_rand( 0, 0xffff ),
-            mt_rand( 0, 0x0fff ) | 0x4000,
-            mt_rand( 0, 0x3fff ) | 0x8000,
-            mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
-        );
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 }

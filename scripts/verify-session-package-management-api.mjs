@@ -17,35 +17,31 @@ const sessionPackageCtrl = path.resolve(rootDir, 'api/controllers/SessionPackage
 const memberSessionPackageCtrl = path.resolve(rootDir, 'api/controllers/MemberSessionPackageController.php');
 const indexPhp = path.resolve(rootDir, 'api/index.php');
 
-// 1. SessionPackageController exists
 check(fs.existsSync(sessionPackageCtrl), 'SessionPackageController exists');
 
 if (fs.existsSync(sessionPackageCtrl)) {
     const spContent = fs.readFileSync(sessionPackageCtrl, 'utf8');
     
-    // 2. explicit super_admin/admin guards
     check(spContent.includes('AuthMiddleware::hasRole([\'super_admin\', \'admin\'])'), 'SessionPackageController has explicit super_admin/admin guards');
-    
-    // 3. GET catalog
     check(spContent.includes('public function index()'), 'GET catalog method exists');
-    
-    // 4. POST create strict payload
     check(spContent.includes('public function create()'), 'POST create method exists');
     check(spContent.includes('Unknown field:'), 'POST create has strict payload validation');
-    
-    // 5. PATCH update strict payload
     check(spContent.includes('public function update('), 'PATCH update method exists');
     check(spContent.includes('Unknown field:'), 'PATCH update has strict payload validation');
-    
-    // 6. no DELETE
     check(!spContent.includes('public function delete('), 'No DELETE method in SessionPackageController');
-    
-    // 19. audit events
-    check(spContent.includes('AuditLogger::log(\'session_package.create\''), 'Audit event session_package.create exists');
-    check(spContent.includes('AuditLogger::log(\'session_package.update\''), 'Audit event session_package.update exists');
-    
-    // 20. generic exception responses
     check(spContent.includes('An unexpected error occurred'), 'Generic 500 error messages used in SessionPackageController');
+    
+    // NEW HARDENED CHECKS
+    check(spContent.includes('Database::getInstance()->getConnection()'), 'SessionPackageController uses Database::getInstance()->getConnection()');
+    check(spContent.includes('AuditLogger::log(\'session_package.create\', $adminId, \'session_package\', $id,'), 'AuditLogger::log in create has correct canonical 5-parameter signature with $adminId');
+    check(spContent.includes('AuditLogger::log(\'session_package.update\', $adminId, \'session_package\', $id,'), 'AuditLogger::log in update has correct canonical 5-parameter signature with $adminId');
+    check(spContent.includes('$allowedParams = [\'status\', \'q\', \'page\', \'per_page\'];'), 'Catalog GET has strict allowlist for query parameters');
+    check(spContent.includes('in_array($_GET[\'status\'], [\'active\', \'inactive\'])'), 'Catalog GET strictly validates active/inactive status');
+    check(spContent.includes('ctype_digit((string)$_GET[\'page\'])'), 'Catalog GET strictly validates page as positive integer');
+    check(spContent.includes('ctype_digit((string)$_GET[\'per_page\'])'), 'Catalog GET strictly validates per_page as positive integer');
+    check(spContent.includes('catch (\\Throwable $e)'), 'SessionPackageController mutations catch \\Throwable');
+    check(spContent.includes('if ($this->db->inTransaction()) {'), 'SessionPackageController rollback guarded by inTransaction()');
+    check(spContent.includes('random_bytes(16)'), 'SessionPackageController UUID generation uses random_bytes(16)');
 }
 
 check(fs.existsSync(memberSessionPackageCtrl), 'MemberSessionPackageController exists');
@@ -53,51 +49,34 @@ check(fs.existsSync(memberSessionPackageCtrl), 'MemberSessionPackageController e
 if (fs.existsSync(memberSessionPackageCtrl)) {
     const mspContent = fs.readFileSync(memberSessionPackageCtrl, 'utf8');
     
-    // 2. explicit super_admin/admin guards
     check(mspContent.includes('AuthMiddleware::hasRole([\'super_admin\', \'admin\'])'), 'MemberSessionPackageController has explicit super_admin/admin guards');
-    
-    // 7. member package list exists
     check(mspContent.includes('public function index('), 'GET member package list method exists');
-    
-    // 8. remaining = total + SUM(delta)
     check(mspContent.includes('COALESCE(SUM(mspl.delta), 0)'), 'remaining sessions calculation uses SUM(delta)');
-    
-    // 9. effective status computed; DB statusa yazılmıyor
     check(mspContent.includes('$effectiveStatus = \'active\''), 'effective_status is computed');
     check(!mspContent.includes('UPDATE member_session_packages SET status = \'expired\''), 'effective_status does not update DB directly during read');
-    
-    // 10. assignment package snapshot
     check(mspContent.includes('package_name_snapshot'), 'Assignment takes package_name_snapshot');
     check(mspContent.includes('total_sessions'), 'Assignment takes total_sessions snapshot');
-    
-    // 11. inactive catalog package cannot assign
     check(mspContent.includes('Session package is inactive'), 'Inactive catalog package cannot be assigned');
-    
-    // 12. validity_days inclusive date calculation
     check(mspContent.includes('- 1) . \' days\''), 'validity_days calculation is inclusive (- 1 days)');
-    
-    // 13. assignment has no initial ledger row
     check(!mspContent.includes('INSERT INTO member_session_package_ledger'), 'Assignment does not create initial ledger row');
-    
-    // 14. multiple active packages not artificially blocked
     check(!mspContent.includes('Member already has an active package'), 'Multiple active packages are not artificially blocked');
-    
-    // 15. cancel transaction/lock
     check(mspContent.includes('FOR UPDATE'), 'Cancel method uses FOR UPDATE lock');
     check(mspContent.includes('beginTransaction()'), 'Cancel method uses transaction');
-    
-    // 16. cancel rejects active reservations
     check(mspContent.includes('PACKAGE_HAS_ACTIVE_RESERVATIONS'), 'Cancel rejects active reservations');
-    
-    // 17. ledger read-only endpoint
     check(mspContent.includes('public function ledger('), 'Ledger read endpoint exists');
-    
-    // 18. no ledger mutation/adjustment endpoint
     check(!mspContent.includes('public function adjust(') && !mspContent.includes('INSERT INTO member_session_package_ledger'), 'No ledger mutation endpoint exists');
-    
-    // 19. audit events
-    check(mspContent.includes('AuditLogger::log(\'member_session_package.assign\''), 'Audit event member_session_package.assign exists');
-    check(mspContent.includes('AuditLogger::log(\'member_session_package.cancel\''), 'Audit event member_session_package.cancel exists');
+
+    // NEW HARDENED CHECKS
+    check(mspContent.includes('Database::getInstance()->getConnection()'), 'MemberSessionPackageController uses Database::getInstance()->getConnection()');
+    check(mspContent.includes('AuditLogger::log(\'member_session_package.assign\', $adminId, \'member_session_package\', $newId,'), 'AuditLogger::log in assign has correct canonical 5-parameter signature with $adminId');
+    check(mspContent.includes('AuditLogger::log(\'member_session_package.cancel\', $adminId, \'member_session_package\', $id,'), 'AuditLogger::log in cancel has correct canonical 5-parameter signature with $adminId');
+    check(mspContent.includes('a.display_name as created_by_name'), 'Ledger uses display_name projection');
+    check(!mspContent.includes('a.name as created_by'), 'Ledger does not use a.name projection');
+    check(mspContent.includes('\\DateTime::createFromFormat(\'Y-m-d\''), 'Assignment uses DateTime::createFromFormat for calendar validation');
+    check(mspContent.includes('catch (\\Throwable $e)'), 'MemberSessionPackageController mutations catch \\Throwable');
+    check(mspContent.includes('if ($this->db->inTransaction()) {'), 'MemberSessionPackageController rollback guarded by inTransaction()');
+    check(mspContent.includes('SELECT id FROM member_session_packages WHERE id = :id'), 'Ledger endpoint checks package existence (404 behavior)');
+    check(mspContent.includes('random_bytes(16)'), 'MemberSessionPackageController UUID generation uses random_bytes(16)');
 }
 
 if (fs.existsSync(indexPhp)) {
