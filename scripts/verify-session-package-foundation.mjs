@@ -63,6 +63,23 @@ if (fs.existsSync(migrationPath)) {
     
     // 12. mutable used_sessions/remaining_sessions source-of-truth kolonu yok
     check(!migrationContent.includes('used_sessions') && !migrationContent.includes('remaining_sessions'), 'used_sessions/remaining_sessions columns are absent');
+
+    // F.17A.1 Structural Constraints
+    
+    // session_packages
+    check(migrationContent.includes('CONSTRAINT `chk_sp_session_count` CHECK (`session_count` > 0)'), 'session_packages enforces session_count > 0');
+    check(migrationContent.includes('CONSTRAINT `chk_sp_validity_days` CHECK (`validity_days` IS NULL OR `validity_days` > 0)'), 'session_packages enforces validity_days IS NULL OR > 0');
+
+    // member_session_packages
+    check(migrationContent.includes('CONSTRAINT `chk_msp_total_sessions` CHECK (`total_sessions` > 0)'), 'member_session_packages enforces total_sessions > 0');
+    check(migrationContent.includes('CONSTRAINT `chk_msp_validity_range` CHECK (`valid_until` IS NULL OR `valid_until` >= `valid_from`)'), 'member_session_packages enforces valid_until >= valid_from');
+
+    // member_session_package_ledger
+    check(migrationContent.includes('CONSTRAINT `chk_mspl_canonical_semantics` CHECK'), 'ledger has canonical semantics check');
+    check(migrationContent.includes('(`entry_type` = \'reserve\' AND `appointment_id` IS NOT NULL AND `delta` = -1)'), 'ledger constraint: reserve requires appointment and delta -1');
+    check(migrationContent.includes('(`entry_type` = \'release\' AND `appointment_id` IS NOT NULL AND `delta` = 1)'), 'ledger constraint: release requires appointment and delta +1');
+    check(migrationContent.includes('(`entry_type` = \'adjustment\' AND `appointment_id` IS NULL AND `delta` <> 0)'), 'ledger constraint: adjustment requires no appointment and non-zero delta');
+
 }
 
 // 13. membership_renewals değiştirilmemiş
@@ -95,6 +112,7 @@ if (fs.existsSync(appointmentControllerPath)) {
 if (fs.existsSync(freshInstallPath)) {
     const content = fs.readFileSync(freshInstallPath, 'utf8');
     check(content.includes('037_create_session_packages.sql'), 'fresh-install has parity with 037 schema and history');
+    check(content.includes('CONSTRAINT `chk_sp_session_count` CHECK'), 'fresh-install parity includes table check constraints');
     check(content.includes('Generated from migrations 001-037'), 'fresh-install header updated');
 }
 

@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS `session_packages` (
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_session_packages_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-    CONSTRAINT `fk_session_packages_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+    CONSTRAINT `fk_session_packages_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `chk_sp_session_count` CHECK (`session_count` > 0),
+    CONSTRAINT `chk_sp_validity_days` CHECK (`validity_days` IS NULL OR `validity_days` > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `member_session_packages` (
@@ -35,7 +37,9 @@ CREATE TABLE IF NOT EXISTS `member_session_packages` (
     CONSTRAINT `fk_msp_member_id` FOREIGN KEY (`member_id`) REFERENCES `members`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
     CONSTRAINT `fk_msp_package_id` FOREIGN KEY (`session_package_id`) REFERENCES `session_packages`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
     CONSTRAINT `fk_msp_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-    CONSTRAINT `fk_msp_cancelled_by` FOREIGN KEY (`cancelled_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+    CONSTRAINT `fk_msp_cancelled_by` FOREIGN KEY (`cancelled_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    CONSTRAINT `chk_msp_total_sessions` CHECK (`total_sessions` > 0),
+    CONSTRAINT `chk_msp_validity_range` CHECK (`valid_until` IS NULL OR `valid_until` >= `valid_from`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX `idx_msp_member_history` ON `member_session_packages`(`member_id`, `created_at`);
@@ -55,7 +59,12 @@ CREATE TABLE IF NOT EXISTS `member_session_package_ledger` (
     CONSTRAINT `fk_mspl_package_id` FOREIGN KEY (`member_session_package_id`) REFERENCES `member_session_packages`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
     CONSTRAINT `fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
     CONSTRAINT `fk_mspl_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-    CONSTRAINT `uk_mspl_appointment_entry` UNIQUE (`appointment_id`, `entry_type`)
+    CONSTRAINT `uk_mspl_appointment_entry` UNIQUE (`appointment_id`, `entry_type`),
+    CONSTRAINT `chk_mspl_canonical_semantics` CHECK (
+        (`entry_type` = 'reserve' AND `appointment_id` IS NOT NULL AND `delta` = -1) OR
+        (`entry_type` = 'release' AND `appointment_id` IS NOT NULL AND `delta` = 1) OR
+        (`entry_type` = 'adjustment' AND `appointment_id` IS NULL AND `delta` <> 0)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX `idx_mspl_package_balance` ON `member_session_package_ledger`(`member_session_package_id`);
