@@ -157,9 +157,23 @@ checkInvariant("mutation route yok", () => {
 const rolesSource = fs.readFileSync(path.resolve(rootDir, 'src/admin/auth/roles.ts'), 'utf8');
 
 checkInvariant("route/sidebar yalnız super_admin için erişilebilir", () => {
-    if (!rolesSource.includes("if (pathname === '/admin/audit-logs' || pathname.startsWith('/admin/audit-logs/')) {") ||
-        !rolesSource.includes("return role === 'super_admin';")) {
-        throw new Error("Frontend roles.ts does not strict-guard /admin/audit-logs to super_admin");
+    const fnStart = rolesSource.indexOf('export const hasRoleAccess');
+    const fnBody = extractBalanced(rolesSource, fnStart, '{', '}');
+    
+    if (!fnBody.includes("pathname === '/admin/audit-logs'") || !fnBody.includes("pathname.startsWith('/admin/audit-logs/')")) {
+        throw new Error("Missing exact or child route check for audit-logs");
+    }
+
+    const auditLogsRegex = /if\s*\([\s\S]*?'\/admin\/audit-logs'[\s\S]*?\)\s*\{\s*return role === 'super_admin';\s*\}/;
+    if (!auditLogsRegex.test(fnBody)) {
+        throw new Error("Frontend roles.ts does not strict-guard /admin/audit-logs to super_admin inside the special block");
+    }
+    
+    const auditMatch = fnBody.match(auditLogsRegex);
+    const genericAllowIdx = fnBody.indexOf("if (role === 'super_admin' || role === 'admin') return true;");
+    
+    if (auditMatch.index >= genericAllowIdx) {
+        throw new Error("audit-logs check happens after generic allow");
     }
 });
 
