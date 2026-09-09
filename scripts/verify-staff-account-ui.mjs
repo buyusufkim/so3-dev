@@ -51,7 +51,7 @@ check(pageCode.includes("apiClient.get('/api/admin/staff-accounts')"), 'Uses can
 
 // 6. create payload yalnız 5 backend alanını gönderiyor
 // 7. password_confirmation API payload'a gitmiyor
-const createPostCall = pageCode.substring(pageCode.indexOf("await apiClient.post('/api/admin/staff-accounts'"), pageCode.indexOf("setCreateFormSuccess('Hesap başarıyla oluşturuldu.')"));
+const createPostCall = pageCode.substring(pageCode.indexOf("await apiClient.post('/api/admin/staff-accounts'"), pageCode.indexOf("});", pageCode.indexOf("await apiClient.post('/api/admin/staff-accounts'")) + 3);
 check(
     createPostCall.includes("username:") && createPostCall.includes("email:") && createPostCall.includes("display_name:") && createPostCall.includes("password,") && createPostCall.includes("role") && !createPostCall.includes("password_confirmation"),
     'Create payload sends exactly 5 backend fields.'
@@ -115,8 +115,30 @@ check(
     'Trainer and super_admin options do not exist in the role select.'
 );
 
+// F.14B.1 Hardening
+// 20. create mutation response validate ediliyor
+check(pageCode.includes("isStaffAccountCreateResponse(res)"), "Create response is validated");
+// 21. status/role/reset-password mutation response validate ediliyor
+check((pageCode.match(/isStaffAccountMessageResponse\(res\)/g) || []).length >= 3, "Message responses are validated for status, role, and reset-password");
+// 22. malformed mutation response success sayılmıyor
+check(pageCode.includes("throw new Error('Geçersiz sunucu yanıtı.')"), "Malformed mutation responses throw errors");
+// 23. create success sonrası password state hemen temizleniyor
+const createSuccessIndex = pageCode.indexOf("setCreateFormSuccess('Hesap başarıyla oluşturuldu.')");
+const createPasswordClearIndex = pageCode.indexOf("password: ''", pageCode.indexOf("setCreateFormData(prev"));
+check(createPasswordClearIndex !== -1 && createPasswordClearIndex < createSuccessIndex, "Create password state is cleared immediately after success");
+// 24. reset success sonrası password state hemen temizleniyor
+const resetSuccessIndex = pageCode.indexOf("setPasswordFormSuccess('Şifre başarıyla güncellendi.')");
+const resetPasswordClearIndex = pageCode.indexOf("setPasswordFormData({ password: '', password_confirmation: '' })");
+check(resetPasswordClearIndex !== -1 && resetPasswordClearIndex < resetSuccessIndex, "Reset password state is cleared immediately after success");
+// 25. cleanup setTimeout içine bırakılmıyor
+const createSetTimeoutContent = pageCode.substring(createSuccessIndex, createSuccessIndex + 300);
+const resetSetTimeoutContent = pageCode.substring(resetSuccessIndex, resetSuccessIndex + 300);
+check(!createSetTimeoutContent.includes("password: ''", createSetTimeoutContent.indexOf("setCreateFormData({")) && !resetSetTimeoutContent.includes("setPasswordFormData({ password: '', password_confirmation: '' })"), "Cleanup is not left inside setTimeout");
+// 26. display_name Unicode-safe length kullanıyor
+check(pageCode.includes("Array.from(trimmedDisplayName).length < 2") && pageCode.includes("Array.from(trimmedDisplayName).length > 100"), "display_name uses Unicode-safe length check");
+
 if (pass) {
-    console.log('\nPASS — F.14B SUPER ADMIN STAFF ACCOUNTS UI VERIFIED');
+    console.log('\nPASS — F.14B SUPER ADMIN STAFF ACCOUNTS UI CLOSED');
     process.exit(0);
 } else {
     console.error('\nFAIL — Verifications failed.');

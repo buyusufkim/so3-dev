@@ -36,3 +36,35 @@ export function isStaffAccountListResponse(obj: unknown): obj is StaffAccountLis
   if (!Array.isArray(res.items)) return false;
   return res.items.every(isStaffAccount);
 }
+
+export interface StaffAccountCreateResponse {
+  id: number;
+  username: string;
+  email: string;
+  display_name: string;
+  role: 'admin' | 'editor' | 'reception';
+  status: 'active' | 'inactive';
+}
+
+export function isStaffAccountCreateResponse(obj: unknown): obj is StaffAccountCreateResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const a = obj as Record<string, unknown>;
+  return (
+    typeof a.id === 'number' && Number.isInteger(a.id) && a.id > 0 &&
+    typeof a.username === 'string' &&
+    typeof a.email === 'string' &&
+    typeof a.display_name === 'string' &&
+    (a.role === 'admin' || a.role === 'editor' || a.role === 'reception') &&
+    (a.status === 'active' || a.status === 'inactive')
+  );
+}
+
+export interface StaffAccountMessageResponse {
+  message: string;
+}
+
+export function isStaffAccountMessageResponse(obj: unknown): obj is StaffAccountMessageResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const a = obj as Record<string, unknown>;
+  return typeof a.message === 'string';
+}

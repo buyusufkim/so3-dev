@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient, ApiError } from '../../api/client';
-import { StaffAccount, isStaffAccountListResponse } from './types';
+import { StaffAccount, isStaffAccountListResponse, isStaffAccountCreateResponse, isStaffAccountMessageResponse } from './types';
 import { Shield, Plus, KeyRound, Power, PowerOff, ShieldAlert, CircleUserRound } from 'lucide-react';
 
 export function StaffAccountsPage() {
@@ -114,7 +114,7 @@ export function StaffAccountsPage() {
     }
     
     const trimmedDisplayName = display_name.trim();
-    if (!trimmedDisplayName || trimmedDisplayName.length < 2 || trimmedDisplayName.length > 100) {
+    if (!trimmedDisplayName || Array.from(trimmedDisplayName).length < 2 || Array.from(trimmedDisplayName).length > 100) {
       setCreateFormError('Görünen ad 2-100 karakter arasında olmalıdır.');
       return;
     }
@@ -138,24 +138,31 @@ export function StaffAccountsPage() {
     setIsSubmitting(true);
 
     try {
-      await apiClient.post('/api/admin/staff-accounts', {
+      const res = await apiClient.post('/api/admin/staff-accounts', {
         username: trimmedUsername,
         email: email.trim(),
         display_name: trimmedDisplayName,
         password,
         role
       });
+      if (!isStaffAccountCreateResponse(res)) {
+        throw new Error('Geçersiz sunucu yanıtı.');
+      }
+      setCreateFormData(prev => ({
+        ...prev,
+        password: '',
+        password_confirmation: ''
+      }));
       setCreateFormSuccess('Hesap başarıyla oluşturuldu.');
       setTimeout(() => {
         setIsCreateModalOpen(false);
-        setCreateFormData({
+        setCreateFormData(prev => ({
+          ...prev,
           username: '',
           email: '',
           display_name: '',
-          password: '',
-          password_confirmation: '',
           role: 'admin'
-        });
+        }));
         setCreateFormSuccess(null);
         fetchData();
       }, 1500);
@@ -183,7 +190,10 @@ export function StaffAccountsPage() {
     
     try {
       const newStatus = isActivating ? 'active' : 'inactive';
-      await apiClient.patch(`/api/admin/staff-accounts/${account.id}/status`, { status: newStatus });
+      const res = await apiClient.patch(`/api/admin/staff-accounts/${account.id}/status`, { status: newStatus });
+      if (!isStaffAccountMessageResponse(res)) {
+        throw new Error('Geçersiz sunucu yanıtı.');
+      }
       await fetchData();
     } catch (err: unknown) {
       alert(mapApiError(err));
@@ -210,7 +220,10 @@ export function StaffAccountsPage() {
     setIsUpdatingRole(true);
 
     try {
-      await apiClient.patch(`/api/admin/staff-accounts/${account.id}/role`, { role: newRole });
+      const res = await apiClient.patch(`/api/admin/staff-accounts/${account.id}/role`, { role: newRole });
+      if (!isStaffAccountMessageResponse(res)) {
+        throw new Error('Geçersiz sunucu yanıtı.');
+      }
       await fetchData();
     } catch (err: unknown) {
       alert(mapApiError(err));
@@ -243,15 +256,18 @@ export function StaffAccountsPage() {
     setIsSubmittingPassword(true);
 
     try {
-      await apiClient.post(`/api/admin/staff-accounts/${selectedAccountForPassword.id}/reset-password`, {
+      const res = await apiClient.post(`/api/admin/staff-accounts/${selectedAccountForPassword.id}/reset-password`, {
         password
       });
+      if (!isStaffAccountMessageResponse(res)) {
+        throw new Error('Geçersiz sunucu yanıtı.');
+      }
+      setPasswordFormData({ password: '', password_confirmation: '' });
       setPasswordFormSuccess('Şifre başarıyla güncellendi.');
       
       // Cleanup
       setTimeout(() => {
         setIsPasswordModalOpen(false);
-        setPasswordFormData({ password: '', password_confirmation: '' });
         setPasswordFormSuccess(null);
         setSelectedAccountForPassword(null);
         fetchData();
