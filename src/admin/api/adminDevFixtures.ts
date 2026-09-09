@@ -166,6 +166,22 @@ function generateSyntheticUuid(id: number): string {
 }
 
 
+
+let mockAppointments = [
+  {
+    id: 1,
+    uuid: '00000000-0000-4000-8000-000000000001',
+    member_id: 1,
+    trainer_id: 1,
+    starts_at: '2026-10-10 10:00:00',
+    ends_at: '2026-10-10 11:00:00',
+    status: 'scheduled',
+    created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+  }
+];
+let nextAppointmentId = 2;
+
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
   const url = new URL(endpoint, 'http://localhost');
@@ -2008,20 +2024,62 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   // --- Appointments Parity ---
   const appointmentMatch = path.match(/^\/api\/(admin|reception|trainer)\/appointments(?:\/([1-9]\d*))?(?:\/(reschedule|cancel|complete|no-show))?$/);
   if (appointmentMatch) {
+    const scope = appointmentMatch[1];
+    const idStr = appointmentMatch[2];
     const action = appointmentMatch[3];
-    if (method === 'GET') {
-      return createResponse({ data: { items: [] } });
+    
+    if (method === 'GET' && !idStr) {
+      const items = mockAppointments.map(a => {
+        const member = mockMembers.find(m => m.id === a.member_id) || { id: a.member_id, uuid: 'm1', first_name: 'Unknown', last_name: 'Unknown', phone: '000' };
+        const trainer = mockTrainers.find(t => t.id === a.trainer_id) || { id: a.trainer_id, name: 'Unknown' };
+        return { appointment: a, member: { id: member.id, uuid: ('uuid' in member ? member.uuid : 'm1'), first_name: member.first_name, last_name: member.last_name, phone: member.phone }, trainer: { id: trainer.id, name: trainer.name } };
+      });
+      return createResponse({ data: { items } });
     }
-    if (method === 'POST') {
-      return createResponse({ data: { appointment: { id: 1, uuid: 'a-1', member_id: 1, trainer_id: 1, starts_at: new Date().toISOString(), ends_at: new Date().toISOString(), status: 'scheduled' } } });
+    if (method === 'POST' && !idStr) {
+      const p = typeof reqBody === 'object' ? reqBody : {};
+      const newAppt = {
+        id: nextAppointmentId++,
+        uuid: generateSyntheticUuid(nextAppointmentId),
+        member_id: Number(p.member_id) || 1,
+        trainer_id: Number(p.trainer_id) || 1,
+        starts_at: String(p.starts_at || '2026-10-11 10:00:00'),
+        ends_at: String(p.ends_at || '2026-10-11 11:00:00'),
+        status: 'scheduled',
+        created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+      };
+      mockAppointments.push(newAppt);
+      return createResponse({ data: { appointment: newAppt } });
     }
-    if (method === 'PATCH') {
-      return createResponse({ data: { appointment: { id: parseInt(appointmentMatch[2] || '1', 10), uuid: 'a-1', member_id: 1, trainer_id: 1, starts_at: new Date().toISOString(), ends_at: new Date().toISOString(), status: action === 'complete' ? 'completed' : action === 'cancel' ? 'cancelled' : 'scheduled' } } });
+    if (method === 'PATCH' && idStr && action) {
+      const id = parseInt(idStr, 10);
+      const appt = mockAppointments.find(a => a.id === id);
+      if (!appt) return createError('Appointment not found', 404);
+
+      if (action === 'reschedule') {
+        const p = typeof reqBody === 'object' ? reqBody : {};
+        appt.starts_at = p.starts_at ? String(p.starts_at) : appt.starts_at;
+        appt.ends_at = p.ends_at ? String(p.ends_at) : appt.ends_at;
+        appt.status = 'scheduled';
+      } else if (action === 'cancel') {
+        if (scope === 'trainer') return createError('Not found', 404);
+        appt.status = 'cancelled';
+      } else if (action === 'complete') {
+        if (scope === 'reception') return createError('Not found', 404);
+        appt.status = 'completed';
+      } else if (action === 'no-show') {
+        if (scope === 'reception') return createError('Not found', 404);
+        appt.status = 'no_show';
+      }
+      appt.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      return createResponse({ data: { appointment: appt } });
     }
   }
   
   if (path === '/api/reception/appointment-trainers' && method === 'GET') {
-     return createResponse({ data: [] });
+     const items = mockTrainers.map(t => ({ id: t.id, name: t.name || 'Trainer' }));
+     return createResponse({ data: { items } });
   }
 
   // --- Staff Accounts Parity ---

@@ -31,6 +31,7 @@
     "verify:appointment-create-options": "node scripts/verify-appointment-create-options.mjs",
     "verify:member-operational-history": "node scripts/verify-member-operational-history.mjs",
     "verify:operational-admin-dashboard": "node scripts/verify-operational-admin-dashboard.mjs",
+    "verify:admin-dev-fallback-parity": "node scripts/verify-admin-dev-fallback-parity.mjs",
     "verify:audit-log-visibility": "node scripts/verify-audit-log-visibility.mjs"
   },
   "dependencies": {
