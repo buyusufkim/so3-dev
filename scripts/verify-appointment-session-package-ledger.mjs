@@ -134,6 +134,10 @@ if (fs.existsSync('run_all.sh') || fs.existsSync('patch_options.php') || fs.exis
     check(true, 'No temporary artifact remains');
 }
 
-if (exitCode !== 0) 
+check(!controller.includes("'PACKAGE_INELIGIBLE'"), 'No PACKAGE_INELIGIBLE error code');
+check(!controller.includes("PACKAGE_DATE_INVALID"), 'No PACKAGE_DATE_INVALID error code');
+check(controller.split("usort($items").length === 2, 'One usort for options pipeline');
+check(controller.split("unset($item['created_at'])").length === 2, 'One strip for options pipeline');
+check(controller.split("5.5 Package validity").length === 1, 'No duplicate package validity block');
 
 process.exit(exitCode);

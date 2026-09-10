@@ -124,46 +124,28 @@ class AppointmentController {
         }
 
         usort($items, function($a, $b) {
-            if ($a['valid_until'] === null && $b['valid_until'] !== null) return 1;
-            if ($a['valid_until'] !== null && $b['valid_until'] === null) return -1;
-            if ($a['valid_until'] !== $b['valid_until']) {
-                return strcmp($a['valid_until'], $b['valid_until']);
+            if ($a['valid_until'] !== null && $b['valid_until'] !== null) {
+                if ($a['valid_until'] !== $b['valid_until']) {
+                    return strcmp($a['valid_until'], $b['valid_until']);
+                }
+            } elseif ($a['valid_until'] !== null) {
+                return -1;
+            } elseif ($b['valid_until'] !== null) {
+                return 1;
             }
+            
             if ($a['created_at'] !== $b['created_at']) {
                 return strcmp($a['created_at'], $b['created_at']);
             }
             return $a['id'] <=> $b['id'];
         });
 
-        // Strip created_at
         $items = array_map(function($item) {
             unset($item['created_at']);
             return $item;
         }, $items);
 
-        usort($items, function($a, $b) {
-            if ($a['valid_until'] !== null && $b['valid_until'] !== null) {
-                if ($a['valid_until'] !== $b['valid_until']) {
-                    return $a['valid_until'] <=> $b['valid_until'];
-                }
-            } elseif ($a['valid_until'] !== null) {
-                return -1; // a comes first
-            } elseif ($b['valid_until'] !== null) {
-                return 1; // b comes first
-            }
-            
-            if ($a['created_at'] !== $b['created_at']) {
-                return $a['created_at'] <=> $b['created_at'];
-            }
-            return $a['id'] <=> $b['id'];
-        });
-        
-        $finalItems = array_map(function($item) {
-            unset($item['created_at']);
-            return $item;
-        }, $items);
-
-        Response::json(['items' => $finalItems]);
+        Response::json(['items' => $items]);
     }
 
     private $db;
@@ -801,15 +783,20 @@ class AppointmentController {
                 $pkgStmt->execute([$pkgId]);
                 $pkg = $pkgStmt->fetch(\PDO::FETCH_ASSOC);
 
-                if (!$pkg || $pkg['status'] !== 'active') {
+                if (!$pkg) {
                     $this->db->rollBack();
-                    Response::error('Session package is no longer active.', 'PACKAGE_INELIGIBLE', 409);
+                    Response::error('Session package not found.', 'SESSION_PACKAGE_NOT_FOUND', 404);
+                }
+                
+                if ($pkg['status'] !== 'active') {
+                    $this->db->rollBack();
+                    Response::error('Session package is no longer active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
                 }
                 
                 $newDateStr = $startsDt->format('Y-m-d');
                 if ($newDateStr < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $newDateStr > $pkg['valid_until'])) {
                     $this->db->rollBack();
-                    Response::error('New appointment date is outside the session package validity period.', 'PACKAGE_DATE_INVALID', 409);
+                    Response::error('New appointment date is outside the session package validity period.', 'SESSION_PACKAGE_INELIGIBLE', 409);
                 }
             }
 
@@ -847,47 +834,6 @@ class AppointmentController {
             if ($mConfStmt->fetch()) {
                 $this->db->rollBack();
                 Response::error('Member is already booked for this time.', 'MEMBER_CONFLICT', 409);
-            }
-
-            // 5.5 Package validity
-            $memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;
-
-            if ($memberSessionPackageId !== null) {
-                // Verify reserve exists and release doesn't
-                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND member_session_package_id = ? AND entry_type = 'reserve'");
-                $resStmt->execute([$appointmentId, $memberSessionPackageId]);
-                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] !== 1) {
-                    $this->db->rollBack();
-                    Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
-                }
-
-                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND member_session_package_id = ? AND entry_type = 'release'");
-                $relStmt->execute([$appointmentId, $memberSessionPackageId]);
-                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] !== 0) {
-                    $this->db->rollBack();
-                    Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
-                }
-
-                $pkgStmt = $this->db->prepare("SELECT valid_from, valid_until, status FROM member_session_packages WHERE id = ?");
-                $pkgStmt->bindValue(1, $memberSessionPackageId, \PDO::PARAM_INT);
-                $pkgStmt->execute();
-                $pkg = $pkgStmt->fetch(\PDO::FETCH_ASSOC);
-
-                if (!$pkg) {
-                    $this->db->rollBack();
-                    Response::error('Session package not found.', 'SESSION_PACKAGE_NOT_FOUND', 404);
-                }
-
-                if ($pkg['status'] !== 'active') {
-                    $this->db->rollBack();
-                    Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
-                }
-
-                $apptDate = $startsDt->format('Y-m-d');
-                if ($apptDate < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $apptDate > $pkg['valid_until'])) {
-                    $this->db->rollBack();
-                    Response::error('Appointment date is outside the session package validity window.', 'SESSION_PACKAGE_INELIGIBLE', 409);
-                }
             }
 
             // 6. History INSERT
