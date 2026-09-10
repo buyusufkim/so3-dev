@@ -206,7 +206,7 @@ let sessionPackages = [
   }
 ];
 
-let memberSessionPackages = [
+let memberSessionPackages: any[] = [
   {
     id: 1,
     uuid: "abcdef12-3456-7890-abcd-ef1234567890",
@@ -214,8 +214,8 @@ let memberSessionPackages = [
     session_package_id: 1,
     package_name: "Standart Paket",
     total_sessions: 12,
-    valid_from: new Date().toISOString().split('T')[0],
-    valid_until: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    valid_from: "2026-09-10",
+    valid_until: "2026-10-09",
     stored_status: "active",
     effective_status: "active",
     remaining_sessions: 12,
@@ -286,6 +286,131 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   // --- Trainer Namespace Role Firewall ---
   if (path.startsWith('/api/trainer/') && currentDevRole !== 'trainer') {
     return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+  }
+
+
+  // --- Session Packages ---
+  if (path === '/api/admin/session-packages' && method === 'GET') {
+    const status = url.searchParams.get('status');
+    const q = url.searchParams.get('q');
+    
+    let filtered = [...sessionPackages];
+    if (status && status !== 'all') {
+      filtered = filtered.filter(p => p.status === status);
+    }
+    if (q) {
+      filtered = filtered.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+    }
+    
+    return createResponse({
+      items: filtered,
+      pagination: {
+        current_page: 1,
+        per_page: 100,
+        total_items: filtered.length,
+        total_pages: 1
+      }
+    });
+  }
+
+  if (path === '/api/admin/session-packages' && method === 'POST') {
+    const newPkg = {
+      id: sessionPackages.length + 1,
+      uuid: "new-uuid-" + (sessionPackages.length + 1),
+      name: reqBody.name as string,
+      session_count: reqBody.session_count as number,
+      validity_days: reqBody.validity_days as number | null,
+      status: reqBody.status as 'active' | 'inactive',
+      created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+    sessionPackages.push(newPkg);
+    return createResponse(newPkg, 201);
+  }
+
+  const spMatch = path.match(/^\/api\/admin\/session-packages\/([1-9]\d*)$/);
+  if (spMatch && method === 'PATCH') {
+    const id = parseInt(spMatch[1], 10);
+    const pkg = sessionPackages.find(p => p.id === id);
+    if (!pkg) return createError('Not found', 404);
+    
+    if (reqBody.name !== undefined) pkg.name = reqBody.name as string;
+    if (reqBody.session_count !== undefined) pkg.session_count = reqBody.session_count as number;
+    if (reqBody.validity_days !== undefined) pkg.validity_days = reqBody.validity_days as number | null;
+    if (reqBody.status !== undefined) pkg.status = reqBody.status as 'active' | 'inactive';
+    pkg.updated_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    
+    return createResponse(pkg);
+  }
+
+  const mspMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/session-packages$/);
+  if (mspMatch && method === 'GET') {
+    const mId = parseInt(mspMatch[1], 10);
+    const pkgs = memberSessionPackages.filter(p => p.member_id === mId);
+    return createResponse(pkgs);
+  }
+
+  if (mspMatch && method === 'POST') {
+    const mId = parseInt(mspMatch[1], 10);
+    const spId = reqBody.session_package_id as number;
+    const catPkg = sessionPackages.find(p => p.id === spId);
+    if (!catPkg) return createError('Package not found', 404);
+    
+    let valid_until = null;
+    if (catPkg.validity_days) {
+       const start = new Date(reqBody.valid_from as string);
+       start.setDate(start.getDate() + catPkg.validity_days - 1);
+       valid_until = start.toISOString().split('T')[0];
+    }
+    
+    const newMsp = {
+      id: memberSessionPackages.length + 1,
+      uuid: "new-msp-uuid-" + (memberSessionPackages.length + 1),
+      member_id: mId,
+      session_package_id: spId,
+      package_name: catPkg.name,
+      total_sessions: catPkg.session_count,
+      valid_from: reqBody.valid_from as string,
+      valid_until: valid_until,
+      stored_status: "active",
+      effective_status: "active",
+      remaining_sessions: catPkg.session_count,
+      reserved_sessions: 0,
+      created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      cancelled_at: null,
+      cancellation_reason: null
+    };
+    memberSessionPackages.push(newMsp);
+    return createResponse(newMsp, 201);
+  }
+
+  const cancelMatch = path.match(/^\/api\/admin\/member-session-packages\/([1-9]\d*)\/cancel$/);
+  if (cancelMatch && method === 'POST') {
+    const id = parseInt(cancelMatch[1], 10);
+    const pkg = memberSessionPackages.find(p => p.id === id);
+    if (!pkg) return createError('Not found', 404, 'NOT_FOUND');
+    
+    if (pkg.stored_status === 'cancelled') {
+      return createError('Already cancelled', 409, 'CONFLICT');
+    }
+    
+    // DEV logic: If reserved sessions > 0, return PACKAGE_HAS_ACTIVE_RESERVATIONS
+    if (pkg.reserved_sessions > 0) {
+       return createError('Has reservations', 422, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
+    }
+    
+    pkg.stored_status = 'cancelled';
+    pkg.effective_status = 'cancelled';
+    pkg.cancelled_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    pkg.cancellation_reason = reqBody.reason as string;
+    
+    return createResponse(pkg);
+  }
+
+  const ledgerMatch = path.match(/^\/api\/admin\/member-session-packages\/([1-9]\d*)\/ledger$/);
+  if (ledgerMatch && method === 'GET') {
+     // Return empty ledger for now or mock entries
+     return createResponse([]);
   }
 
   // --- Dashboard Endpoints ---

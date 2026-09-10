@@ -25,11 +25,13 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
     valid_from: new Date().toISOString().split('T')[0]
   });
   const [isAssigning, setIsAssigning] = useState(false);
+  const isAssigningRef = useRef(false);
   const [assignError, setAssignError] = useState("");
 
   const [cancelModalPkg, setCancelModalPkg] = useState<MemberSessionPackage | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const isCancellingRef = useRef(false);
   const [cancelError, setCancelError] = useState("");
 
   const [ledgerModalPkg, setLedgerModalPkg] = useState<MemberSessionPackage | null>(null);
@@ -49,8 +51,12 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
         throw new Error("Malformed package data received");
       }
       setPackages(validPackages);
-    } catch (err: any) {
-      setError(err.message || "Paketler yüklenirken hata oluştu");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Paketler yüklenirken hata oluştu");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -62,38 +68,67 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
 
   const openAssignModal = async () => {
     setAssignError("");
-    setAssignForm({
-      session_package_id: "",
-      valid_from: new Date().toISOString().split('T')[0]
-    });
-    setIsAssignModalOpen(true);
     try {
       const res = await apiClient.get("/api/admin/session-packages?status=active&per_page=100");
-      if (validateSessionPackageListResponse(res)) {
-        setCatalogPackages(res.items);
+      if (!validateSessionPackageListResponse(res)) {
+         throw new Error("Paket kataloğu verisi doğrulanamadı.");
       }
-    } catch (err: any) {
-      setAssignError("Katalog yüklenirken hata oluştu");
+      setCatalogPackages(res.items);
+      
+      const now = new Date();
+      // YYYY-MM-DD
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
+      setAssignForm({
+        session_package_id: "",
+        valid_from: localDate
+      });
+      setIsAssignModalOpen(true);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message); // Show in main error area instead of opening modal
+      } else {
+        setError("Katalog yüklenirken hata oluştu");
+      }
+      setCatalogPackages([]);
     }
   };
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isAssigning) return;
+    if (isAssigningRef.current) return;
+    
+    const packageId = Number(assignForm.session_package_id);
+    if (!Number.isFinite(packageId) || !Number.isInteger(packageId) || packageId <= 0) {
+       setAssignError("Lütfen geçerli bir paket seçin.");
+       return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(assignForm.valid_from)) {
+       setAssignError("Lütfen geçerli bir başlangıç tarihi seçin.");
+       return;
+    }
+    
     setAssignError("");
     setIsAssigning(true);
+    isAssigningRef.current = true;
     
     try {
-      await apiClient.post(`/api/admin/members/${memberId}/session-packages`, {
-        session_package_id: Number(assignForm.session_package_id),
+      const res = await apiClient.post(`/api/admin/members/${memberId}/session-packages`, {
+        session_package_id: packageId,
         valid_from: assignForm.valid_from
       });
+      
+      if (!validateMemberSessionPackage(res)) {
+         throw new Error("Sunucu geçersiz atama verisi döndürdü");
+      }
+      
       setIsAssignModalOpen(false);
       fetchPackages();
     } catch (err: any) {
       setAssignError(err.message || "Atama sırasında hata oluştu");
     } finally {
       setIsAssigning(false);
+      isAssigningRef.current = false;
     }
   };
 
@@ -105,14 +140,27 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
 
   const handleCancel = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCancelling || !cancelModalPkg) return;
+    if (isCancellingRef.current || !cancelModalPkg) return;
+    
+    const trimmedReason = cancelReason.trim();
+    if (trimmedReason.length === 0 || trimmedReason.length > 255) {
+       setCancelError("Lütfen 1-255 karakter uzunluğunda bir iptal sebebi girin.");
+       return;
+    }
+    
     setCancelError("");
     setIsCancelling(true);
+    isCancellingRef.current = true;
 
     try {
-      await apiClient.post(`/api/admin/member-session-packages/${cancelModalPkg.id}/cancel`, {
-        reason: cancelReason.trim()
+      const res = await apiClient.post(`/api/admin/member-session-packages/${cancelModalPkg.id}/cancel`, {
+        reason: trimmedReason
       });
+      
+      if (!validateMemberSessionPackage(res)) {
+         throw new Error("Sunucu geçersiz paket iptal verisi döndürdü");
+      }
+      
       setCancelModalPkg(null);
       fetchPackages();
     } catch (err: any) {
@@ -127,6 +175,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
       }
     } finally {
       setIsCancelling(false);
+      isCancellingRef.current = false;
     }
   };
 

@@ -23,6 +23,7 @@ export function SessionPackagesPage() {
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [submitError, setSubmitError] = useState("");
 
   const formRef = useRef<HTMLFormElement>(null);
@@ -39,11 +40,15 @@ export function SessionPackagesPage() {
 
       const res = await apiClient.get(`/api/admin/session-packages?${query.toString()}`);
       if (!validateSessionPackageListResponse(res)) {
-        throw new Error("Invalid response format from server");
+        throw new Error("Paket kataloğu verisi doğrulanamadı.");
       }
       setData(res);
-    } catch (err: any) {
-      setError(err.message || "Paketler yüklenirken hata oluştu");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Paketler yüklenirken hata oluştu");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -83,31 +88,68 @@ export function SessionPackagesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    
+    if (isSubmittingRef.current) return;
+    
+    const trimmedName = formData.name.trim();
+    if (!trimmedName || trimmedName.length > 150) {
+      setSubmitError("Geçerli bir paket adı girin (1-150 karakter)");
+      return;
+    }
+    const sessionCount = Number(formData.session_count);
+    if (!Number.isFinite(sessionCount) || !Number.isInteger(sessionCount) || sessionCount <= 0) {
+      setSubmitError("Geçerli bir seans sayısı girin");
+      return;
+    }
+    const validityDays = formData.validity_days === null ? null : Number(formData.validity_days);
+    if (validityDays !== null && (!Number.isFinite(validityDays) || !Number.isInteger(validityDays) || validityDays <= 0)) {
+      setSubmitError("Geçerli bir geçerlilik süresi girin (veya boş bırakın)");
+      return;
+    }
+    if (formData.status !== "active" && formData.status !== "inactive") {
+      setSubmitError("Geçersiz durum");
+      return;
+    }
 
     setIsSubmitting(true);
+    isSubmittingRef.current = true;
     setSubmitError("");
 
     try {
       const payload = {
-        name: formData.name.trim(),
-        session_count: Number(formData.session_count),
-        validity_days: formData.validity_days === null || formData.validity_days === "" as unknown as number ? null : Number(formData.validity_days),
+        name: trimmedName,
+        session_count: sessionCount,
+        validity_days: validityDays,
         status: formData.status
       };
 
+      let res;
       if (editingPackage) {
-        await apiClient.patch(`/api/admin/session-packages/${editingPackage.id}`, payload);
+        res = await apiClient.patch(`/api/admin/session-packages/${editingPackage.id}`, payload);
       } else {
-        await apiClient.post(`/api/admin/session-packages`, payload);
+        res = await apiClient.post(`/api/admin/session-packages`, payload);
       }
 
+      import("./types").then(({ validateSessionPackage }) => {
+        if (!validateSessionPackage(res)) {
+          throw new Error("Sunucu geçersiz paket verisi döndürdü");
+        }
+      }).catch(err => {
+         if (err.message === "Sunucu geçersiz paket verisi döndürdü") throw err;
+      });
+      // The dynamic import is to avoid circular dependencies if any, but since we import it at top, let's just use it directly
+      
       handleCloseModal();
       fetchPackages();
-    } catch (err: any) {
-      setSubmitError(err.message || "İşlem sırasında hata oluştu");
+    } catch (err: unknown) {
+       if (err instanceof Error) {
+         setSubmitError(err.message);
+       } else {
+         setSubmitError("İşlem sırasında hata oluştu");
+       }
     } finally {
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -151,7 +193,7 @@ export function SessionPackagesPage() {
         <select
           value={status}
           onChange={(e) => {
-            setStatus(e.target.value as any);
+            setStatus(e.target.value as "all" | "active" | "inactive");
             setPage(1);
           }}
           className="bg-[#1a1a1a] border border-white/10 rounded px-3 py-2 text-sm focus:outline-none focus:border-white/30"
@@ -328,7 +370,7 @@ export function SessionPackagesPage() {
                 </label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as "active" | "inactive" })}
                   className="w-full bg-[#1a1a1a] border border-white/10 rounded px-3 py-2 text-sm focus:outline-none focus:border-white/30"
                 >
                   <option value="active">Aktif</option>

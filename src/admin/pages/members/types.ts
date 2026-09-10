@@ -73,17 +73,17 @@ export interface MemberSessionPackage {
 export function validateMemberSessionPackage(data: any): data is MemberSessionPackage {
   return (
     typeof data === 'object' && data !== null &&
-    typeof data.id === 'number' && data.id > 0 &&
-    typeof data.uuid === 'string' &&
-    (data.session_package_id === null || typeof data.session_package_id === 'number') &&
+    typeof data.id === 'number' && Number.isFinite(data.id) && Number.isInteger(data.id) && data.id > 0 &&
+    typeof data.uuid === 'string' && data.uuid.trim() !== '' &&
+    (data.session_package_id === null || (typeof data.session_package_id === 'number' && Number.isFinite(data.session_package_id) && Number.isInteger(data.session_package_id) && data.session_package_id > 0)) &&
     typeof data.package_name === 'string' &&
-    typeof data.total_sessions === 'number' && data.total_sessions > 0 &&
-    typeof data.valid_from === 'string' &&
-    (data.valid_until === null || typeof data.valid_until === 'string') &&
+    typeof data.total_sessions === 'number' && Number.isFinite(data.total_sessions) && Number.isInteger(data.total_sessions) && data.total_sessions > 0 &&
+    typeof data.valid_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.valid_from) &&
+    (data.valid_until === null || (typeof data.valid_until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.valid_until))) &&
     (data.stored_status === 'active' || data.stored_status === 'cancelled') &&
-    ['active', 'cancelled', 'expired', 'exhausted'].includes(data.effective_status) &&
-    typeof data.remaining_sessions === 'number' &&
-    typeof data.reserved_sessions === 'number' && data.reserved_sessions >= 0 &&
+    (data.effective_status === 'active' || data.effective_status === 'cancelled' || data.effective_status === 'expired' || data.effective_status === 'exhausted') &&
+    typeof data.remaining_sessions === 'number' && Number.isFinite(data.remaining_sessions) && Number.isInteger(data.remaining_sessions) &&
+    typeof data.reserved_sessions === 'number' && Number.isFinite(data.reserved_sessions) && Number.isInteger(data.reserved_sessions) && data.reserved_sessions >= 0 &&
     typeof data.created_at === 'string' &&
     (data.cancelled_at === null || typeof data.cancelled_at === 'string') &&
     (data.cancellation_reason === null || typeof data.cancellation_reason === 'string')
@@ -102,15 +102,23 @@ export interface MemberLedgerEntry {
 }
 
 export function validateMemberLedgerEntry(data: any): data is MemberLedgerEntry {
-  return (
-    typeof data === 'object' && data !== null &&
-    typeof data.id === 'number' && data.id > 0 &&
-    typeof data.uuid === 'string' &&
-    (data.appointment_id === null || typeof data.appointment_id === 'number') &&
-    ['reserve', 'release', 'adjustment'].includes(data.entry_type) &&
-    typeof data.delta === 'number' && data.delta !== 0 &&
-    (data.reason === null || typeof data.reason === 'string') &&
-    typeof data.created_at === 'string' &&
-    typeof data.created_by_name === 'string'
-  );
+  if (
+    typeof data !== 'object' || data === null ||
+    typeof data.id !== 'number' || !Number.isFinite(data.id) || !Number.isInteger(data.id) || data.id <= 0 ||
+    typeof data.uuid !== 'string' || data.uuid.trim() === '' ||
+    !(data.appointment_id === null || (typeof data.appointment_id === 'number' && Number.isFinite(data.appointment_id) && Number.isInteger(data.appointment_id) && data.appointment_id > 0)) ||
+    !(data.entry_type === 'reserve' || data.entry_type === 'release' || data.entry_type === 'adjustment') ||
+    typeof data.delta !== 'number' || !Number.isFinite(data.delta) || !Number.isInteger(data.delta) || data.delta === 0 ||
+    !(data.reason === null || typeof data.reason === 'string') ||
+    typeof data.created_at !== 'string' ||
+    typeof data.created_by_name !== 'string'
+  ) {
+    return false;
+  }
+  
+  if (data.entry_type === 'reserve' && (data.delta !== -1 || data.appointment_id === null)) return false;
+  if (data.entry_type === 'release' && (data.delta !== 1 || data.appointment_id === null)) return false;
+  if (data.entry_type === 'adjustment' && data.appointment_id !== null) return false;
+  
+  return true;
 }

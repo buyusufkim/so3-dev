@@ -67,4 +67,13 @@ const fixtures = fs.readFileSync(devFixturesPath, 'utf8');
 check(fixtures.includes('sessionPackages =') && fixtures.includes('memberSessionPackages ='), 'DEV catalog and member package stateful handlers exist');
 check(fixtures.includes('total_sessions:') && fixtures.includes('remaining_sessions:'), 'DEV responses match backend parity');
 
+
+check(!spPage.includes('as any') && !spPage.includes('as unknown'), 'SessionPackagesPage has no typescript escapes');
+check(!mPanel.includes('as any') && !mPanel.includes('as unknown'), 'MemberSessionPackagesPanel has no typescript escapes');
+check(spPage.includes('validateSessionPackage(res)') || spPage.includes('validateSessionPackage'), 'SessionPackagesPage validates mutation response');
+check(mPanel.includes('validateMemberSessionPackage(res)'), 'MemberSessionPackagesPanel validates mutation response');
+check(spPage.includes('isSubmittingRef.current'), 'Double submit protection in SessionPackagesPage');
+check(mPanel.includes('isAssigningRef.current') && mPanel.includes('isCancellingRef.current'), 'Double submit protection in MemberSessionPackagesPanel');
+check(fixtures.includes('PACKAGE_HAS_ACTIVE_RESERVATIONS'), 'adminDevFixtures handles PACKAGE_HAS_ACTIVE_RESERVATIONS');
+
 process.exit(exitCode);
