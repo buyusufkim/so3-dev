@@ -35,7 +35,8 @@
     "verify:audit-log-visibility": "node scripts/verify-audit-log-visibility.mjs",
     "verify:media-controller-authorization": "node scripts/verify-media-controller-authorization.mjs",
     "verify:session-package-foundation": "node scripts/verify-session-package-foundation.mjs",
-    "verify:session-package-management-api": "node scripts/verify-session-package-management-api.mjs"
+    "verify:session-package-management-api": "node scripts/verify-session-package-management-api.mjs",
+    "verify:session-package-management-ui": "node scripts/verify-session-package-management-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

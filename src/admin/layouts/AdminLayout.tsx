@@ -121,6 +121,7 @@ export function AdminLayout() {
               <div className="space-y-1">
                 <NavLink to="/admin/appointments" className={navLinkClass}>Randevular</NavLink>
                 <NavLink to="/admin/members" className={navLinkClass}>Üyeler</NavLink>
+                <NavLink to="/admin/session-packages" className={navLinkClass}>Seans Paketleri</NavLink>
                 <NavLink to="/admin/trainer-accounts" className={navLinkClass}>Eğitmen Hesapları</NavLink>
               </div>
             </div>

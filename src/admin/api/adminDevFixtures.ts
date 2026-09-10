@@ -182,6 +182,52 @@ let mockAppointments = [
 ];
 let nextAppointmentId = 2;
 
+
+let sessionPackages = [
+  {
+    id: 1,
+    uuid: "11111111-2222-3333-4444-555555555555",
+    name: "Standart Paket",
+    session_count: 12,
+    validity_days: 30,
+    status: "active",
+    created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+  },
+  {
+    id: 2,
+    uuid: "22222222-3333-4444-5555-666666666666",
+    name: "Deneme Paketi",
+    session_count: 3,
+    validity_days: null,
+    status: "inactive",
+    created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+  }
+];
+
+let memberSessionPackages = [
+  {
+    id: 1,
+    uuid: "abcdef12-3456-7890-abcd-ef1234567890",
+    member_id: 1,
+    session_package_id: 1,
+    package_name: "Standart Paket",
+    total_sessions: 12,
+    valid_from: new Date().toISOString().split('T')[0],
+    valid_until: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    stored_status: "active",
+    effective_status: "active",
+    remaining_sessions: 12,
+    reserved_sessions: 0,
+    created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    cancelled_at: null,
+    cancellation_reason: null
+  }
+];
+
+let packageLedgers = [];
+
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
   const url = new URL(endpoint, 'http://localhost');

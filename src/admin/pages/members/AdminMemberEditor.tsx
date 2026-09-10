@@ -6,6 +6,7 @@ import { Member } from "./types";
 import { AdminTrainerListItem } from "../trainers/types";
 import { MemberVisitsPanel } from "./MemberVisitsPanel";
 import { MemberRenewalsPanel } from "./MemberRenewalsPanel";
+import { MemberSessionPackagesPanel } from "./MemberSessionPackagesPanel";
 
 export function AdminMemberEditor() {
   const { id } = useParams<{ id: string }>();
@@ -18,7 +19,7 @@ export function AdminMemberEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"info" | "visits" | "renewals">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "visits" | "renewals" | "session-packages">("info");
   
   const [trainers, setTrainers] = useState<AdminTrainerListItem[]>([]);
   const [initialConsent, setInitialConsent] = useState<string | null>(null);
@@ -295,6 +296,12 @@ export function AdminMemberEditor() {
           >
             Yenileme Geçmişi
           </button>
+          <button
+            onClick={() => setActiveTab('session-packages')}
+            className={`pb-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'session-packages' ? 'border-white text-white' : 'border-transparent text-white/50 hover:text-white/70'}`}
+          >
+            Seans Paketleri
+          </button>
         </div>
       )}
 
@@ -458,6 +465,12 @@ export function AdminMemberEditor() {
       {activeTab === 'renewals' && id && (
         <div className="bg-[#121212] border border-white/10 rounded-lg">
           <MemberRenewalsPanel memberId={id} />
+        </div>
+      )}
+
+      {activeTab === 'session-packages' && id && (
+        <div className="bg-[#121212] border border-white/10 rounded-lg p-6">
+          <MemberSessionPackagesPanel memberId={parseInt(id, 10)} />
         </div>
       )}
 
