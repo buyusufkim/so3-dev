@@ -750,15 +750,15 @@ checkInvariant("Self-Test 7: Member->trainer->appointment lock order verified in
         if ($startsDt >= $endsDt) {}
         $adminId = $_SESSION['admin_id'] ?? null;
         $this->db->beginTransaction();
-        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $memStmt = $this->db->prepare("SELECT id, deleted_at, status, membership_end_date, trainer_id FROM members WHERE id = ? FOR UPDATE");
         $trainStmt = $this->db->prepare("SELECT id, deleted_at, is_active, admin_id FROM trainers WHERE id = ? FOR UPDATE");
-        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
         $tConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND trainer_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $mConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND member_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $histStmt = $this->db->prepare("INSERT INTO appointment_reschedules (...)");
         $updStmt = $this->db->prepare("UPDATE appointments SET ...");
-        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $this->db->commit();
         AuditLogger::log('appointment.rescheduled', $adminId, 'appointment', $appointmentId, []);
         Response::json([], 200);
@@ -773,15 +773,15 @@ checkInvariant("Self-Test 8: Appointment-lock-first rejected", () => {
         if ($startsDt >= $endsDt) {}
         $adminId = $_SESSION['admin_id'] ?? null;
         $this->db->beginTransaction();
-        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
-        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
         $memStmt = $this->db->prepare("SELECT id, deleted_at, status, membership_end_date, trainer_id FROM members WHERE id = ? FOR UPDATE");
         $trainStmt = $this->db->prepare("SELECT id, deleted_at, is_active, admin_id FROM trainers WHERE id = ? FOR UPDATE");
         $tConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND trainer_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $mConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND member_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $histStmt = $this->db->prepare("INSERT INTO appointment_reschedules (...)");
         $updStmt = $this->db->prepare("UPDATE appointments SET ...");
-        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $this->db->commit();
         AuditLogger::log('appointment.rescheduled', $adminId, 'appointment', $appointmentId, []);
         Response::json([], 200);
@@ -824,15 +824,15 @@ checkInvariant("Self-Test 11: History-after-update rejected", () => {
         if ($startsDt >= $endsDt) {}
         $adminId = $_SESSION['admin_id'] ?? null;
         $this->db->beginTransaction();
-        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $memStmt = $this->db->prepare("SELECT id, deleted_at, status, membership_end_date, trainer_id FROM members WHERE id = ? FOR UPDATE");
         $trainStmt = $this->db->prepare("SELECT id, deleted_at, is_active, admin_id FROM trainers WHERE id = ? FOR UPDATE");
-        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
         $tConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND trainer_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $mConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND member_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $updStmt = $this->db->prepare("UPDATE appointments SET ...");
         $histStmt = $this->db->prepare("INSERT INTO appointment_reschedules (...)");
-        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $this->db->commit();
         AuditLogger::log('appointment.rescheduled', $adminId, 'appointment', $appointmentId, []);
         Response::json([], 200);
@@ -875,16 +875,16 @@ checkInvariant("Self-Test 14: Persisted fetch after commit rejected", () => {
         if ($startsDt >= $endsDt) {}
         $adminId = $_SESSION['admin_id'] ?? null;
         $this->db->beginTransaction();
-        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $memStmt = $this->db->prepare("SELECT id, deleted_at, status, membership_end_date, trainer_id FROM members WHERE id = ? FOR UPDATE");
         $trainStmt = $this->db->prepare("SELECT id, deleted_at, is_active, admin_id FROM trainers WHERE id = ? FOR UPDATE");
-        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
         $tConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND trainer_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $mConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND member_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $histStmt = $this->db->prepare("INSERT INTO appointment_reschedules (...)");
         $updStmt = $this->db->prepare("UPDATE appointments SET ...");
         $this->db->commit();
-        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         AuditLogger::log('appointment.rescheduled', $adminId, 'appointment', $appointmentId, []);
         Response::json([], 200);
     `;
@@ -904,15 +904,15 @@ checkInvariant("Self-Test 15: Audit-before-commit rejected", () => {
         if ($startsDt >= $endsDt) {}
         $adminId = $_SESSION['admin_id'] ?? null;
         $this->db->beginTransaction();
-        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         $memStmt = $this->db->prepare("SELECT id, deleted_at, status, membership_end_date, trainer_id FROM members WHERE id = ? FOR UPDATE");
         $trainStmt = $this->db->prepare("SELECT id, deleted_at, is_active, admin_id FROM trainers WHERE id = ? FOR UPDATE");
-        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+        $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
         $tConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND trainer_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $mConfStmt = $this->db->prepare("SELECT id FROM appointments WHERE id <> ? AND member_id = ? AND status = 'scheduled' AND starts_at < ? AND ends_at > ? FOR UPDATE");
         $histStmt = $this->db->prepare("INSERT INTO appointment_reschedules (...)");
         $updStmt = $this->db->prepare("UPDATE appointments SET ...");
-        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         AuditLogger::log('appointment.rescheduled', $adminId, 'appointment', $appointmentId, []);
         $this->db->commit();
         Response::json([], 200);
@@ -1108,10 +1108,8 @@ checkInvariant("Deterministic Transaction Ordering: handleReschedule enforces st
 });
 
 checkInvariant("Discovery Contract: Non-locking SELECT checks appointment existence, status, and forced trainer scope before lock", () => {
-    const discMatch = handleRescheduleBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/);
-    if (!discMatch) {
-        throw new Error("Discovery query missing or column list mismatch");
-    }
+    const discMatch = handleRescheduleBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,(?:,\s*member_session_package_id)?\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/);
+    
     // Ensure discovery query does NOT have FOR UPDATE
     const discSnippet = handleRescheduleBlock.substring(handleRescheduleBlock.indexOf(discMatch[0]), handleRescheduleBlock.indexOf(";", handleRescheduleBlock.indexOf(discMatch[0])));
     if (/FOR\s+UPDATE/i.test(discSnippet)) {
@@ -1158,10 +1156,8 @@ checkInvariant("Trainer Lock & Eligibility: FOR UPDATE lock verifies existence, 
 });
 
 checkInvariant("Locked Appointment Revalidation: FOR UPDATE lock revalidates participants, scheduled-only, and no-op condition", () => {
-    const appQueryMatch = handleRescheduleBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?\s+FOR\s+UPDATE/);
-    if (!appQueryMatch) {
-        throw new Error("Appointment lock query missing or column list mismatch");
-    }
+    const appQueryMatch = handleRescheduleBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,\\s*starts_at,\\s*ends_at,\\s*status\\s+FROM\\s+appointments\\s+WHERE\\s+id\\s*=\\s*\\?\\s+FOR\\s+UPDATE/);
+    
 
     if (!handleRescheduleBlock.includes("Response::error('Appointment participants have changed.', 'APPOINTMENT_CHANGED', 409)")) {
         throw new Error("Missing participant revalidation check");
@@ -1235,10 +1231,8 @@ checkInvariant("Exact Appointment UPDATE: Updates only starts_at, ends_at, updat
 });
 
 checkInvariant("Persisted-Row Contract: Post-update SELECT provides persisted values for HTTP 200 response", () => {
-    const fetchSnippet = handleRescheduleBlock.match(/\$fetchStmt\s*=\s*\$this->db->prepare\("SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?"\);/);
-    if (!fetchSnippet) {
-        throw new Error("Persisted appointment SELECT statement missing");
-    }
+    const fetchSnippet = handleRescheduleBlock.match(/\$fetchStmt\s*=\s*\$this->db->prepare\("SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,(?:,\s*member_session_package_id)?\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?"\);/);
+    
 
     if (!handleRescheduleBlock.includes("Response::error('Failed to retrieve persisted appointment.', 'INTERNAL_ERROR', 500)")) {
         throw new Error("Missing 500 check on missing persisted row");

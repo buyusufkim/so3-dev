@@ -485,7 +485,7 @@ function verifyCreateExecutionOrder(code) {
         { name: "member conflict SELECT", token: "member_id = ? AND status = 'scheduled'" },
         { name: "INSERT appointments", token: "INSERT INTO appointments" },
         { name: "lastInsertId", token: "lastInsertId" },
-        { name: "persisted SELECT", token: "SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?" },
+        { name: "persisted SELECT", token: "SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?" },
         { name: "persisted-missing guard", token: "Failed to retrieve persisted appointment" },
         { name: "commit", token: "commit()" },
         { name: "AuditLogger", token: "AuditLogger::log" },
@@ -603,7 +603,7 @@ function verifyAuditLoggerCall(auditCallBlock) {
     }
 
     // Arg 4: $appId
-    if (!/^\$appId\b/.test(args[3])) {
+    if (!/^\$(appId|appointmentId)\b/.test(args[3])) {
         throw new Error(`Arg 4 mismatch. Expected $appId, found: ${args[3]}`);
     }
 
@@ -613,7 +613,7 @@ function verifyAuditLoggerCall(auditCallBlock) {
         throw new Error("Arg 5 could not be parsed as PHP associative array");
     }
 
-    const expectedKeys = ['ends_at', 'member_id', 'starts_at', 'trainer_id'].sort();
+    const expectedKeys = ['ends_at', 'member_id', 'member_session_package_id', 'starts_at', 'trainer_id'].sort();
     const actualKeys = [...metaKeys].sort();
 
     if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys)) {
@@ -962,7 +962,7 @@ checkInvariant('Self-Test 7: Monotonic execution ordering rejects transposed ope
         $this->db->prepare("member_id = ? AND status = 'scheduled' FOR UPDATE");
         $this->db->prepare("INSERT INTO appointments");
         $this->db->lastInsertId();
-        $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         throw new Exception("Failed to retrieve persisted appointment");
         $this->db->commit();
         AuditLogger::log();
@@ -1046,7 +1046,8 @@ checkInvariant('Self-Test 10: Exact AuditLogger call parser rejects extra keys, 
                 'member_id' => (int)$persistedApp['member_id'],
                 'trainer_id' => (int)$persistedApp['trainer_id'],
                 'starts_at' => $persistedApp['starts_at'],
-                'ends_at' => $persistedApp['ends_at']
+                'ends_at' => $persistedApp['ends_at'],
+                'member_session_package_id' => $persistedApp['member_session_package_id']
             ]
         )
     `;
@@ -1063,7 +1064,8 @@ checkInvariant('Self-Test 10: Exact AuditLogger call parser rejects extra keys, 
                 'member_id' => (int)$persistedApp['member_id'],
                 'trainer_id' => (int)$persistedApp['trainer_id'],
                 'starts_at' => $persistedApp['starts_at'],
-                'ends_at' => $persistedApp['ends_at']
+                'ends_at' => $persistedApp['ends_at'],
+                'member_session_package_id' => $persistedApp['member_session_package_id']
             ],
             $this->db
         )
@@ -1626,7 +1628,7 @@ checkInvariant('Exact INSERT Parser: column set is exact, status is server-liter
     if (!colsMatch) throw new Error("Could not parse columns from INSERT statement");
 
     const cols = colsMatch[1].split(',').map(c => c.trim()).sort();
-    const expectedCols = ['created_by', 'ends_at', 'member_id', 'starts_at', 'status', 'trainer_id', 'uuid'].sort();
+    const expectedCols = ['created_by', 'ends_at', 'member_id', 'member_session_package_id', 'starts_at', 'status', 'trainer_id', 'uuid'].sort();
 
     if (JSON.stringify(cols) !== JSON.stringify(expectedCols)) {
         throw new Error(`INSERT columns mismatch. Expected: [${expectedCols.join(', ')}], Found: [${cols.join(', ')}]`);
@@ -1649,7 +1651,7 @@ checkInvariant('Exact INSERT Parser: column set is exact, status is server-liter
 // Persisted-Row Contract & Success Response Truth
 checkInvariant('Persisted-Row Contract: fetch row by lastInsertId and build 201 response strictly from persisted row', () => {
     const lastInsertIdx = handleCreateBlock.indexOf("lastInsertId()");
-    const fetchIdx = handleCreateBlock.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+    const fetchIdx = handleCreateBlock.indexOf("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
     const guardIdx = handleCreateBlock.indexOf("Failed to retrieve persisted appointment");
     const commitIdx = handleCreateBlock.indexOf("commit()");
     const resp201Idx = handleCreateBlock.indexOf("201");

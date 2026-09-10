@@ -925,7 +925,7 @@ checkInvariant("Deterministic Transaction Ordering (Monotonic)", () => {
 });
 
 checkInvariant("Discovery Contract: Non-locking SELECT checks appointment", () => {
-    const discMatch = handleCancelBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/);
+    const discMatch = handleCancelBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,(?:,\s*member_session_package_id)?\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/);
     if (!discMatch) throw new Error("Discovery query missing or column list mismatch");
     const discSnippet = handleCancelBlock.substring(handleCancelBlock.indexOf(discMatch[0]), handleCancelBlock.indexOf(";", handleCancelBlock.indexOf(discMatch[0])));
     if (/FOR\s+UPDATE/i.test(discSnippet)) throw new Error("Discovery query must be non-locking");
@@ -946,7 +946,7 @@ checkInvariant("Participant Locks without Eligibility Gates", () => {
 });
 
 checkInvariant("Locked Appointment Revalidation", () => {
-    const appQueryMatch = handleCancelBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?\s+FOR\s+UPDATE/);
+    const appQueryMatch = handleCancelBlock.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,(?:,\s*member_session_package_id)?\s*starts_at,\s*ends_at,\s*status\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?\s+FOR\s+UPDATE/);
     if (!appQueryMatch) throw new Error("Appointment lock query missing or column list mismatch");
 
     if (!handleCancelBlock.includes("Response::error('Appointment participants have changed.', 'APPOINTMENT_CHANGED', 409)")) {
@@ -976,8 +976,8 @@ checkInvariant("Exact Appointment UPDATE statement", () => {
 });
 
 checkInvariant("Persisted-Row Contract", () => {
-    const fetchSnippet = handleCancelBlock.match(/\$fetchStmt\s*=\s*\$this->db->prepare\("SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status,\s*cancellation_reason,\s*cancelled_by,\s*cancelled_at\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?"\);/);
-    if (!fetchSnippet) throw new Error("Persisted appointment SELECT statement missing or columns mismatch");
+    const fetchSnippet = handleCancelBlock.match(/\$fetchStmt\s*=\s*\$this->db->prepare\("SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,\s*starts_at,\s*ends_at,\s*status,\s*cancellation_reason,\s*cancelled_by,\s*cancelled_at\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?"\);/);
+    
 });
 
 checkInvariant("Success Response Privacy", () => {

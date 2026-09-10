@@ -924,6 +924,34 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
 }
 
 
+        if ($requestUri === '/api/admin/appointment-session-packages') {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getAppointmentSessionPackages('admin');
+            $matched = true;
+        }
+    }
+    if ($requestUri === '/api/reception/appointment-session-packages') {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getAppointmentSessionPackages('reception');
+            $matched = true;
+        }
+    }
+    if ($requestUri === '/api/trainer/appointment-session-packages') {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/AppointmentController.php';
+            (new \Controllers\AppointmentController())->getAppointmentSessionPackages('trainer');
+            $matched = true;
+        }
+    }
+
     if ($requestUri === '/api/admin/session-packages') {
         AuthMiddleware::handle();
         require_once __DIR__ . '/controllers/SessionPackageController.php';

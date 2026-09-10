@@ -11,6 +11,134 @@ use DateTime;
 use DateTimeZone;
 
 class AppointmentController {
+    public function getAppointmentSessionPackages(string $scope) {
+        $allowedKeys = ['member_id', 'date'];
+        $dataKeys = array_keys($_GET);
+        sort($dataKeys);
+        sort($allowedKeys);
+        
+        if ($dataKeys !== $allowedKeys) {
+            Response::error('Exact query parameters member_id and date are required.', 'VALIDATION_ERROR', 422);
+        }
+
+        if (!preg_match('/^[1-9]\d*$/', $_GET['member_id'])) {
+            Response::error('member_id must be a positive integer.', 'VALIDATION_ERROR', 422);
+        }
+        $memberId = (int)$_GET['member_id'];
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date'])) {
+            Response::error('date must be in YYYY-MM-DD format.', 'VALIDATION_ERROR', 422);
+        }
+        
+        $dateStr = $_GET['date'];
+        $d = DateTime::createFromFormat('Y-m-d', $dateStr, new DateTimeZone('Europe/Istanbul'));
+        if (!$d || $d->format('Y-m-d') !== $dateStr) {
+            Response::error('Invalid calendar date.', 'VALIDATION_ERROR', 422);
+        }
+
+        $adminId = $_SESSION['admin_id'] ?? 0;
+        if (!$adminId || $adminId <= 0) {
+            Response::error('Valid session required.', 'UNAUTHORIZED', 401);
+        }
+
+        if ($scope === 'trainer') {
+            $trainStmt = $this->db->prepare("SELECT id, is_active FROM trainers WHERE admin_id = ? AND deleted_at IS NULL");
+            $trainStmt->bindValue(1, $adminId, PDO::PARAM_INT);
+            $trainStmt->execute();
+            $trainer = $trainStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$trainer) {
+                Response::error('Trainer not found or deleted.', 'NOT_FOUND', 404);
+            }
+            if ($trainer['is_active'] != 1) {
+                Response::error('Trainer is inactive.', 'TRAINER_INELIGIBLE', 409);
+            }
+            $trainerId = (int)$trainer['id'];
+
+            // Check if member is assigned to this trainer
+            $memStmt = $this->db->prepare("SELECT id, trainer_id FROM members WHERE id = ? AND deleted_at IS NULL AND status = 'active'");
+            $memStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+            $memStmt->execute();
+            $member = $memStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$member || (int)$member['trainer_id'] !== $trainerId) {
+                Response::error('Unauthorized member access.', 'FORBIDDEN', 403);
+            }
+        } else {
+            $memStmt = $this->db->prepare("SELECT id FROM members WHERE id = ? AND deleted_at IS NULL AND status = 'active'");
+            $memStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+            $memStmt->execute();
+            if (!$memStmt->fetch()) {
+                Response::error('Member not found or inactive.', 'NOT_FOUND', 404);
+            }
+        }
+
+        $stmt = $this->db->prepare("
+            SELECT msp.id, sp.name as package_name, msp.total_sessions, msp.valid_from, msp.valid_until, msp.created_at,
+                   COALESCE(
+                       (SELECT SUM(delta) FROM member_session_package_ledger WHERE member_session_package_id = msp.id), 0
+                   ) as used_delta,
+                   COALESCE(
+                       (SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = msp.id AND entry_type = 'reserve'), 0
+                   ) as reserve_count,
+                   COALESCE(
+                       (SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = msp.id AND entry_type = 'release'), 0
+                   ) as release_count
+            FROM member_session_packages msp
+            JOIN session_packages sp ON msp.session_package_id = sp.id
+            WHERE msp.member_id = ?
+              AND msp.stored_status = 'active'
+              AND msp.valid_from <= ?
+              AND (msp.valid_until IS NULL OR msp.valid_until >= ?)
+        ");
+        $stmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $dateStr, PDO::PARAM_STR);
+        $stmt->bindValue(3, $dateStr, PDO::PARAM_STR);
+        $stmt->execute();
+        $packages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $items = [];
+        foreach ($packages as $pkg) {
+            $remaining = (int)$pkg['total_sessions'] + (int)$pkg['used_delta'];
+            if ($remaining > 0) {
+                $reserved = max(0, (int)$pkg['reserve_count'] - (int)$pkg['release_count']);
+                $items[] = [
+                    'id' => (int)$pkg['id'],
+                    'package_name' => $pkg['package_name'],
+                    'total_sessions' => (int)$pkg['total_sessions'],
+                    'remaining_sessions' => $remaining,
+                    'reserved_sessions' => $reserved,
+                    'valid_from' => $pkg['valid_from'],
+                    'valid_until' => $pkg['valid_until'],
+                    'created_at' => $pkg['created_at']
+                ];
+            }
+        }
+
+        usort($items, function($a, $b) {
+            if ($a['valid_until'] !== null && $b['valid_until'] !== null) {
+                if ($a['valid_until'] !== $b['valid_until']) {
+                    return $a['valid_until'] <=> $b['valid_until'];
+                }
+            } elseif ($a['valid_until'] !== null) {
+                return -1; // a comes first
+            } elseif ($b['valid_until'] !== null) {
+                return 1; // b comes first
+            }
+            
+            if ($a['created_at'] !== $b['created_at']) {
+                return $a['created_at'] <=> $b['created_at'];
+            }
+            return $a['id'] <=> $b['id'];
+        });
+        
+        $finalItems = array_map(function($item) {
+            unset($item['created_at']);
+            return $item;
+        }, $items);
+
+        Response::json(['items' => $finalItems]);
+    }
+
     private $db;
 
     public function __construct() {
@@ -189,7 +317,7 @@ class AppointmentController {
 
     // --- CREATE HELPERS ---
 
-    private function handleCreate(array $allowedKeys, ?int $forcedTrainerId = null) {
+    private function handleCreate(array $allowedKeysLegacy, array $allowedKeysPackage, ?int $forcedTrainerId = null) {
         if (!empty($_GET)) {
             Response::error(
                 'Query parameters are not allowed for appointment creation.',
@@ -207,11 +335,22 @@ class AppointmentController {
 
         $dataKeys = array_keys($data);
         sort($dataKeys);
-        $allowedSorted = $allowedKeys;
-        sort($allowedSorted);
+        $allowedLegacySorted = $allowedKeysLegacy;
+        sort($allowedLegacySorted);
+        
+        $allowedPackageSorted = $allowedKeysPackage;
+        sort($allowedPackageSorted);
 
-        if ($dataKeys !== $allowedSorted) {
+        if ($dataKeys !== $allowedLegacySorted && $dataKeys !== $allowedPackageSorted) {
             Response::error('Exact payload keys required.', 'VALIDATION_ERROR', 422);
+        }
+        
+        $memberSessionPackageId = null;
+        if (in_array('member_session_package_id', $dataKeys)) {
+            $memberSessionPackageId = $data['member_session_package_id'];
+            if (!is_int($memberSessionPackageId) || $memberSessionPackageId <= 0) {
+                Response::error('member_session_package_id must be a positive integer.', 'VALIDATION_ERROR', 422);
+            }
         }
 
         if (!is_int($data['member_id']) || $data['member_id'] <= 0) {
@@ -334,24 +473,82 @@ class AppointmentController {
                 Response::error('Member is already booked for this time.', 'MEMBER_CONFLICT', 409);
             }
 
+
+            // 4.5. Package lock and balance check
+            if ($memberSessionPackageId !== null) {
+                $pkgStmt = $this->db->prepare("
+                    SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, stored_status
+                    FROM member_session_packages
+                    WHERE id = ?
+                    FOR UPDATE
+                ");
+                $pkgStmt->bindValue(1, $memberSessionPackageId, PDO::PARAM_INT);
+                $pkgStmt->execute();
+                $pkg = $pkgStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$pkg || (int)$pkg['member_id'] !== (int)$data['member_id']) {
+                    $this->db->rollBack();
+                    Response::error('Session package not found or does not belong to the member.', 'SESSION_PACKAGE_NOT_FOUND', 404);
+                }
+
+                if ($pkg['stored_status'] !== 'active') {
+                    $this->db->rollBack();
+                    Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+                }
+
+                $apptDate = $startsDt->format('Y-m-d');
+                if ($apptDate < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $apptDate > $pkg['valid_until'])) {
+                    $this->db->rollBack();
+                    Response::error('Appointment date is outside the session package validity window.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+                }
+
+                $ledgerStmt = $this->db->prepare("SELECT COALESCE(SUM(delta), 0) as used_delta FROM member_session_package_ledger WHERE member_session_package_id = ?");
+                $ledgerStmt->bindValue(1, $memberSessionPackageId, PDO::PARAM_INT);
+                $ledgerStmt->execute();
+                $ledger = $ledgerStmt->fetch(PDO::FETCH_ASSOC);
+                
+                $remaining = (int)$pkg['total_sessions'] + (int)$ledger['used_delta'];
+                if ($remaining <= 0) {
+                    $this->db->rollBack();
+                    Response::error('Session package is exhausted.', 'SESSION_PACKAGE_EXHAUSTED', 409);
+                }
+            }
+
             // 5. Insert
+
             $uuid = $this->generateUuid();
+
             $insStmt = $this->db->prepare("
-                INSERT INTO appointments (uuid, member_id, trainer_id, starts_at, ends_at, status, created_by)
-                VALUES (?, ?, ?, ?, ?, 'scheduled', ?)
+                INSERT INTO appointments (uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?)
             ");
             $insStmt->bindValue(1, $uuid, PDO::PARAM_STR);
             $insStmt->bindValue(2, $data['member_id'], PDO::PARAM_INT);
             $insStmt->bindValue(3, $trainerId, PDO::PARAM_INT);
-            $insStmt->bindValue(4, $data['starts_at'], PDO::PARAM_STR);
-            $insStmt->bindValue(5, $data['ends_at'], PDO::PARAM_STR);
-            $insStmt->bindValue(6, $adminId, PDO::PARAM_INT);
+            $insStmt->bindValue(4, $memberSessionPackageId, $memberSessionPackageId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $insStmt->bindValue(5, $data['starts_at'], PDO::PARAM_STR);
+            $insStmt->bindValue(6, $data['ends_at'], PDO::PARAM_STR);
+            $insStmt->bindValue(7, $adminId, PDO::PARAM_INT);
             $insStmt->execute();
             
-            $appId = (int)$this->db->lastInsertId();
+            $appointmentId = (int)$this->db->lastInsertId();
 
-            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
-            $fetchStmt->bindValue(1, $appId, PDO::PARAM_INT);
+            if ($memberSessionPackageId !== null) {
+                $ledgerUuid = $this->generateUuid();
+                $resStmt = $this->db->prepare("
+                    INSERT INTO member_session_package_ledger (uuid, member_session_package_id, appointment_id, entry_type, delta, created_by)
+                    VALUES (?, ?, ?, 'reserve', -1, ?)
+                ");
+                $resStmt->bindValue(1, $ledgerUuid, PDO::PARAM_STR);
+                $resStmt->bindValue(2, $memberSessionPackageId, PDO::PARAM_INT);
+                $resStmt->bindValue(3, $appointmentId, PDO::PARAM_INT);
+                $resStmt->bindValue(4, $adminId, PDO::PARAM_INT);
+                $resStmt->execute();
+            }
+
+            
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $fetchStmt->bindValue(1, $appointmentId, PDO::PARAM_INT);
             $fetchStmt->execute();
             $persistedApp = $fetchStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -368,12 +565,13 @@ class AppointmentController {
                     'appointment.created',
                     $adminId,
                     'appointment',
-                    $appId,
+                    $appointmentId,
                     [
                         'member_id' => (int)$persistedApp['member_id'],
                         'trainer_id' => (int)$persistedApp['trainer_id'],
                         'starts_at' => $persistedApp['starts_at'],
-                        'ends_at' => $persistedApp['ends_at']
+                        'ends_at' => $persistedApp['ends_at'],
+                        'member_session_package_id' => $persistedApp['member_session_package_id'] !== null ? (int)$persistedApp['member_session_package_id'] : null
                     ]
                 );
             } catch (Throwable $e) {
@@ -387,6 +585,7 @@ class AppointmentController {
                     'uuid' => $persistedApp['uuid'],
                     'member_id' => (int)$persistedApp['member_id'],
                     'trainer_id' => (int)$persistedApp['trainer_id'],
+                    'member_session_package_id' => $persistedApp['member_session_package_id'] !== null ? (int)$persistedApp['member_session_package_id'] : null,
                     'starts_at' => $persistedApp['starts_at'],
                     'ends_at' => $persistedApp['ends_at'],
                     'status' => $persistedApp['status']
@@ -456,7 +655,7 @@ class AppointmentController {
             $this->db->beginTransaction();
 
             // Discovery
-            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
             $discStmt->bindValue(1, $appointmentId, PDO::PARAM_INT);
             $discStmt->execute();
             $discovery = $discStmt->fetch(PDO::FETCH_ASSOC);
@@ -525,7 +724,7 @@ class AppointmentController {
             }
 
             // 3. Appointment lock
-            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
             $appStmt->bindValue(1, $appointmentId, PDO::PARAM_INT);
             $appStmt->execute();
             $lockedApp = $appStmt->fetch(PDO::FETCH_ASSOC);
@@ -591,6 +790,49 @@ class AppointmentController {
                 Response::error('Member is already booked for this time.', 'MEMBER_CONFLICT', 409);
             }
 
+            // 5.5 Package validity
+            $memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;
+
+            if ($memberSessionPackageId !== null) {
+                // Verify reserve exists and release doesn't
+                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'");
+                $resStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+                $resStmt->execute();
+                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] === 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+
+                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'release'");
+                $relStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+                $relStmt->execute();
+                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] > 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+
+                $pkgStmt = $this->db->prepare("SELECT valid_from, valid_until, stored_status FROM member_session_packages WHERE id = ?");
+                $pkgStmt->bindValue(1, $memberSessionPackageId, \PDO::PARAM_INT);
+                $pkgStmt->execute();
+                $pkg = $pkgStmt->fetch(\PDO::FETCH_ASSOC);
+
+                if (!$pkg) {
+                    $this->db->rollBack();
+                    Response::error('Session package not found.', 'SESSION_PACKAGE_NOT_FOUND', 404);
+                }
+
+                if ($pkg['stored_status'] !== 'active') {
+                    $this->db->rollBack();
+                    Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+                }
+
+                $apptDate = $startsDt->format('Y-m-d');
+                if ($apptDate < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $apptDate > $pkg['valid_until'])) {
+                    $this->db->rollBack();
+                    Response::error('Appointment date is outside the session package validity window.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+                }
+            }
+
             // 6. History INSERT
             $historyUuid = $this->generateUuid();
             $histStmt = $this->db->prepare("
@@ -625,7 +867,7 @@ class AppointmentController {
             }
 
             // 8. Persisted fetch
-            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
             $fetchStmt->bindValue(1, $appointmentId, PDO::PARAM_INT);
             $fetchStmt->execute();
             $persistedApp = $fetchStmt->fetch(PDO::FETCH_ASSOC);
@@ -727,7 +969,7 @@ class AppointmentController {
             $this->db->beginTransaction();
 
             // Discovery
-            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
             $discStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
             $discStmt->execute();
             $discovery = $discStmt->fetch(\PDO::FETCH_ASSOC);
@@ -759,7 +1001,7 @@ class AppointmentController {
             }
 
             // 3. Appointment lock
-            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
             $appStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
             $appStmt->execute();
             $lockedApp = $appStmt->fetch(\PDO::FETCH_ASSOC);
@@ -789,6 +1031,27 @@ class AppointmentController {
             
             $cancelledAt = $now->format('Y-m-d H:i:s');
 
+            $memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;
+
+            if ($memberSessionPackageId !== null) {
+                // Verify reserve exists and release doesn't
+                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'");
+                $resStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+                $resStmt->execute();
+                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] === 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+
+                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'release'");
+                $relStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
+                $relStmt->execute();
+                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] > 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+            }
+
             // 4. Appointment UPDATE
             $updStmt = $this->db->prepare("
                 UPDATE appointments 
@@ -802,13 +1065,27 @@ class AppointmentController {
             $updStmt->bindValue(5, $appointmentId, \PDO::PARAM_INT);
             $updStmt->execute();
 
+            if ($memberSessionPackageId !== null) {
+                $ledgerUuid = $this->generateUuid();
+                $insRel = $this->db->prepare("
+                    INSERT INTO member_session_package_ledger (uuid, member_session_package_id, appointment_id, entry_type, delta, reason, created_by)
+                    VALUES (?, ?, ?, 'release', 1, ?, ?)
+                ");
+                $insRel->bindValue(1, $ledgerUuid, \PDO::PARAM_STR);
+                $insRel->bindValue(2, $memberSessionPackageId, \PDO::PARAM_INT);
+                $insRel->bindValue(3, $appointmentId, \PDO::PARAM_INT);
+                $insRel->bindValue(4, $reason, \PDO::PARAM_STR);
+                $insRel->bindValue(5, $adminId, \PDO::PARAM_INT);
+                $insRel->execute();
+            }
+
             if ($updStmt->rowCount() === 0) {
                 $this->db->rollBack();
                 Response::error('Failed to cancel appointment.', 'INTERNAL_ERROR', 500);
             }
 
             // 5. Persisted fetch
-            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, cancellation_reason, cancelled_by, cancelled_at FROM appointments WHERE id = ?");
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status, cancellation_reason, cancelled_by, cancelled_at FROM appointments WHERE id = ?");
             $fetchStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
             $fetchStmt->execute();
             $persistedApp = $fetchStmt->fetch(\PDO::FETCH_ASSOC);
@@ -865,7 +1142,7 @@ class AppointmentController {
     }
 
     public function createAdminAppointment() {
-        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at']);
+        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at'], ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
     }
 
     public function getReceptionAppointments() {
@@ -873,7 +1150,7 @@ class AppointmentController {
     }
 
     public function createReceptionAppointment() {
-        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at']);
+        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at'], ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
     }
 
     public function getTrainerAppointments() {
@@ -891,7 +1168,7 @@ class AppointmentController {
             Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
         $trainerId = $this->getTrainerProfileId($adminId);
-        $this->handleCreate(['member_id', 'starts_at', 'ends_at'], $trainerId);
+        $this->handleCreate(['member_id', 'starts_at', 'ends_at'], ['member_id', 'member_session_package_id', 'starts_at', 'ends_at'], $trainerId);
     }
 
     public function rescheduleAdminAppointment(int $id) {
@@ -984,7 +1261,7 @@ class AppointmentController {
         try {
             $this->db->beginTransaction();
 
-            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+            $discStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
             $discStmt->execute([$id]);
             $discovery = $discStmt->fetch(\PDO::FETCH_ASSOC);
             if (!$discovery) {
@@ -1015,7 +1292,7 @@ class AppointmentController {
                 }
             }
 
-            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
+            $appStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ? FOR UPDATE");
             $appStmt->execute([$id]);
             $lockedApp = $appStmt->fetch(\PDO::FETCH_ASSOC);
             if (!$lockedApp) {
@@ -1042,6 +1319,26 @@ class AppointmentController {
                 Response::error('Appointment cannot be terminalized before it ends.', 'APPOINTMENT_NOT_TERMINALIZABLE', 409);
             }
 
+            $memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;
+            if ($memberSessionPackageId !== null) {
+                // Verify reserve exists and release doesn't
+                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'");
+                $resStmt->bindValue(1, $id, \PDO::PARAM_INT);
+                $resStmt->execute();
+                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] === 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+
+                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'release'");
+                $relStmt->bindValue(1, $id, \PDO::PARAM_INT);
+                $relStmt->execute();
+                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] > 0) {
+                    $this->db->rollBack();
+                    Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+            }
+
             if ($targetStatus === 'completed') {
                 $updStmt = $this->db->prepare("
                     UPDATE appointments 
@@ -1063,7 +1360,7 @@ class AppointmentController {
                 Response::error('Failed to terminalize appointment.', 'INTERNAL_ERROR', 500);
             }
 
-            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
+            $fetchStmt = $this->db->prepare("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
             $fetchStmt->execute([$id]);
             $persisted = $fetchStmt->fetch(\PDO::FETCH_ASSOC);
             if (!$persisted) {

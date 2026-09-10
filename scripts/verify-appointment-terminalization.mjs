@@ -273,7 +273,7 @@ function verifyActorNormalization(block) {
 
 function verifyOrdering(block) {
     const beginTxIdx = block.indexOf("$this->db->beginTransaction()");
-    const discIdx = block.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+    const discIdx = block.indexOf("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
     if (discIdx === -1) throw new Error("Missing non-locking discovery query");
     if (beginTxIdx === -1) throw new Error("Missing beginTransaction");
     if (discIdx < beginTxIdx) throw new Error("Discovery before beginTransaction");
@@ -295,7 +295,7 @@ function verifyOrdering(block) {
     
     const updateTargetIdx = block.indexOf("UPDATE appointments");
     const rowCountIdx = block.indexOf("rowCount() === 0");
-    const persistedSelectIdx = block.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
+    const persistedSelectIdx = block.indexOf("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?");
     const commitIdx = block.indexOf("$this->db->commit()");
     const auditIdx = block.indexOf("AuditLogger::log");
     
@@ -437,7 +437,7 @@ function verifyNoSideEffects(block) {
 }
 
 function verifyPersistedRowContract(block) {
-    const fetchSnippet = block.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*starts_at,\s*ends_at,\s*status,\s*completed_by,\s*completed_at,\s*no_show_by,\s*no_show_at\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/is);
+    const fetchSnippet = block.match(/SELECT\s+id,\s*uuid,\s*member_id,\s*trainer_id,\s*member_session_package_id,\s*starts_at,\s*ends_at,\s*status,\s*completed_by,\s*completed_at,\s*no_show_by,\s*no_show_at\s+FROM\s+appointments\s+WHERE\s+id\s*=\s*\?/is);
     if (!fetchSnippet) throw new Error("Persisted row SELECT statement missing or columns mismatch");
     
     const fetchStmtBlockIdx = block.indexOf(fetchSnippet[0]);
@@ -593,7 +593,7 @@ checkInvariant("Self-Test 3: Exact JSON Contract", () => {
 checkInvariant("Self-Test 4: Transaction & Lock Ordering", () => {
     const good = `
         $this->db->beginTransaction();
-        SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?
+        SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?
         FROM members WHERE id = ? FOR UPDATE
         FROM trainers WHERE id = ? FOR UPDATE
         FROM appointments WHERE id = ? FOR UPDATE
@@ -601,7 +601,7 @@ checkInvariant("Self-Test 4: Transaction & Lock Ordering", () => {
         new \\DateTime('now'
         UPDATE appointments
         rowCount() === 0
-        SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?
+        SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status, completed_by, completed_at, no_show_by, no_show_at FROM appointments WHERE id = ?
         $this->db->commit();
         AuditLogger::log
     `;

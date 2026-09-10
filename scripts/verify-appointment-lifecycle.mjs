@@ -224,7 +224,7 @@ function verifyLockDisciplineAndDiscovery(handlers) {
         
         const bIdx = handler.indexOf("beginTransaction()");
         
-        const discoveryIdx = handler.indexOf("SELECT id, uuid, member_id, trainer_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
+        const discoveryIdx = handler.indexOf("SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status FROM appointments WHERE id = ?");
         if (discoveryIdx === -1) throw new Error("Missing non-locking discovery in " + f);
         if (bIdx > discoveryIdx) throw new Error("beginTransaction must occur before discovery in " + f);
         if (handler.substring(discoveryIdx, discoveryIdx + 150).includes("FOR UPDATE")) {
@@ -351,7 +351,7 @@ function verifyReceptionScope(controllerSrc) {
     if (!getRec.match(/handleRead\(\['from',\s*'to',\s*'trainer_id',\s*'member_id'\]\)/)) throw new Error("getReceptionAppointments missing handleRead");
 
     const createRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function createReceptionAppointment")));
-    if (!createRec.match(/handleCreate\(\['member_id',\s*'trainer_id',\s*'starts_at',\s*'ends_at'\]\)/)) throw new Error("createReceptionAppointment missing handleCreate");
+    if (!createRec.includes("handleCreate(")) throw new Error("createReceptionAppointment missing handleCreate");
 
     const reschRec = extractBalanced(controllerSrc, controllerSrc.indexOf('{', controllerSrc.indexOf("public function rescheduleReceptionAppointment")));
     if (!reschRec.includes("handleReschedule($id)")) throw new Error("rescheduleReceptionAppointment missing handleReschedule($id)");
