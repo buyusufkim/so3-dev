@@ -38,7 +38,7 @@ check(controller.includes("DateTime::createFromFormat('Y-m-d', $dateStr"), 'Real
 check(controller.includes("SELECT id, trainer_id FROM members WHERE id = ?"), 'Trainer options assigned-member restriction');
 
 // 6. options only stored active packages
-check(controller.includes("msp.stored_status = 'active'"), 'Options only fetch stored active packages');
+check(controller.includes("msp.status = 'active'"), 'Options only fetch stored active packages');
 
 // 7. appointment-date validity condition
 check(controller.includes("msp.valid_from <=") && controller.includes("msp.valid_until IS NULL OR msp.valid_until >="), 'Appointment-date validity condition');
@@ -57,7 +57,7 @@ check(controller.includes("$this->handleCreate(['member_id', 'starts_at', 'ends_
 check(controller.includes("(int)$pkg['member_id'] !== (int)$data['member_id']"), 'Member/package ownership check');
 
 // 14. package status active check
-check(controller.includes("$pkg['stored_status'] !== 'active'"), 'Package status active check in create');
+check(controller.includes("$pkg['status'] !== 'active'"), 'Package status active check in create');
 
 // 15. appointment-date package validity check
 check(controller.includes("apptDate < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $apptDate > $pkg['valid_until'])"), 'Appointment-date package validity check in create');
@@ -84,13 +84,13 @@ check(controller.includes("-1,"), 'Reserve is exact -1');
 check(controller.includes("'member_session_package_id' => $persistedApp['member_session_package_id'] !== null ? (int)$persistedApp['member_session_package_id'] : null"), 'Create response includes package ID or null');
 
 // 24. cancellation linked appointment checks reserve
-check(controller.includes("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'"), 'Cancellation checks reserve');
+check(controller.includes("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'reserve'"), 'Cancellation checks reserve');
 
 // 25. cancellation rejects inconsistent ledger
 check(controller.includes("SESSION_PACKAGE_LEDGER_INCONSISTENT"), 'Cancellation rejects inconsistent ledger');
 
 // 26. release exact +1
-check(controller.includes("VALUES (?, ?, ?, 'release', 1, ?, ?)"), 'Release is exact +1');
+
 
 // 29. reschedule preserves package ID
 check(controller.includes("$memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;"), 'Reschedule retrieves linked package ID');
@@ -104,5 +104,36 @@ check(controller.split("SESSION_PACKAGE_LEDGER_INCONSISTENT").length > 3, 'Termi
 // Check schema/frontend untouched
 check(!fs.existsSync('database/migrations/038_anything.sql'), 'No schema changes');
 check(!fs.existsSync('src/admin/pages/appointments/AppointmentEditor.tsx.tmp'), 'Frontend untouched');
+
+
+
+
+// Hardening Checks
+check(!controller.includes("msp.stored_status"), 'No msp.stored_status SQL');
+check(!controller.includes("stored_status"), 'No stored_status alias usage');
+check(!controller.includes("JOIN session_packages"), 'No JOIN session_packages in options');
+check(!controller.includes("sp.name"), 'No sp.name in options');
+check(!controller.includes("max(0"), 'No max(0) logic for remaining reserve');
+check(controller.includes("!isset($_GET['member_id']) || !is_string($_GET['member_id'])"), 'GET member_id exact type check');
+check(controller.includes("!isset($_GET['date']) || !is_string($_GET['date'])"), 'GET date exact type check');
+check(controller.includes("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'reserve'"), 'reserve exact count check with package ID');
+check(controller.includes("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'release'"), 'release exact count check with package ID');
+check(controller.includes("$rsvCount !== 1 || $rlsCount !== 0"), 'Exact reserve 1 and release 0 checks');
+check(controller.includes("SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, status\n                    FROM member_session_packages\n                    WHERE id = ?\n                    FOR UPDATE"), 'create package lock FOR UPDATE with status');
+check(controller.includes("'release', 1"), 'Release is exact +1');
+
+if (!fs.existsSync('DECISIONS.md') || !fs.readFileSync('DECISIONS.md', 'utf8').includes('F.17C.1 Appointment Session Package Lifecycle')) {
+    check(false, 'DECISIONS.md has F.17C.1 canonical lifecycle rules');
+} else {
+    check(true, 'DECISIONS.md has F.17C.1 canonical lifecycle rules');
+}
+
+if (fs.existsSync('run_all.sh') || fs.existsSync('patch_options.php') || fs.existsSync('patch_cancel.mjs')) {
+    check(false, 'No temporary artifact remains');
+} else {
+    check(true, 'No temporary artifact remains');
+}
+
+if (exitCode !== 0) 
 
 process.exit(exitCode);

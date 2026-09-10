@@ -21,6 +21,13 @@ class AppointmentController {
             Response::error('Exact query parameters member_id and date are required.', 'VALIDATION_ERROR', 422);
         }
 
+        if (!isset($_GET['member_id']) || !is_string($_GET['member_id'])) {
+            Response::error('member_id must be a string.', 'VALIDATION_ERROR', 422);
+        }
+        if (!isset($_GET['date']) || !is_string($_GET['date'])) {
+            Response::error('date must be a string.', 'VALIDATION_ERROR', 422);
+        }
+
         if (!preg_match('/^[1-9]\d*$/', $_GET['member_id'])) {
             Response::error('member_id must be a positive integer.', 'VALIDATION_ERROR', 422);
         }
@@ -73,7 +80,7 @@ class AppointmentController {
         }
 
         $stmt = $this->db->prepare("
-            SELECT msp.id, sp.name as package_name, msp.total_sessions, msp.valid_from, msp.valid_until, msp.created_at,
+            SELECT msp.id, msp.package_name_snapshot as package_name, msp.total_sessions, msp.valid_from, msp.valid_until, msp.created_at,
                    COALESCE(
                        (SELECT SUM(delta) FROM member_session_package_ledger WHERE member_session_package_id = msp.id), 0
                    ) as used_delta,
@@ -84,9 +91,8 @@ class AppointmentController {
                        (SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = msp.id AND entry_type = 'release'), 0
                    ) as release_count
             FROM member_session_packages msp
-            JOIN session_packages sp ON msp.session_package_id = sp.id
             WHERE msp.member_id = ?
-              AND msp.stored_status = 'active'
+              AND msp.status = 'active'
               AND msp.valid_from <= ?
               AND (msp.valid_until IS NULL OR msp.valid_until >= ?)
         ");
@@ -100,7 +106,10 @@ class AppointmentController {
         foreach ($packages as $pkg) {
             $remaining = (int)$pkg['total_sessions'] + (int)$pkg['used_delta'];
             if ($remaining > 0) {
-                $reserved = max(0, (int)$pkg['reserve_count'] - (int)$pkg['release_count']);
+                $reserved = (int)$pkg['reserve_count'] - (int)$pkg['release_count'];
+                if ($reserved < 0) {
+                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
                 $items[] = [
                     'id' => (int)$pkg['id'],
                     'package_name' => $pkg['package_name'],
@@ -113,6 +122,24 @@ class AppointmentController {
                 ];
             }
         }
+
+        usort($items, function($a, $b) {
+            if ($a['valid_until'] === null && $b['valid_until'] !== null) return 1;
+            if ($a['valid_until'] !== null && $b['valid_until'] === null) return -1;
+            if ($a['valid_until'] !== $b['valid_until']) {
+                return strcmp($a['valid_until'], $b['valid_until']);
+            }
+            if ($a['created_at'] !== $b['created_at']) {
+                return strcmp($a['created_at'], $b['created_at']);
+            }
+            return $a['id'] <=> $b['id'];
+        });
+
+        // Strip created_at
+        $items = array_map(function($item) {
+            unset($item['created_at']);
+            return $item;
+        }, $items);
 
         usort($items, function($a, $b) {
             if ($a['valid_until'] !== null && $b['valid_until'] !== null) {
@@ -477,7 +504,7 @@ class AppointmentController {
             // 4.5. Package lock and balance check
             if ($memberSessionPackageId !== null) {
                 $pkgStmt = $this->db->prepare("
-                    SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, stored_status
+                    SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, status
                     FROM member_session_packages
                     WHERE id = ?
                     FOR UPDATE
@@ -491,7 +518,7 @@ class AppointmentController {
                     Response::error('Session package not found or does not belong to the member.', 'SESSION_PACKAGE_NOT_FOUND', 404);
                 }
 
-                if ($pkg['stored_status'] !== 'active') {
+                if ($pkg['status'] !== 'active') {
                     $this->db->rollBack();
                     Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
                 }
@@ -754,6 +781,38 @@ class AppointmentController {
                 Response::error('At least one time value must change.', 'VALIDATION_ERROR', 422);
             }
 
+            if ($lockedApp['member_session_package_id'] !== null) {
+                $pkgId = (int)$lockedApp['member_session_package_id'];
+                
+                $rsvStmt = $this->db->prepare("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'reserve'");
+                $rsvStmt->execute([$pkgId, $appointmentId]);
+                $rsvCount = (int)$rsvStmt->fetchColumn();
+
+                $rlsStmt = $this->db->prepare("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'release'");
+                $rlsStmt->execute([$pkgId, $appointmentId]);
+                $rlsCount = (int)$rlsStmt->fetchColumn();
+
+                if ($rsvCount !== 1 || $rlsCount !== 0) {
+                    $this->db->rollBack();
+                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+
+                $pkgStmt = $this->db->prepare("SELECT status, valid_from, valid_until FROM member_session_packages WHERE id = ? FOR UPDATE");
+                $pkgStmt->execute([$pkgId]);
+                $pkg = $pkgStmt->fetch(\PDO::FETCH_ASSOC);
+
+                if (!$pkg || $pkg['status'] !== 'active') {
+                    $this->db->rollBack();
+                    Response::error('Session package is no longer active.', 'PACKAGE_INELIGIBLE', 409);
+                }
+                
+                $newDateStr = $startsDt->format('Y-m-d');
+                if ($newDateStr < $pkg['valid_from'] || ($pkg['valid_until'] !== null && $newDateStr > $pkg['valid_until'])) {
+                    $this->db->rollBack();
+                    Response::error('New appointment date is outside the session package validity period.', 'PACKAGE_DATE_INVALID', 409);
+                }
+            }
+
             // 4. Trainer conflict
             $tConfStmt = $this->db->prepare("
                 SELECT id FROM appointments 
@@ -795,23 +854,21 @@ class AppointmentController {
 
             if ($memberSessionPackageId !== null) {
                 // Verify reserve exists and release doesn't
-                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'");
-                $resStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
-                $resStmt->execute();
-                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] === 0) {
+                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND member_session_package_id = ? AND entry_type = 'reserve'");
+                $resStmt->execute([$appointmentId, $memberSessionPackageId]);
+                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] !== 1) {
                     $this->db->rollBack();
                     Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
                 }
 
-                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'release'");
-                $relStmt->bindValue(1, $appointmentId, \PDO::PARAM_INT);
-                $relStmt->execute();
-                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] > 0) {
+                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND member_session_package_id = ? AND entry_type = 'release'");
+                $relStmt->execute([$appointmentId, $memberSessionPackageId]);
+                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] !== 0) {
                     $this->db->rollBack();
                     Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
                 }
 
-                $pkgStmt = $this->db->prepare("SELECT valid_from, valid_until, stored_status FROM member_session_packages WHERE id = ?");
+                $pkgStmt = $this->db->prepare("SELECT valid_from, valid_until, status FROM member_session_packages WHERE id = ?");
                 $pkgStmt->bindValue(1, $memberSessionPackageId, \PDO::PARAM_INT);
                 $pkgStmt->execute();
                 $pkg = $pkgStmt->fetch(\PDO::FETCH_ASSOC);
@@ -821,7 +878,7 @@ class AppointmentController {
                     Response::error('Session package not found.', 'SESSION_PACKAGE_NOT_FOUND', 404);
                 }
 
-                if ($pkg['stored_status'] !== 'active') {
+                if ($pkg['status'] !== 'active') {
                     $this->db->rollBack();
                     Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
                 }
@@ -1319,23 +1376,20 @@ class AppointmentController {
                 Response::error('Appointment cannot be terminalized before it ends.', 'APPOINTMENT_NOT_TERMINALIZABLE', 409);
             }
 
-            $memberSessionPackageId = $lockedApp['member_session_package_id'] !== null ? (int)$lockedApp['member_session_package_id'] : null;
-            if ($memberSessionPackageId !== null) {
-                // Verify reserve exists and release doesn't
-                $resStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'reserve'");
-                $resStmt->bindValue(1, $id, \PDO::PARAM_INT);
-                $resStmt->execute();
-                if ((int)$resStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] === 0) {
-                    $this->db->rollBack();
-                    Response::error('Inconsistent ledger: missing reserve.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
-                }
+            if ($lockedApp['member_session_package_id'] !== null) {
+                $pkgId = (int)$lockedApp['member_session_package_id'];
+                
+                $rsvStmt = $this->db->prepare("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'reserve'");
+                $rsvStmt->execute([$pkgId, $id]);
+                $rsvCount = (int)$rsvStmt->fetchColumn();
 
-                $relStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM member_session_package_ledger WHERE appointment_id = ? AND entry_type = 'release'");
-                $relStmt->bindValue(1, $id, \PDO::PARAM_INT);
-                $relStmt->execute();
-                if ((int)$relStmt->fetch(\PDO::FETCH_ASSOC)['cnt'] > 0) {
+                $rlsStmt = $this->db->prepare("SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = ? AND appointment_id = ? AND entry_type = 'release'");
+                $rlsStmt->execute([$pkgId, $id]);
+                $rlsCount = (int)$rlsStmt->fetchColumn();
+
+                if ($rsvCount !== 1 || $rlsCount !== 0) {
                     $this->db->rollBack();
-                    Response::error('Inconsistent ledger: release already exists.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
                 }
             }
 

@@ -43,3 +43,14 @@ Bu dosya, proje süresince alınan önemli mimari, teknolojik ve ürüne dair ka
   - Rezervasyon ve iadeler appointment ID ve explicit entry_type ile (`reserve`, `release`, `adjustment`) ledger üzerine işlenecektir.
   - Finansal (payment/invoice) bilgiler bu fazda kapsama dahil edilmemiş, yalnızca seans yönetimi üzerine kurgulanmıştır.
 - **Gerekçe:** Paket (seans) hakları operasyonel değer taşır; güncel veya eski hareketlerin audit edilebilmesi, concurrency anında hatalı eksiltmeleri engellemek ve geçmiş kullanım hakkını tutarlı korumak için append-only ledger modeli tek güvenilir mimaridir.
+
+
+### F.17C.1 Appointment Session Package Lifecycle
+* appointment create with package → reserve -1
+* cancel → release +1
+* completed/no_show → credit consumed
+* reschedule → same reservation retained
+* appointment package association immutable
+* balance reservation serialized by `member_session_packages` row lock
+* NULL package association only transitional legacy compatibility
+* F.17C.2 frontend cutover package selection mandatory yapacak
