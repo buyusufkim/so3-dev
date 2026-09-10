@@ -118,7 +118,7 @@ if (fs.existsSync(receptionMemberControllerPath)) {
 const appointmentControllerPath = path.resolve(rootDir, 'api/controllers/AppointmentController.php');
 if (fs.existsSync(appointmentControllerPath)) {
     const content = fs.readFileSync(appointmentControllerPath, 'utf8');
-    check(true, 'AppointmentController lifecycle business logic remains unchanged in this phase');
+// Appointment lifecycle integration is verified by F.17C dedicated verifier.
 }
 
 if (pass) {

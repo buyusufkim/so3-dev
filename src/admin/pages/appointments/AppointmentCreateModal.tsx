@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../../api/client';
-import { AppointmentScope, AppointmentSessionPackageOption } from './types';
+import { AppointmentScope, AppointmentSessionPackageOption, validateAppointmentSessionPackageOptionsResponse, validateAppointmentCreateSuccessResponse } from './types';
 import { ApiError } from '../../api/client';
 
 interface AppointmentCreateModalProps {
@@ -240,10 +240,10 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     };
   }, []);
 
-  const packagesGenerationRef = useRef(0);
+    const packagesGenerationRef = useRef(0);
   const packagesAbortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
+  const loadPackages = useCallback(async () => {
     if (!selectedMemberId || typeof selectedMemberId !== 'number' || selectedMemberId <= 0) {
       setPackageOptions([]);
       setSelectedPackageId('');
@@ -274,51 +274,25 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
       date: selectedDate
     });
 
-    apiClient.get(`${endpoint}?${params.toString()}`, { signal: abortController.signal })
-      .then((response: unknown) => {
-        if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
-
-        if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
-          throw new Error('Invalid response format');
-        }
-
-        const validItems: AppointmentSessionPackageOption[] = [];
-        for (const item of (response as any).items) {
-          if (!item || typeof item !== 'object') continue;
-          if (typeof item.id !== 'number' || !Number.isInteger(item.id) || item.id <= 0) continue;
-          if (typeof item.package_name !== 'string' || item.package_name.trim() === '') continue;
-          if (typeof item.total_sessions !== 'number' || !Number.isInteger(item.total_sessions) || item.total_sessions <= 0) continue;
-          if (typeof item.remaining_sessions !== 'number' || !Number.isInteger(item.remaining_sessions) || item.remaining_sessions <= 0) continue;
-          if (typeof item.reserved_sessions !== 'number' || !Number.isInteger(item.reserved_sessions) || item.reserved_sessions < 0) continue;
-          
-          if (typeof item.valid_from !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.valid_from)) continue;
-          if (item.valid_until !== null && (typeof item.valid_until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.valid_until))) continue;
-
-          validItems.push({
-            id: item.id,
-            package_name: item.package_name.trim(),
-            total_sessions: item.total_sessions,
-            remaining_sessions: item.remaining_sessions,
-            reserved_sessions: item.reserved_sessions,
-            valid_from: item.valid_from,
-            valid_until: item.valid_until
-          });
-        }
-
-        setPackageOptions(validItems);
-        setSelectedPackageId('');
-      })
-      .catch((err: unknown) => {
-        if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
-        setPackageError('Seans paketleri yüklenirken bir hata oluştu.');
-      })
-      .finally(() => {
-        if (!abortController.signal.aborted && localGen === packagesGenerationRef.current) {
-          setIsLoadingPackages(false);
-        }
-      });
-
+    try {
+      const response = await apiClient.get(`${endpoint}?${params.toString()}`, { signal: abortController.signal });
+      if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
+      const validItems = validateAppointmentSessionPackageOptionsResponse(response);
+      setPackageOptions(validItems);
+      setSelectedPackageId('');
+    } catch (err: unknown) {
+      if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
+      setPackageError('Seans paketleri yüklenirken bir hata oluştu.');
+    } finally {
+      if (!abortController.signal.aborted && localGen === packagesGenerationRef.current) {
+        setIsLoadingPackages(false);
+      }
+    }
   }, [selectedMemberId, selectedDate, scope]);
+
+  useEffect(() => {
+    loadPackages();
+  }, [loadPackages]);
 
   useEffect(() => {
     return () => {
@@ -381,29 +355,26 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
 
     try {
       const response = await apiClient.post(endpoint, payload);
-      
-      const appt = (response as any).appointment;
-      if (!appt || typeof appt !== 'object') throw new Error('Invalid response');
-      if (typeof appt.id !== 'number' || appt.id <= 0) throw new Error('Invalid id');
-      if (typeof appt.member_session_package_id !== 'number' || appt.member_session_package_id !== selectedPackageId) throw new Error('Package mismatch');
-      if (appt.status !== 'scheduled') throw new Error('Invalid status');
+      validateAppointmentCreateSuccessResponse(
+        response, 
+        selectedMemberId as number, 
+        scope === 'trainer' ? null : (selectedTrainerId as number), 
+        selectedPackageId as number, 
+        `${selectedDate} ${startTime}:00`, 
+        `${selectedDate} ${endTime}:00`
+      );
       
       onSuccess();
     } catch (err: unknown) {
       let msg = 'Randevu oluşturulamadı. Lütfen tekrar deneyin.';
       if (err instanceof ApiError) {
-        if (err.code === 'SESSION_PACKAGE_EXHAUSTED') {
-          msg = 'Seçilen pakette kullanılabilir seans hakkı kalmadı. Paket listesini yenileyip tekrar seçim yapın.';
+        if (['SESSION_PACKAGE_EXHAUSTED', 'SESSION_PACKAGE_INELIGIBLE', 'SESSION_PACKAGE_NOT_FOUND', 'SESSION_PACKAGE_LEDGER_INCONSISTENT'].includes(err.code || '')) {
+          msg = 'Seçilen paket artık geçerli değil. Paket listesi güncelleniyor...';
+          if (err.code === 'SESSION_PACKAGE_EXHAUSTED') msg = 'Seçilen pakette kullanılabilir seans hakkı kalmadı. Paket listesi güncelleniyor...';
+          else if (err.code === 'SESSION_PACKAGE_LEDGER_INCONSISTENT') msg = 'Seans paketi hareketlerinde tutarsızlık tespit edildi. Paket listesi güncelleniyor...';
+          
           setSelectedPackageId('');
-        } else if (err.code === 'SESSION_PACKAGE_INELIGIBLE') {
-          msg = 'Seçilen paket artık bu randevu tarihi için kullanılamıyor.';
-          setSelectedPackageId('');
-        } else if (err.code === 'SESSION_PACKAGE_NOT_FOUND') {
-          msg = 'Seçilen seans paketi artık bulunamıyor.';
-          setSelectedPackageId('');
-        } else if (err.code === 'SESSION_PACKAGE_LEDGER_INCONSISTENT') {
-          msg = 'Seans paketi hareketlerinde tutarsızlık tespit edildi. İşlem tamamlanamadı.';
-          setSelectedPackageId('');
+          loadPackages();
         } else if (err.message) {
           msg = err.message;
         }

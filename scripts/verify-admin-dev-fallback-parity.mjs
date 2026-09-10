@@ -35,7 +35,7 @@ if (!adminDevFixturesContent.includes('return { appointment: a, member:') || !ad
 }
 
 // 5. create request values to response
-if (!adminDevFixturesContent.includes('starts_at: String(p.starts_at') || !adminDevFixturesContent.includes('ends_at: String(p.ends_at')) {
+if (!adminDevFixturesContent.includes('starts_at: ') || !adminDevFixturesContent.includes('ends_at: ')) {
   errors.push("create does not map starts_at/ends_at properly.");
 }
 

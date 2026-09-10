@@ -104,7 +104,7 @@ if (fs.existsSync(receptionMemberControllerPath)) {
 // 16. AppointmentController lifecycle business logic değiştirilmemiş
 if (fs.existsSync(appointmentControllerPath)) {
     const content = fs.readFileSync(appointmentControllerPath, 'utf8');
-    check(true, 'AppointmentController lifecycle business logic remains unchanged in this phase');
+// Appointment lifecycle integration is verified by F.17C dedicated verifier.
 }
 
 // 17. fresh-install 037 ile parity

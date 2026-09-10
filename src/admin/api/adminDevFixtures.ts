@@ -402,7 +402,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   const mspMatch = path.match(/^\/api\/admin\/members\/([1-9]\d*)\/session-packages$/);
   if (mspMatch && method === 'GET') {
     const mId = parseInt(mspMatch[1], 10);
-    const pkgs = memberSessionPackages.filter(p => p.member_id === mId);
+    const pkgs = memberSessionPackages.filter(p => p.member_id === mId).map(getDerivedMsp);
     return createResponse(pkgs);
   }
 
@@ -451,7 +451,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
     
     // DEV logic: If reserved sessions > 0, return PACKAGE_HAS_ACTIVE_RESERVATIONS
-    if (pkg.reserved_sessions > 0) {
+    if (getDerivedMsp(pkg).reserved_sessions > 0) {
        return createError('Has reservations', 409, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
     }
     
@@ -468,20 +468,18 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     const pkId = parseInt(ledgerMatch[1], 10);
     const msp = memberSessionPackages.find(p => p.id === pkId);
     if (!msp) return createError('Not found', 404);
-    return createResponse({
-      items: packageLedgers.filter(l => l.member_session_package_id === pkId).map(l => ({
-        id: l.id,
-        uuid: l.uuid,
-        entry_type: l.entry_type,
-        delta: l.delta,
-        appointment_id: l.appointment_id,
-        appointment_starts_at: null,
-        appointment_ends_at: null,
-        display_name: "Mock Admin",
-        reason: l.reason,
-        created_at: l.created_at
-      }))
-    });
+    
+    const items = packageLedgers.filter(l => l.member_session_package_id === pkId).map(l => ({
+      id: l.id,
+      uuid: l.uuid,
+      appointment_id: l.appointment_id,
+      entry_type: l.entry_type,
+      delta: l.delta,
+      reason: l.reason,
+      created_at: l.created_at,
+      created_by_name: "DEV Admin"
+    }));
+    return createResponse(items);
   }
 
   // --- Dashboard Endpoints ---
@@ -2267,13 +2265,22 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
   const apptPackageOptionsMatch = path.match(/^\/api\/(admin|reception|trainer)\/appointment-session-packages$/);
   if (apptPackageOptionsMatch && method === 'GET') {
-    const memberId = parseInt(url.searchParams.get('member_id') || '0', 10);
+    const rawMemberId = url.searchParams.get('member_id');
+    const memberId = Number(rawMemberId);
+    if (!rawMemberId || !/^\d+$/.test(rawMemberId) || !Number.isInteger(memberId) || memberId <= 0) return createError('Validation Error', 422);
+    
     const date = url.searchParams.get('date');
-    if (!memberId || !date) return createError('Validation Error', 422);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return createError('Validation Error', 422);
 
-    const pkgs = memberSessionPackages
+    const derivedPkgs = memberSessionPackages
       .filter(p => p.member_id === memberId && p.stored_status === 'active')
-      .map(getDerivedMsp)
+      .map(getDerivedMsp);
+
+    for (const dp of derivedPkgs) {
+       if (dp.reserved_sessions < 0) return createError('Ledger Inconsistent', 409, 'SESSION_PACKAGE_LEDGER_INCONSISTENT');
+    }
+
+    const pkgs = derivedPkgs
       .filter(p => p.remaining_sessions > 0)
       .filter(p => {
         if (date < p.valid_from) return false;
@@ -2314,13 +2321,25 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       return createResponse({ data: { items } });
     }
     if (method === 'POST' && !idStr) {
-      const p = typeof reqBody === 'object' ? reqBody : {};
+      const p = (typeof reqBody === 'object' && reqBody !== null ? reqBody : {}) as Record<string, unknown>;
       
-      const pkgId = Number(p.member_session_package_id);
-      if (!pkgId || pkgId <= 0) return createError('member_session_package_id is required', 422, 'VALIDATION_ERROR');
-      
-      const memberId = Number(p.member_id) || 1;
-      const startsAtStr = String(p.starts_at || '2026-10-11 10:00:00');
+      if (typeof p.member_session_package_id !== 'number' || !Number.isInteger(p.member_session_package_id) || p.member_session_package_id <= 0) return createError('Validation Error', 422);
+      if (typeof p.member_id !== 'number' || !Number.isInteger(p.member_id) || p.member_id <= 0) return createError('Validation Error', 422);
+      if (typeof p.starts_at !== 'string') return createError('Validation Error', 422);
+      if (typeof p.ends_at !== 'string') return createError('Validation Error', 422);
+
+      let trainerId: number;
+      if (scope === 'trainer') {
+        if ('trainer_id' in p) return createError('Validation Error', 422);
+        trainerId = 1;
+      } else {
+        if (typeof p.trainer_id !== 'number' || !Number.isInteger(p.trainer_id) || p.trainer_id <= 0) return createError('Validation Error', 422);
+        trainerId = p.trainer_id;
+      }
+
+      const pkgId = p.member_session_package_id;
+      const memberId = p.member_id;
+      const startsAtStr = p.starts_at;
       
       const rawMsp = memberSessionPackages.find(m => m.id === pkgId);
       if (!rawMsp) return createError('Package not found', 404, 'SESSION_PACKAGE_NOT_FOUND');
@@ -2343,10 +2362,10 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         id: nextAppointmentId++,
         uuid: generateSyntheticUuid(nextAppointmentId),
         member_id: memberId,
-        trainer_id: Number(p.trainer_id) || 1,
+        trainer_id: trainerId,
         member_session_package_id: pkgId,
-        starts_at: String(p.starts_at || '2026-10-11 10:00:00'),
-        ends_at: String(p.ends_at || '2026-10-11 11:00:00'),
+        starts_at: startsAtStr,
+        ends_at: p.ends_at,
         status: 'scheduled',
         created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
         updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -2378,8 +2397,20 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         appt.status = 'scheduled';
       } else if (action === 'cancel') {
         if (scope === 'trainer') return createError('Not found', 404);
+        
+        if (appt.member_session_package_id) {
+          const apptReserves = packageLedgers.filter(l => l.member_session_package_id === appt.member_session_package_id && l.appointment_id === appt.id && l.entry_type === 'reserve').length;
+          const apptReleases = packageLedgers.filter(l => l.member_session_package_id === appt.member_session_package_id && l.appointment_id === appt.id && l.entry_type === 'release').length;
+          if (apptReserves !== 1 || apptReleases !== 0) {
+            return createError('Ledger Inconsistent', 409, 'SESSION_PACKAGE_LEDGER_INCONSISTENT');
+          }
+        }
+        
         appt.status = 'cancelled';
         if (appt.member_session_package_id) {
+          const p = typeof reqBody === 'object' && reqBody !== null ? reqBody as Record<string, unknown> : {};
+          const reason = typeof p.cancellation_reason === 'string' ? p.cancellation_reason : 'appointment_cancelled';
+          
           packageLedgers.push({
               id: Date.now(),
               uuid: 'dev-release-' + Date.now(),
@@ -2387,7 +2418,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
               appointment_id: appt.id,
               entry_type: 'release',
               delta: 1,
-              reason: 'appointment_cancelled',
+              reason: reason,
               created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
           });
         }
