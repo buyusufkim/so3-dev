@@ -54,3 +54,6 @@ Bu dosya, proje süresince alınan önemli mimari, teknolojik ve ürüne dair ka
 * balance reservation serialized by `member_session_packages` row lock
 * NULL package association only transitional legacy compatibility
 * F.17C.2 frontend cutover package selection mandatory yapacak
+
+F.17C.2 cutover sonrası yeni appointment create işlemlerinde explicit member_session_package_id zorunludur.
+NULL association yalnız pre-cutover/historical appointment compatibility içindir.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../../api/client';
-import { AppointmentScope } from './types';
+import { AppointmentScope, AppointmentSessionPackageOption } from './types';
+import { ApiError } from '../../api/client';
 
 interface AppointmentCreateModalProps {
   scope: AppointmentScope;
@@ -37,6 +38,11 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
   const [trainers, setTrainers] = useState<TrainerOption[]>([]);
   const [isLoadingTrainers, setIsLoadingTrainers] = useState(false);
   const [trainerError, setTrainerError] = useState<string | null>(null);
+
+  const [packageOptions, setPackageOptions] = useState<AppointmentSessionPackageOption[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState<number | ''>('');
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+  const [packageError, setPackageError] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -234,7 +240,97 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     };
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const packagesGenerationRef = useRef(0);
+  const packagesAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!selectedMemberId || typeof selectedMemberId !== 'number' || selectedMemberId <= 0) {
+      setPackageOptions([]);
+      setSelectedPackageId('');
+      setPackageError(null);
+      return;
+    }
+
+    packagesGenerationRef.current += 1;
+    const localGen = packagesGenerationRef.current;
+
+    if (packagesAbortControllerRef.current) {
+      packagesAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    packagesAbortControllerRef.current = abortController;
+
+    setIsLoadingPackages(true);
+    setPackageError(null);
+
+    let endpoint = '';
+    if (scope === 'admin') endpoint = '/api/admin/appointment-session-packages';
+    else if (scope === 'reception') endpoint = '/api/reception/appointment-session-packages';
+    else if (scope === 'trainer') endpoint = '/api/trainer/appointment-session-packages';
+
+    const params = new URLSearchParams({
+      member_id: selectedMemberId.toString(),
+      date: selectedDate
+    });
+
+    apiClient.get(`${endpoint}?${params.toString()}`, { signal: abortController.signal })
+      .then((response: unknown) => {
+        if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
+
+        if (!response || typeof response !== 'object' || !Array.isArray((response as any).items)) {
+          throw new Error('Invalid response format');
+        }
+
+        const validItems: AppointmentSessionPackageOption[] = [];
+        for (const item of (response as any).items) {
+          if (!item || typeof item !== 'object') continue;
+          if (typeof item.id !== 'number' || !Number.isInteger(item.id) || item.id <= 0) continue;
+          if (typeof item.package_name !== 'string' || item.package_name.trim() === '') continue;
+          if (typeof item.total_sessions !== 'number' || !Number.isInteger(item.total_sessions) || item.total_sessions <= 0) continue;
+          if (typeof item.remaining_sessions !== 'number' || !Number.isInteger(item.remaining_sessions) || item.remaining_sessions <= 0) continue;
+          if (typeof item.reserved_sessions !== 'number' || !Number.isInteger(item.reserved_sessions) || item.reserved_sessions < 0) continue;
+          
+          if (typeof item.valid_from !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.valid_from)) continue;
+          if (item.valid_until !== null && (typeof item.valid_until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.valid_until))) continue;
+
+          validItems.push({
+            id: item.id,
+            package_name: item.package_name.trim(),
+            total_sessions: item.total_sessions,
+            remaining_sessions: item.remaining_sessions,
+            reserved_sessions: item.reserved_sessions,
+            valid_from: item.valid_from,
+            valid_until: item.valid_until
+          });
+        }
+
+        setPackageOptions(validItems);
+        setSelectedPackageId('');
+      })
+      .catch((err: unknown) => {
+        if (abortController.signal.aborted || localGen !== packagesGenerationRef.current) return;
+        setPackageError('Seans paketleri yüklenirken bir hata oluştu.');
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted && localGen === packagesGenerationRef.current) {
+          setIsLoadingPackages(false);
+        }
+      });
+
+  }, [selectedMemberId, selectedDate, scope]);
+
+  useEffect(() => {
+    return () => {
+      packagesGenerationRef.current += 1;
+      if (packagesAbortControllerRef.current) {
+        packagesAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitLockRef.current || isSubmitting) return;
 
@@ -243,6 +339,11 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
         (!selectedTrainerId && scope !== 'trainer') || (scope !== 'trainer' && (typeof selectedTrainerId !== 'number' || !Number.isInteger(selectedTrainerId) || selectedTrainerId <= 0)) ||
         !startTime || !endTime) {
       setSubmitError('Lütfen tüm alanları doldurun.');
+      return;
+    }
+
+    if (!selectedPackageId || typeof selectedPackageId !== 'number' || !Number.isInteger(selectedPackageId) || selectedPackageId <= 0) {
+      setSubmitError('Lütfen kullanılacak seans paketini seçin.');
       return;
     }
 
@@ -255,14 +356,22 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     setIsSubmitting(true);
     setSubmitError(null);
 
-    const payload: any = {
-      member_id: selectedMemberId,
-      starts_at: `${selectedDate} ${startTime}:00`,
-      ends_at: `${selectedDate} ${endTime}:00`
-    };
-
-    if (scope !== 'trainer') {
-      payload.trainer_id = selectedTrainerId;
+    let payload: Record<string, unknown> = {};
+    if (scope === 'trainer') {
+      payload = {
+        member_id: selectedMemberId,
+        member_session_package_id: selectedPackageId,
+        starts_at: `${selectedDate} ${startTime}:00`,
+        ends_at: `${selectedDate} ${endTime}:00`
+      };
+    } else {
+      payload = {
+        member_id: selectedMemberId,
+        trainer_id: selectedTrainerId,
+        member_session_package_id: selectedPackageId,
+        starts_at: `${selectedDate} ${startTime}:00`,
+        ends_at: `${selectedDate} ${endTime}:00`
+      };
     }
 
     let endpoint = '';
@@ -271,48 +380,37 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
     else if (scope === 'trainer') endpoint = '/api/trainer/appointments';
 
     try {
-      const res = await apiClient.post(endpoint, payload);
+      const response = await apiClient.post(endpoint, payload);
       
-      // Strict validation of success response
-      if (!res || typeof res !== 'object' || !res.appointment || typeof res.appointment !== 'object') {
-        throw new Error('Invalid response structure');
-      }
+      const appt = (response as any).appointment;
+      if (!appt || typeof appt !== 'object') throw new Error('Invalid response');
+      if (typeof appt.id !== 'number' || appt.id <= 0) throw new Error('Invalid id');
+      if (typeof appt.member_session_package_id !== 'number' || appt.member_session_package_id !== selectedPackageId) throw new Error('Package mismatch');
+      if (appt.status !== 'scheduled') throw new Error('Invalid status');
       
-      const appt = res.appointment;
-      if (typeof appt.id !== 'number' || !Number.isInteger(appt.id) || appt.id <= 0 ||
-          typeof appt.uuid !== 'string' || !appt.uuid ||
-          typeof appt.member_id !== 'number' || !Number.isInteger(appt.member_id) || appt.member_id <= 0 ||
-          typeof appt.starts_at !== 'string' || !appt.starts_at ||
-          typeof appt.ends_at !== 'string' || !appt.ends_at ||
-          appt.status !== 'scheduled' ||
-          typeof appt.trainer_id !== 'number' || !Number.isInteger(appt.trainer_id) || appt.trainer_id <= 0) {
-        throw new Error('Malformed appointment in response');
-      }
-
-      if (mountedRef.current) onSuccess();
-    } catch (err: any) {
-      console.error(err);
-      if (mountedRef.current) {
-        let errMsg = 'Randevu oluşturulurken beklenmedik bir hata oluştu.';
-        if (err.code) {
-          const codeMap: Record<string, string> = {
-            'MEMBER_CONFLICT': 'Üyenin bu saat aralığında başka bir randevusu var.',
-            'TRAINER_CONFLICT': 'Eğitmenin bu saat aralığında başka bir randevusu var.',
-            'MEMBER_INELIGIBLE': 'Üye bu tarih için randevuya uygun değil.',
-            'TRAINER_INELIGIBLE': 'Eğitmen aktif değil.',
-            'FORBIDDEN': 'Bu randevuyu oluşturma yetkiniz yok.',
-            'NOT_FOUND': 'Seçilen üye veya eğitmen artık bulunamıyor.',
-            'VALIDATION_ERROR': 'Randevu bilgileri geçersiz.'
-          };
-          if (codeMap[err.code]) {
-            errMsg = codeMap[err.code];
-          }
+      onSuccess();
+    } catch (err: unknown) {
+      let msg = 'Randevu oluşturulamadı. Lütfen tekrar deneyin.';
+      if (err instanceof ApiError) {
+        if (err.code === 'SESSION_PACKAGE_EXHAUSTED') {
+          msg = 'Seçilen pakette kullanılabilir seans hakkı kalmadı. Paket listesini yenileyip tekrar seçim yapın.';
+          setSelectedPackageId('');
+        } else if (err.code === 'SESSION_PACKAGE_INELIGIBLE') {
+          msg = 'Seçilen paket artık bu randevu tarihi için kullanılamıyor.';
+          setSelectedPackageId('');
+        } else if (err.code === 'SESSION_PACKAGE_NOT_FOUND') {
+          msg = 'Seçilen seans paketi artık bulunamıyor.';
+          setSelectedPackageId('');
+        } else if (err.code === 'SESSION_PACKAGE_LEDGER_INCONSISTENT') {
+          msg = 'Seans paketi hareketlerinde tutarsızlık tespit edildi. İşlem tamamlanamadı.';
+          setSelectedPackageId('');
+        } else if (err.message) {
+          msg = err.message;
         }
-        setSubmitError(errMsg);
       }
-    } finally {
+      setSubmitError(msg);
       submitLockRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -356,6 +454,9 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
                 onChange={(e) => {
                   setMemberSearch(e.target.value);
                   setSelectedMemberId('');
+                  setSelectedPackageId('');
+                  setPackageOptions([]);
+                  setPackageError(null);
                 }}
                 maxLength={80}
                 placeholder="İsim ile ara (min 2 karakter)"
@@ -372,7 +473,12 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setSelectedMemberId(m.id)}
+                      onClick={() => {
+                        setSelectedMemberId(m.id);
+                        setSelectedPackageId('');
+                        setPackageOptions([]);
+                        setPackageError(null);
+                      }}
                       disabled={isSubmitting}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-white/5 transition disabled:opacity-50 ${selectedMemberId === m.id ? 'bg-[#851C35]/20 text-[#851C35]' : 'text-white'}`}
                     >
@@ -385,6 +491,46 @@ export function AppointmentCreateModal({ scope, selectedDate, onClose, onSuccess
                  <div className="text-xs text-white/50 mt-1.5">Sonuç bulunamadı.</div>
               )}
             </div>
+
+            {selectedMemberId !== '' && (
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1.5">Seans Paketi</label>
+                {isLoadingPackages ? (
+                  <div className="text-sm text-white/50">Seans paketleri yükleniyor...</div>
+                ) : packageError ? (
+                  <div className="text-sm text-red-400">{packageError}</div>
+                ) : packageOptions.length === 0 ? (
+                  <div className="text-sm text-white/50 border border-white/10 rounded px-4 py-3 bg-black">
+                    Bu tarih için kullanılabilir seans paketi bulunmuyor.<br />
+                    Randevu oluşturabilmek için üyeye geçerli ve kullanılabilir seans hakkı tanımlanmalıdır.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {packageOptions.map(pkg => (
+                      <button
+                        key={pkg.id}
+                        type="button"
+                        onClick={() => setSelectedPackageId(pkg.id)}
+                        disabled={isSubmitting}
+                        className={`w-full text-left px-4 py-3 rounded border transition disabled:opacity-50 ${selectedPackageId === pkg.id ? 'border-[#851C35] bg-[#851C35]/10' : 'border-white/10 bg-black hover:border-white/30'}`}
+                      >
+                        <div className="text-sm text-white font-medium mb-1">
+                          {pkg.package_name} &mdash; {pkg.remaining_sessions} / {pkg.total_sessions} seans kaldı
+                        </div>
+                        {selectedPackageId === pkg.id && (
+                          <div className="text-xs text-white/60 space-y-0.5 mt-2 bg-white/5 p-2 rounded">
+                            <div>Kalan: <span className="text-white">{pkg.remaining_sessions}</span></div>
+                            <div>Toplam: <span className="text-white">{pkg.total_sessions}</span></div>
+                            <div>Rezerve: <span className="text-white">{pkg.reserved_sessions}</span></div>
+                            <div>Geçerlilik: <span className="text-white">{pkg.valid_until ? `${pkg.valid_until.split('-').reverse().join('.')} tarihine kadar` : 'Süre sınırı yok'}</span></div>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {scope !== 'trainer' && (
               <div>

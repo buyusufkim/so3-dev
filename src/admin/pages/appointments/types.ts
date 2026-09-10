@@ -32,3 +32,13 @@ export interface AppointmentListItem {
 export interface AppointmentListResponse {
   items: AppointmentListItem[];
 }
+
+export interface AppointmentSessionPackageOption {
+  id: number;
+  package_name: string;
+  total_sessions: number;
+  remaining_sessions: number;
+  reserved_sessions: number;
+  valid_from: string;
+  valid_until: string | null;
+}

@@ -51,6 +51,8 @@ export async function adminApiFetch(endpoint: string, options?: RequestInit): Pr
                      endpoint.startsWith('/api/admin/program-exercises') ||
                      endpoint.startsWith('/api/reception/') ||
                      endpoint.startsWith('/api/admin/appointments') ||
+                     endpoint.startsWith('/api/admin/appointment-session-packages') ||
+                     endpoint.startsWith('/api/trainer/appointment-session-packages') ||
                      endpoint.startsWith('/api/trainer/appointments');
                      
                      

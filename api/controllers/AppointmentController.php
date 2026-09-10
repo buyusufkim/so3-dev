@@ -326,7 +326,7 @@ class AppointmentController {
 
     // --- CREATE HELPERS ---
 
-    private function handleCreate(array $allowedKeysLegacy, array $allowedKeysPackage, ?int $forcedTrainerId = null) {
+    private function handleCreate(array $allowedKeys, ?int $forcedTrainerId = null) {
         if (!empty($_GET)) {
             Response::error(
                 'Query parameters are not allowed for appointment creation.',
@@ -344,22 +344,16 @@ class AppointmentController {
 
         $dataKeys = array_keys($data);
         sort($dataKeys);
-        $allowedLegacySorted = $allowedKeysLegacy;
-        sort($allowedLegacySorted);
-        
-        $allowedPackageSorted = $allowedKeysPackage;
-        sort($allowedPackageSorted);
+        $allowedSorted = $allowedKeys;
+        sort($allowedSorted);
 
-        if ($dataKeys !== $allowedLegacySorted && $dataKeys !== $allowedPackageSorted) {
+        if ($dataKeys !== $allowedSorted) {
             Response::error('Exact payload keys required.', 'VALIDATION_ERROR', 422);
         }
         
-        $memberSessionPackageId = null;
-        if (in_array('member_session_package_id', $dataKeys)) {
-            $memberSessionPackageId = $data['member_session_package_id'];
-            if (!is_int($memberSessionPackageId) || $memberSessionPackageId <= 0) {
-                Response::error('member_session_package_id must be a positive integer.', 'VALIDATION_ERROR', 422);
-            }
+        $memberSessionPackageId = $data['member_session_package_id'];
+        if (!is_int($memberSessionPackageId) || $memberSessionPackageId <= 0) {
+            Response::error('member_session_package_id must be a positive integer.', 'VALIDATION_ERROR', 422);
         }
 
         if (!is_int($data['member_id']) || $data['member_id'] <= 0) {
@@ -1145,7 +1139,7 @@ class AppointmentController {
     }
 
     public function createAdminAppointment() {
-        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at'], ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
+        $this->handleCreate(['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
     }
 
     public function getReceptionAppointments() {
@@ -1153,7 +1147,7 @@ class AppointmentController {
     }
 
     public function createReceptionAppointment() {
-        $this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at'], ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
+        $this->handleCreate(['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
     }
 
     public function getTrainerAppointments() {
@@ -1171,7 +1165,7 @@ class AppointmentController {
             Response::error('Unauthorized.', 'UNAUTHORIZED', 401);
         }
         $trainerId = $this->getTrainerProfileId($adminId);
-        $this->handleCreate(['member_id', 'starts_at', 'ends_at'], ['member_id', 'member_session_package_id', 'starts_at', 'ends_at'], $trainerId);
+        $this->handleCreate(['member_id', 'member_session_package_id', 'starts_at', 'ends_at'], $trainerId);
     }
 
     public function rescheduleAdminAppointment(int $id) {

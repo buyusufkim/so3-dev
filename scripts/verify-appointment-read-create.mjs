@@ -1450,13 +1450,13 @@ checkInvariant('POST Query Rejection: handleCreate rejects non-empty $_GET with 
 });
 
 // Exact Create Payload Sets
-checkInvariant('Exact Create Payload Sets: Admin and Reception require [ends_at, member_id, starts_at, trainer_id]', () => {
-    verifyCreatePayloadSet(createAdminAppointmentBlock, ['member_id', 'trainer_id', 'starts_at', 'ends_at']);
-    verifyCreatePayloadSet(createReceptionAppointmentBlock, ['member_id', 'trainer_id', 'starts_at', 'ends_at']);
+checkInvariant('Exact Create Payload Sets: Admin and Reception require [ends_at, member_id, member_session_package_id, starts_at, trainer_id]', () => {
+    verifyCreatePayloadSet(createAdminAppointmentBlock, ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
+    verifyCreatePayloadSet(createReceptionAppointmentBlock, ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at']);
 });
 
-checkInvariant('Exact Create Payload Sets: Trainer requires exact [ends_at, member_id, starts_at] and forbids trainer_id', () => {
-    verifyCreatePayloadSet(createTrainerAppointmentBlock, ['member_id', 'starts_at', 'ends_at']);
+checkInvariant('Exact Create Payload Sets: Trainer requires exact [ends_at, member_id, member_session_package_id, starts_at] and forbids trainer_id', () => {
+    verifyCreatePayloadSet(createTrainerAppointmentBlock, ['member_id', 'member_session_package_id', 'starts_at', 'ends_at']);
 });
 
 // Strict Datetime Parser

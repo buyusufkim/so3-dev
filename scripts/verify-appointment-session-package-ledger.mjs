@@ -49,9 +49,9 @@ check(controller.includes("SELECT SUM(delta) FROM member_session_package_ledger"
 // 9. remaining >0 options filter
 check(controller.includes("$remaining > 0"), 'Remaining > 0 filter applied');
 
-// 11. transitional dual exact create payload
-check(controller.includes("$this->handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at'], ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at'])"), 'Transitional dual exact create payload for admin/reception');
-check(controller.includes("$this->handleCreate(['member_id', 'starts_at', 'ends_at'], ['member_id', 'member_session_package_id', 'starts_at', 'ends_at'], $trainerId)"), 'Transitional dual exact create payload for trainer');
+// 11. exact package-aware create payload only
+check(controller.includes("$this->handleCreate(['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at'])"), 'Exact package-aware create payload for admin/reception');
+check(controller.includes("$this->handleCreate(['member_id', 'member_session_package_id', 'starts_at', 'ends_at'], $trainerId)"), 'Exact package-aware create payload for trainer');
 
 // 13. member/package ownership check
 check(controller.includes("(int)$pkg['member_id'] !== (int)$data['member_id']"), 'Member/package ownership check');

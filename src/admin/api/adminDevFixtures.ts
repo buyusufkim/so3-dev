@@ -167,12 +167,24 @@ function generateSyntheticUuid(id: number): string {
 
 
 
-let mockAppointments = [
+let mockAppointments: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    trainer_id: number;
+    member_session_package_id?: number | null;
+    starts_at: string;
+    ends_at: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+}[] = [
   {
     id: 1,
     uuid: '00000000-0000-4000-8000-000000000001',
     member_id: 1,
     trainer_id: 1,
+    member_session_package_id: null,
     starts_at: '2026-10-10 10:00:00',
     ends_at: '2026-10-10 11:00:00',
     status: 'scheduled',
@@ -244,7 +256,33 @@ let memberSessionPackages: DevMemberSessionPackage[] = [
   }
 ];
 
-let packageLedgers = [];
+
+interface LedgerEntry {
+  id: number;
+  uuid: string;
+  member_session_package_id: number;
+  appointment_id: number | null;
+  entry_type: 'reserve' | 'release' | 'adjustment';
+  delta: number;
+  reason: string | null;
+  created_at: string;
+}
+
+let packageLedgers: LedgerEntry[] = [];
+
+function getDerivedMsp(msp: DevMemberSessionPackage) {
+  const ledgers = packageLedgers.filter(l => l.member_session_package_id === msp.id);
+  const sumDelta = ledgers.reduce((acc, l) => acc + l.delta, 0);
+  const reserveCount = ledgers.filter(l => l.entry_type === 'reserve').length;
+  const releaseCount = ledgers.filter(l => l.entry_type === 'release').length;
+  
+  return {
+    ...msp,
+    remaining_sessions: msp.total_sessions + sumDelta,
+    reserved_sessions: reserveCount - releaseCount
+  };
+}
+
 
 export async function handleAdminFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
@@ -427,8 +465,23 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
 
   const ledgerMatch = path.match(/^\/api\/admin\/member-session-packages\/([1-9]\d*)\/ledger$/);
   if (ledgerMatch && method === 'GET') {
-     // Return empty ledger for now or mock entries
-     return createResponse([]);
+    const pkId = parseInt(ledgerMatch[1], 10);
+    const msp = memberSessionPackages.find(p => p.id === pkId);
+    if (!msp) return createError('Not found', 404);
+    return createResponse({
+      items: packageLedgers.filter(l => l.member_session_package_id === pkId).map(l => ({
+        id: l.id,
+        uuid: l.uuid,
+        entry_type: l.entry_type,
+        delta: l.delta,
+        appointment_id: l.appointment_id,
+        appointment_starts_at: null,
+        appointment_ends_at: null,
+        display_name: "Mock Admin",
+        reason: l.reason,
+        created_at: l.created_at
+      }))
+    });
   }
 
   // --- Dashboard Endpoints ---
@@ -2211,6 +2264,41 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   }
 
   // --- Appointments Parity ---
+
+  const apptPackageOptionsMatch = path.match(/^\/api\/(admin|reception|trainer)\/appointment-session-packages$/);
+  if (apptPackageOptionsMatch && method === 'GET') {
+    const memberId = parseInt(url.searchParams.get('member_id') || '0', 10);
+    const date = url.searchParams.get('date');
+    if (!memberId || !date) return createError('Validation Error', 422);
+
+    const pkgs = memberSessionPackages
+      .filter(p => p.member_id === memberId && p.stored_status === 'active')
+      .map(getDerivedMsp)
+      .filter(p => p.remaining_sessions > 0)
+      .filter(p => {
+        if (date < p.valid_from) return false;
+        if (p.valid_until && date > p.valid_until) return false;
+        return true;
+      });
+
+    return createResponse({
+      items: pkgs.map(p => ({
+        id: p.id,
+        package_name: p.package_name,
+        total_sessions: p.total_sessions,
+        remaining_sessions: p.remaining_sessions,
+        reserved_sessions: p.reserved_sessions,
+        valid_from: p.valid_from,
+        valid_until: p.valid_until
+      })).sort((a, b) => {
+        if (a.valid_until && b.valid_until) return a.valid_until.localeCompare(b.valid_until);
+        if (a.valid_until) return -1;
+        if (b.valid_until) return 1;
+        return a.id - b.id;
+      })
+    });
+  }
+
   const appointmentMatch = path.match(/^\/api\/(admin|reception|trainer)\/appointments(?:\/([1-9]\d*))?(?:\/(reschedule|cancel|complete|no-show))?$/);
   if (appointmentMatch) {
     const scope = appointmentMatch[1];
@@ -2227,17 +2315,54 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     }
     if (method === 'POST' && !idStr) {
       const p = typeof reqBody === 'object' ? reqBody : {};
+      
+      const pkgId = Number(p.member_session_package_id);
+      if (!pkgId || pkgId <= 0) return createError('member_session_package_id is required', 422, 'VALIDATION_ERROR');
+      
+      const memberId = Number(p.member_id) || 1;
+      const startsAtStr = String(p.starts_at || '2026-10-11 10:00:00');
+      
+      const rawMsp = memberSessionPackages.find(m => m.id === pkgId);
+      if (!rawMsp) return createError('Package not found', 404, 'SESSION_PACKAGE_NOT_FOUND');
+      
+      const msp = getDerivedMsp(rawMsp);
+      if (msp.member_id !== memberId || msp.stored_status !== 'active') {
+          return createError('Package ineligible', 409, 'SESSION_PACKAGE_INELIGIBLE');
+      }
+      
+      const startsAtDate = startsAtStr.substring(0, 10);
+      if (startsAtDate < msp.valid_from || (msp.valid_until && startsAtDate > msp.valid_until)) {
+          return createError('Package ineligible', 409, 'SESSION_PACKAGE_INELIGIBLE');
+      }
+      
+      if (msp.remaining_sessions <= 0) {
+          return createError('Package exhausted', 409, 'SESSION_PACKAGE_EXHAUSTED');
+      }
+
       const newAppt = {
         id: nextAppointmentId++,
         uuid: generateSyntheticUuid(nextAppointmentId),
-        member_id: Number(p.member_id) || 1,
+        member_id: memberId,
         trainer_id: Number(p.trainer_id) || 1,
+        member_session_package_id: pkgId,
         starts_at: String(p.starts_at || '2026-10-11 10:00:00'),
         ends_at: String(p.ends_at || '2026-10-11 11:00:00'),
         status: 'scheduled',
         created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
         updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
       };
+      
+      packageLedgers.push({
+          id: Date.now(),
+          uuid: 'dev-reserve-' + Date.now(),
+          member_session_package_id: pkgId,
+          appointment_id: newAppt.id,
+          entry_type: 'reserve',
+          delta: -1,
+          reason: null,
+          created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+      });
+      
       mockAppointments.push(newAppt);
       return createResponse({ data: { appointment: newAppt } });
     }
@@ -2254,6 +2379,18 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       } else if (action === 'cancel') {
         if (scope === 'trainer') return createError('Not found', 404);
         appt.status = 'cancelled';
+        if (appt.member_session_package_id) {
+          packageLedgers.push({
+              id: Date.now(),
+              uuid: 'dev-release-' + Date.now(),
+              member_session_package_id: appt.member_session_package_id,
+              appointment_id: appt.id,
+              entry_type: 'release',
+              delta: 1,
+              reason: 'appointment_cancelled',
+              created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+          });
+        }
       } else if (action === 'complete') {
         if (scope === 'reception') return createError('Not found', 404);
         appt.status = 'completed';
@@ -2265,6 +2402,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       return createResponse({ data: { appointment: appt } });
     }
   }
+
   
   if (path === '/api/reception/appointment-trainers' && method === 'GET') {
      const items = mockTrainers.map(t => ({ id: t.id, name: t.name || 'Trainer' }));

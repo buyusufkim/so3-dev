@@ -37,7 +37,8 @@
     "verify:session-package-foundation": "node scripts/verify-session-package-foundation.mjs",
     "verify:session-package-management-api": "node scripts/verify-session-package-management-api.mjs",
     "verify:session-package-management-ui": "node scripts/verify-session-package-management-ui.mjs",
-    "verify:appointment-session-package-ledger": "node scripts/verify-appointment-session-package-ledger.mjs"
+    "verify:appointment-session-package-ledger": "node scripts/verify-appointment-session-package-ledger.mjs",
+    "verify:appointment-session-package-cutover": "node scripts/verify-appointment-session-package-cutover.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
