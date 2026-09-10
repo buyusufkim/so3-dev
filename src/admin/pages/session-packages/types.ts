@@ -28,8 +28,8 @@ export function validateSessionPackage(data: any): data is SessionPackage {
     typeof data.session_count === 'number' && Number.isFinite(data.session_count) && Number.isInteger(data.session_count) && data.session_count > 0 &&
     (data.validity_days === null || (typeof data.validity_days === 'number' && Number.isFinite(data.validity_days) && Number.isInteger(data.validity_days) && data.validity_days > 0)) &&
     (data.status === 'active' || data.status === 'inactive') &&
-    typeof data.created_at === 'string' &&
-    typeof data.updated_at === 'string'
+    isValidCanonicalDateTime(data.created_at) &&
+    isValidCanonicalDateTime(data.updated_at)
   );
 }
 
@@ -47,4 +47,22 @@ export function validateSessionPackageListResponse(data: any): data is SessionPa
     typeof pag.total_items === 'number' && Number.isFinite(pag.total_items) && Number.isInteger(pag.total_items) && pag.total_items >= 0 &&
     typeof pag.total_pages === 'number' && Number.isFinite(pag.total_pages) && Number.isInteger(pag.total_pages) && pag.total_pages >= 0
   );
+}
+
+export function isValidCanonicalDate(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const daysInMonth = new Date(y, m, 0).getDate();
+  return d <= daysInMonth;
+}
+
+export function isValidCanonicalDateTime(dateTimeStr: string | null | undefined): boolean {
+  if (!dateTimeStr) return false;
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateTimeStr)) return false;
+  const [datePart, timePart] = dateTimeStr.split(' ');
+  if (!isValidCanonicalDate(datePart)) return false;
+  const [hr, min, sec] = timePart.split(':').map(Number);
+  return hr >= 0 && hr < 24 && min >= 0 && min < 60 && sec >= 0 && sec < 60;
 }

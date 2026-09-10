@@ -206,7 +206,25 @@ let sessionPackages = [
   }
 ];
 
-let memberSessionPackages: any[] = [
+interface DevMemberSessionPackage {
+  id: number;
+  uuid: string;
+  member_id: number;
+  session_package_id: number;
+  package_name: string;
+  total_sessions: number;
+  valid_from: string;
+  valid_until: string | null;
+  stored_status: string;
+  effective_status: string;
+  remaining_sessions: number;
+  reserved_sessions: number;
+  created_at: string;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+}
+
+let memberSessionPackages: DevMemberSessionPackage[] = [
   {
     id: 1,
     uuid: "abcdef12-3456-7890-abcd-ef1234567890",
@@ -396,7 +414,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     
     // DEV logic: If reserved sessions > 0, return PACKAGE_HAS_ACTIVE_RESERVATIONS
     if (pkg.reserved_sessions > 0) {
-       return createError('Has reservations', 422, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
+       return createError('Has reservations', 409, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
     }
     
     pkg.stored_status = 'cancelled';

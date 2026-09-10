@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Search, Edit2 } from "lucide-react";
 import { apiClient } from "../../api/client";
-import { SessionPackage, SessionPackageListResponse, validateSessionPackageListResponse } from "./types";
+import { SessionPackage, SessionPackageListResponse, validateSessionPackageListResponse, validateSessionPackage } from "./types";
 
 export function SessionPackagesPage() {
   const [data, setData] = useState<SessionPackageListResponse | null>(null);
@@ -130,14 +130,9 @@ export function SessionPackagesPage() {
         res = await apiClient.post(`/api/admin/session-packages`, payload);
       }
 
-      import("./types").then(({ validateSessionPackage }) => {
-        if (!validateSessionPackage(res)) {
-          throw new Error("Sunucu geçersiz paket verisi döndürdü");
-        }
-      }).catch(err => {
-         if (err.message === "Sunucu geçersiz paket verisi döndürdü") throw err;
-      });
-      // The dynamic import is to avoid circular dependencies if any, but since we import it at top, let's just use it directly
+      if (!validateSessionPackage(res)) {
+        throw new Error("Sunucu geçersiz paket verisi döndürdü.");
+      }
       
       handleCloseModal();
       fetchPackages();

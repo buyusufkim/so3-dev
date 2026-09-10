@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, X, Search, Clock } from "lucide-react";
 import { apiClient } from "../../api/client";
+import { ApiError } from "../../api/client";
 import { 
   MemberSessionPackage, 
   validateMemberSessionPackage, 
   MemberLedgerEntry, 
-  validateMemberLedgerEntry 
+  validateMemberLedgerEntry,
+  isValidCanonicalDate
 } from "./types";
 import { SessionPackage, SessionPackageListResponse, validateSessionPackageListResponse } from "../session-packages/types";
 
@@ -22,7 +24,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
   const [catalogPackages, setCatalogPackages] = useState<SessionPackage[]>([]);
   const [assignForm, setAssignForm] = useState({
     session_package_id: "",
-    valid_from: new Date().toISOString().split('T')[0]
+    valid_from: ""
   });
   const [isAssigning, setIsAssigning] = useState(false);
   const isAssigningRef = useRef(false);
@@ -37,6 +39,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
   const [ledgerModalPkg, setLedgerModalPkg] = useState<MemberSessionPackage | null>(null);
   const [ledgerEntries, setLedgerEntries] = useState<MemberLedgerEntry[]>([]);
   const [isLedgerLoading, setIsLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState("");
 
   const fetchPackages = async () => {
     setIsLoading(true);
@@ -103,7 +106,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
        setAssignError("Lütfen geçerli bir paket seçin.");
        return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(assignForm.valid_from)) {
+    if (!isValidCanonicalDate(assignForm.valid_from)) {
        setAssignError("Lütfen geçerli bir başlangıç tarihi seçin.");
        return;
     }
@@ -124,8 +127,14 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
       
       setIsAssignModalOpen(false);
       fetchPackages();
-    } catch (err: any) {
-      setAssignError(err.message || "Atama sırasında hata oluştu");
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setAssignError(err.message || "Atama sırasında hata oluştu");
+      } else if (err instanceof Error) {
+        setAssignError(err.message);
+      } else {
+        setAssignError("Atama sırasında hata oluştu");
+      }
     } finally {
       setIsAssigning(false);
       isAssigningRef.current = false;
@@ -163,15 +172,21 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
       
       setCancelModalPkg(null);
       fetchPackages();
-    } catch (err: any) {
-      if (err.code === "PACKAGE_HAS_ACTIVE_RESERVATIONS") {
-        setCancelError("Bu pakete bağlı aktif randevu rezervasyonları bulunduğu için paket iptal edilemez.");
-      } else if (err.code === "CONFLICT") {
-        setCancelError("Paket zaten iptal edilmiş olabilir.");
-      } else if (err.code === "NOT_FOUND") {
-        setCancelError("Paket bulunamadı.");
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        if (err.code === "PACKAGE_HAS_ACTIVE_RESERVATIONS") {
+          setCancelError("Bu pakete bağlı aktif randevu rezervasyonları bulunduğu için paket iptal edilemez.");
+        } else if (err.code === "CONFLICT") {
+          setCancelError("Paket zaten iptal edilmiş olabilir.");
+        } else if (err.code === "NOT_FOUND") {
+          setCancelError("Paket bulunamadı.");
+        } else {
+          setCancelError(err.message || "İptal işlemi başarısız.");
+        }
+      } else if (err instanceof Error) {
+        setCancelError(err.message);
       } else {
-        setCancelError(err.message || "İptal işlemi başarısız.");
+        setCancelError("İptal işlemi başarısız.");
       }
     } finally {
       setIsCancelling(false);
@@ -181,6 +196,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
 
   const openLedgerModal = async (pkg: MemberSessionPackage) => {
     setLedgerModalPkg(pkg);
+    setLedgerError("");
     setIsLedgerLoading(true);
     try {
       const res = await apiClient.get(`/api/admin/member-session-packages/${pkg.id}/ledger`);
@@ -189,7 +205,7 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
       if (validEntries.length !== res.length) throw new Error("Malformed ledger data");
       setLedgerEntries(validEntries);
     } catch (err) {
-      // Handle error gracefully
+      setLedgerError("Hareket geçmişi yüklenemedi.");
       setLedgerEntries([]);
     } finally {
       setIsLedgerLoading(false);
@@ -465,6 +481,10 @@ export function MemberSessionPackagesPanel({ memberId }: Props) {
             <div className="p-6 overflow-y-auto">
               {isLedgerLoading ? (
                 <div className="text-center py-8 text-white/50">Yükleniyor...</div>
+              ) : ledgerError ? (
+                <div className="text-center py-8 text-red-400 bg-red-500/10 rounded-lg border border-red-500/20">
+                  {ledgerError}
+                </div>
               ) : ledgerEntries.length === 0 ? (
                 <div className="text-center py-8 text-white/50 bg-[#1a1a1a] rounded-lg border border-white/10">
                   Henüz hareket kaydı bulunmuyor.

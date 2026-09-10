@@ -64,16 +64,26 @@ const fallback = fs.readFileSync(devFallbackPath, 'utf8');
 check(fallback.includes('/api/admin/session-packages') && fallback.includes('/api/admin/member-session-packages'), 'DEV fallback targets added');
 
 const fixtures = fs.readFileSync(devFixturesPath, 'utf8');
-check(fixtures.includes('sessionPackages =') && fixtures.includes('memberSessionPackages ='), 'DEV catalog and member package stateful handlers exist');
+check(fixtures.includes('sessionPackages =') && fixtures.includes('memberSessionPackages: DevMemberSessionPackage[] ='), 'DEV catalog and member package stateful handlers exist');
 check(fixtures.includes('total_sessions:') && fixtures.includes('remaining_sessions:'), 'DEV responses match backend parity');
 
 
-check(!spPage.includes('as any') && !spPage.includes('as unknown'), 'SessionPackagesPage has no typescript escapes');
 check(!mPanel.includes('as any') && !mPanel.includes('as unknown'), 'MemberSessionPackagesPanel has no typescript escapes');
 check(spPage.includes('validateSessionPackage(res)') || spPage.includes('validateSessionPackage'), 'SessionPackagesPage validates mutation response');
 check(mPanel.includes('validateMemberSessionPackage(res)'), 'MemberSessionPackagesPanel validates mutation response');
 check(spPage.includes('isSubmittingRef.current'), 'Double submit protection in SessionPackagesPage');
 check(mPanel.includes('isAssigningRef.current') && mPanel.includes('isCancellingRef.current'), 'Double submit protection in MemberSessionPackagesPanel');
 check(fixtures.includes('PACKAGE_HAS_ACTIVE_RESERVATIONS'), 'adminDevFixtures handles PACKAGE_HAS_ACTIVE_RESERVATIONS');
+
+check(spPage.includes('import {'), 'SessionPackagesPage does not use dynamic import for types');
+check(!spPage.includes('import("./types")'), 'SessionPackagesPage does not use dynamic import for types');
+check(spPage.includes('if (!validateSessionPackage(res))'), 'Synchronous mutation response validation');
+check(mPanel.includes('catch (err: unknown)'), 'MemberSessionPackagesPanel uses catch (err: unknown)');
+check(!mPanel.includes('catch (err: any)'), 'MemberSessionPackagesPanel does not use catch (err: any)');
+check(fixtures.includes('interface DevMemberSessionPackage'), 'adminDevFixtures has typed fixture');
+check(!fixtures.includes('let memberSessionPackages: any[]'), 'adminDevFixtures does not use any[] for member packages');
+check(fs.readFileSync('src/admin/pages/members/types.ts', 'utf8').includes('isValidCanonicalDate'), 'DATE validation helper exists');
+check(fs.readFileSync('src/admin/pages/session-packages/types.ts', 'utf8').includes('isValidCanonicalDateTime'), 'DATETIME validation helper exists');
+check(mPanel.includes('ledgerError ?'), 'Ledger modal handles error state');
 
 process.exit(exitCode);
