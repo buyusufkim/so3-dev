@@ -10,6 +10,15 @@ function pass(msg) {
     console.log('✅ ' + msg);
 }
 
+const rootFiles = fs.readdirSync(process.cwd());
+const tempPatterns = [/^patch\.mjs$/, /^patch\.js$/, /^tmp\.mjs$/, /^tmp\.js$/, /\.tmp$/, /\.fixed$/];
+for (const file of rootFiles) {
+    if (tempPatterns.some(pattern => pattern.test(file))) {
+        fail(`Found temporary artifact in root directory: ${file}`);
+    }
+}
+pass('No temporary artifacts found in root directory');
+
 const controllerPath = path.join(process.cwd(), 'api/controllers/MemberPortalController.php');
 if (!fs.existsSync(controllerPath)) {
     fail('MemberPortalController.php does not exist');
