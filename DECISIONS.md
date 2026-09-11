@@ -93,3 +93,14 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 - Appointment and training program mutations are intentionally excluded to maintain the read-only safety of the portal.
 - The `/uye` route tree automatically applies `noindex,nofollow` robots meta to protect member privacy and SEO integrity.
 - There is no DEV authentication fallback for the member portal; if the backend is unavailable, it gracefully handles the failure without producing synthetic sessions.
+
+## F.18D Admin Member Account Provisioning UI
+- member portal account provisioning admin member detail altında yönetilir
+- only super_admin/admin
+- one member <-> one portal account
+- username create sonrası immutable in current scope
+- account status member statusundan ayrı security state
+- password create/reset never returned/stored client-side
+- reset forces password change and invalidates existing session through backend auth_version
+- no delete/impersonation/public signup
+- backend remains security source-of-truth
