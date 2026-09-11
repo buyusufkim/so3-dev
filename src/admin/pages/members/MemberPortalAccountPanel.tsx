@@ -6,14 +6,15 @@ import {
   validateMemberPortalMutationResponse
 } from "./memberPortalAccountTypes";
 
-function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return 'Henüz giriş yapmadı';
+function formatDateTime(dateStr: string | null, fallback: string): string {
+  if (!dateStr) return fallback;
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-  if (!match) return dateStr;
+  if (!match) return fallback;
   return `${match[3]}.${match[2]}.${match[1]} ${match[4]}:${match[5]}`;
 }
 
-export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
+export function MemberPortalAccountPanel({ memberId }: { memberId: number | null }) {
+  if (memberId === null || memberId <= 0) return null;
   const [data, setData] = useState<MemberPortalAccountResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,13 +37,17 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
   const [isResettingPasswordState, setIsResettingPasswordState] = useState(false);
 
   const mountedRef = useRef(true);
+  const requestGenerationRef = useRef(0);
 
   const fetchAccount = useCallback(async () => {
+    if (memberId === null || memberId <= 0) return;
+    const generation = ++requestGenerationRef.current;
+    const requestedMemberId = memberId;
     try {
       setLoading(true);
       setError(null);
       const res = await apiClient.get(`/api/admin/members/${memberId}/account`);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== requestGenerationRef.current || requestedMemberId !== memberId) return;
 
       const validated = validateMemberPortalAccountResponse(res);
       if (validated.member.id !== memberId) {
@@ -51,14 +56,14 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
       }
       setData(validated);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== requestGenerationRef.current || requestedMemberId !== memberId) return;
       if (err instanceof ApiError && err.code === 'NOT_FOUND') {
         setError('Üye veya portal hesabı bulunamadı.');
       } else {
         setError('Veriler yüklenirken bir hata oluştu.');
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && generation === requestGenerationRef.current && requestedMemberId === memberId) {
         setLoading(false);
       }
     }
@@ -66,6 +71,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
 
   useEffect(() => {
     mountedRef.current = true;
+    requestGenerationRef.current++;
+    setData(null);
+    setLoading(true);
+    setError(null);
     void fetchAccount();
     return () => {
       mountedRef.current = false;
@@ -79,6 +88,7 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
       if (err.code === 'FORBIDDEN') return 'Bu işlemi yapma yetkiniz yok.';
       if (err.code === 'VALIDATION_ERROR') return err.message;
       if (err.code === 'NOT_FOUND') return 'Üye veya portal hesabı bulunamadı.';
+      if (err.code === 'SERVER_ERROR') return 'İşlem şu anda gerçekleştirilemiyor.';
     }
     return 'Bir hata oluştu.';
   };
@@ -88,6 +98,11 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
     if (isCreating.current) return;
 
     const normalizedUsername = createUsername.trim().toLowerCase();
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 50) {
+      alert("Kullanıcı adı 3 ile 50 karakter arasında olmalıdır.");
+      return;
+    }
+
     if (!/^[a-z0-9._-]+$/.test(normalizedUsername)) {
       alert("Kullanıcı adı sadece küçük harf, rakam, nokta, tire ve alt tire içerebilir.");
       return;
@@ -224,9 +239,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
           <p className="text-sm text-white/70">Bu üye için henüz portal hesabı oluşturulmamış.</p>
           <form onSubmit={handleCreate} className="space-y-4 max-w-sm">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white/70">Kullanıcı adı</label>
+              <label htmlFor="portal-username" className="text-sm font-medium text-white/70">Kullanıcı adı</label>
               <input 
                 type="text"
+                id="portal-username"
                 required
                 value={createUsername}
                 onChange={e => setCreateUsername(e.target.value)}
@@ -235,9 +251,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white/70">Geçici şifre</label>
+              <label htmlFor="portal-create-password" className="text-sm font-medium text-white/70">Geçici şifre</label>
               <input 
                 type="password"
+                id="portal-create-password"
                 required
                 value={createPassword}
                 onChange={e => setCreatePassword(e.target.value)}
@@ -246,9 +263,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white/70">Geçici şifre tekrar</label>
+              <label htmlFor="portal-create-password-confirm" className="text-sm font-medium text-white/70">Geçici şifre tekrar</label>
               <input 
                 type="password"
+                id="portal-create-password-confirm"
                 required
                 value={createPasswordConfirm}
                 onChange={e => setCreatePasswordConfirm(e.target.value)}
@@ -281,15 +299,15 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
             </div>
             <div className="space-y-1">
               <div className="text-sm text-white/50">İlk oluşturulma</div>
-              <div className="text-base font-medium">{formatDateTime(data.account.created_at)}</div>
+              <div className="text-base font-medium">{formatDateTime(data.account.created_at, 'Bilinmiyor')}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-white/50">Son giriş</div>
-              <div className="text-base font-medium">{formatDateTime(data.account.last_login_at)}</div>
+              <div className="text-base font-medium">{formatDateTime(data.account.last_login_at, 'Henüz giriş yapmadı')}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-white/50">Son şifre değişimi</div>
-              <div className="text-base font-medium">{formatDateTime(data.account.password_changed_at)}</div>
+              <div className="text-base font-medium">{formatDateTime(data.account.password_changed_at, 'Henüz değiştirilmedi')}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-white/50">Şifre durumu</div>
@@ -333,9 +351,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
             
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-white/70">Yeni geçici şifre</label>
+                <label htmlFor="portal-reset-password" className="text-sm font-medium text-white/70">Yeni geçici şifre</label>
                 <input 
                   type="password"
+                  id="portal-reset-password"
                   required
                   value={resetPassword}
                   onChange={e => setResetPassword(e.target.value)}
@@ -344,9 +363,10 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number }) {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-white/70">Yeni geçici şifre tekrar</label>
+                <label htmlFor="portal-reset-password-confirm" className="text-sm font-medium text-white/70">Yeni geçici şifre tekrar</label>
                 <input 
                   type="password"
+                  id="portal-reset-password-confirm"
                   required
                   value={resetPasswordConfirm}
                   onChange={e => setResetPasswordConfirm(e.target.value)}

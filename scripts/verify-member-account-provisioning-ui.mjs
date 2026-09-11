@@ -34,6 +34,9 @@ try {
   check(editorCode.includes('portal-account'), 'AdminMemberEditor must have portal-account tab');
   check(editorCode.includes('MemberPortalAccountPanel'), 'AdminMemberEditor must import and use MemberPortalAccountPanel');
   check(!editorCode.includes('<MemberPortalAccountPanel />') && editorCode.includes('memberId={'), 'AdminMemberEditor must pass memberId to panel');
+  check(!editorCode.match(/<MemberPortalAccountPanel[^>]*memberId=\{parseInt\(id, 10\)\}/), 'AdminMemberEditor must not pass raw parseInt(id, 10) to PortalAccountPanel');
+  check(editorCode.includes('const parsedMemberId = id && /^\\d+$/.test(id) ? parseInt(id, 10) : null'), 'AdminMemberEditor must use positive integer guard for id');
+  check(!editorCode.includes('{activeTab === \'portal-account\' && id && ('), 'AdminMemberEditor must not use raw id for render guard');
   check(editorCode.includes('{activeTab === \'portal-account\'') && editorCode.includes('&& id &&'), 'Panel must only be shown for existing members (!isNew)');
   
   const panelPath = path.join(adminMembersDir, 'MemberPortalAccountPanel.tsx');
@@ -67,6 +70,7 @@ try {
   step('Username Validation');
   check(panelCode.includes('toLowerCase()') && panelCode.includes('trim()'), 'Username must be lowercase normalized');
   check(panelCode.includes('/^[a-z0-9._-]+$/.test'), 'Username regex parity with backend missing');
+  check(panelCode.includes('normalizedUsername.length < 3') && panelCode.includes('normalizedUsername.length > 50'), 'Username length strictly validated (3-50)');
   
   step('Password Validation');
   check(panelCode.includes('< 12') && panelCode.includes('> 256'), 'Password length validation (12-256) missing');
@@ -85,10 +89,19 @@ try {
   
   step('UI Text & Formatting');
   check(panelCode.includes('Şifre sıfırlandığında'), 'Reset security explanation missing');
+  check(panelCode.includes('id="portal-username"') && panelCode.includes('htmlFor="portal-username"'), 'Username input must have accessibility id/label');
+  check(panelCode.includes('id="portal-create-password"') && panelCode.includes('htmlFor="portal-create-password"'), 'Create password input must have accessibility id/label');
+  check(panelCode.includes('id="portal-create-password-confirm"') && panelCode.includes('htmlFor="portal-create-password-confirm"'), 'Create password confirm input must have accessibility id/label');
+  check(panelCode.includes('id="portal-reset-password"') && panelCode.includes('htmlFor="portal-reset-password"'), 'Reset password input must have accessibility id/label');
+  check(panelCode.includes('id="portal-reset-password-confirm"') && panelCode.includes('htmlFor="portal-reset-password-confirm"'), 'Reset password confirm input must have accessibility id/label');
   check(panelCode.includes('İlk girişte şifre değişikliği gerekli') && panelCode.includes('Şifre güncel'), 'must_change_password display text missing');
   
   check(panelCode.includes('formatDateTime'), 'DATETIME formatter missing');
   check(panelCode.includes('match') && !panelCode.includes('new Date('), 'DATETIME formatter must not use new Date()');
+  check(typesCode.includes('function isValidDateTime'), 'DATETIME semantic validator missing');
+  check(typesCode.includes('daysInMonth') && typesCode.includes('% 4 === 0'), 'DATETIME validator must check calendar day bounds and leap year');
+  check(typesCode.includes('hour > 23') && typesCode.includes('minute > 59') && typesCode.includes('second > 59'), 'DATETIME validator must check time bounds');
+  check(typesCode.includes('!isValidDateTime(account.last_login_at)') && typesCode.includes('!isValidDateTime(account.password_changed_at)') && typesCode.includes('!isValidDateTime(account.created_at)'), 'DATETIME validator must be used on nullable and strict date fields');
   
   step('Error Mapping');
   check(panelCode.includes('MEMBER_ACCOUNT_ALREADY_EXISTS'), 'MEMBER_ACCOUNT_ALREADY_EXISTS mapping missing');
@@ -98,6 +111,9 @@ try {
   
   step('Concurrency Guards');
   check(panelCode.includes('isCreating.current') || panelCode.includes('isCreatingState'), 'Create mutation guard missing');
+  check(panelCode.includes('const requestGenerationRef = useRef(0)'), 'Must have generation token or AbortController');
+  check(panelCode.includes('requestGenerationRef.current++') || panelCode.includes('abort()'), 'Must invalidate old request on member change');
+  check(panelCode.includes('requestedMemberId !== memberId'), 'Must verify response matches current member');
   check(panelCode.includes('isUpdatingStatus.current'), 'Status mutation guard missing');
   check(panelCode.includes('isResettingPassword.current'), 'Reset password mutation guard missing');
   

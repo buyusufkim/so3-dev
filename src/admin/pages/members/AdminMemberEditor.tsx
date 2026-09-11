@@ -13,6 +13,7 @@ export function AdminMemberEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !id;
+  const parsedMemberId = id && /^\d+$/.test(id) ? parseInt(id, 10) : null;
 
   const bypassBlocker = useRef(false);
   const isSubmitting = useRef(false);
@@ -481,9 +482,9 @@ export function AdminMemberEditor() {
         </div>
       )}
 
-      {activeTab === 'portal-account' && id && (
+      {activeTab === 'portal-account' && parsedMemberId !== null && parsedMemberId > 0 && (
         <div className="bg-[#121212] border border-white/10 rounded-lg p-6">
-          <MemberPortalAccountPanel memberId={parseInt(id, 10)} />
+          <MemberPortalAccountPanel memberId={parsedMemberId} />
         </div>
       )}
 
