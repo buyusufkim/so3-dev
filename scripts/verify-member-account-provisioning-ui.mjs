@@ -36,8 +36,11 @@ try {
   check(!editorCode.includes('<MemberPortalAccountPanel />') && editorCode.includes('memberId={'), 'AdminMemberEditor must pass memberId to panel');
   check(!editorCode.match(/<MemberPortalAccountPanel[^>]*memberId=\{parseInt\(id, 10\)\}/), 'AdminMemberEditor must not pass raw parseInt(id, 10) to PortalAccountPanel');
   check(editorCode.includes('const parsedMemberId = id && /^\\d+$/.test(id) ? parseInt(id, 10) : null'), 'AdminMemberEditor must use positive integer guard for id');
+
+  check(editorCode.match(/<MemberPortalAccountPanel[^>]*key=\{validMemberId\}/), 'AdminMemberEditor must use key={validMemberId} to create a member identity boundary');
+
   check(!editorCode.includes('{activeTab === \'portal-account\' && id && ('), 'AdminMemberEditor must not use raw id for render guard');
-  check(editorCode.includes('{activeTab === \'portal-account\'') && editorCode.includes('&& id &&'), 'Panel must only be shown for existing members (!isNew)');
+  
   
   const panelPath = path.join(adminMembersDir, 'MemberPortalAccountPanel.tsx');
   const panelCode = fs.readFileSync(panelPath, 'utf-8');
@@ -116,7 +119,24 @@ try {
   check(panelCode.includes('requestedMemberId !== memberId'), 'Must verify response matches current member');
   check(panelCode.includes('isUpdatingStatus.current'), 'Status mutation guard missing');
   check(panelCode.includes('isResettingPassword.current'), 'Reset password mutation guard missing');
+
+  check(
+    (panelCode.match(/if \(!mountedRef\.current \|\| mutationMemberId !== memberId\) return;[\s\S]*?await fetchAccount\(\)/g) || []).length >= 3,
+    'Must check if component is mounted and member is same before refetching in all 3 mutations'
+  );
+
   
+  
+  step('Repository Hygiene');
+  const files = fs.readdirSync(ROOT_DIR);
+  const badFiles = files.filter(f => 
+    /^patch.*\.(m?js)$/.test(f) || 
+    /^tmp.*\.(m?js)$/.test(f) || 
+    f.endsWith('.tmp') || 
+    f.endsWith('.fixed')
+  );
+  check(badFiles.length === 0, 'No temporary patch or artifact files allowed in repository root');
+
   step('Existing Verifiers');
   check(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'verify-member-portal-auth-foundation.mjs')), 'F.18A verifier missing');
   check(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'verify-member-portal-read-model.mjs')), 'F.18B verifier missing');

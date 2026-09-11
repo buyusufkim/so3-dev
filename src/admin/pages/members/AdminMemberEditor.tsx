@@ -14,6 +14,7 @@ export function AdminMemberEditor() {
   const navigate = useNavigate();
   const isNew = !id;
   const parsedMemberId = id && /^\d+$/.test(id) ? parseInt(id, 10) : null;
+  const validMemberId = parsedMemberId !== null && Number.isInteger(parsedMemberId) && parsedMemberId > 0 ? parsedMemberId : null;
 
   const bypassBlocker = useRef(false);
   const isSubmitting = useRef(false);
@@ -482,9 +483,9 @@ export function AdminMemberEditor() {
         </div>
       )}
 
-      {activeTab === 'portal-account' && parsedMemberId !== null && parsedMemberId > 0 && (
+      {activeTab === 'portal-account' && validMemberId !== null && (
         <div className="bg-[#121212] border border-white/10 rounded-lg p-6">
-          <MemberPortalAccountPanel memberId={parsedMemberId} />
+          <MemberPortalAccountPanel key={validMemberId} memberId={validMemberId} />
         </div>
       )}
 

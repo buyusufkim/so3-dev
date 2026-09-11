@@ -96,6 +96,7 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isCreating.current) return;
+    const mutationMemberId = memberId;
 
     const normalizedUsername = createUsername.trim().toLowerCase();
     if (normalizedUsername.length < 3 || normalizedUsername.length > 50) {
@@ -128,6 +129,7 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
       });
 
       validateMemberPortalMutationResponse(res);
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
 
       setCreatePassword("");
       setCreatePasswordConfirm("");
@@ -135,18 +137,20 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
 
       await fetchAccount();
     } catch (err) {
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
       alert(mapError(err));
     } finally {
-      isCreating.current = false;
-      setIsCreatingState(false);
-      setCreatePassword("");
-      setCreatePasswordConfirm("");
+      if (mountedRef.current && mutationMemberId === memberId) {
+        isCreating.current = false;
+        setIsCreatingState(false);
+      }
     }
   };
 
   const handleToggleStatus = async () => {
     if (!data?.account) return;
     if (isUpdatingStatus.current) return;
+    const mutationMemberId = memberId;
 
     const newStatus = data.account.status === 'active' ? 'inactive' : 'active';
     
@@ -167,12 +171,18 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
       });
 
       validateMemberPortalMutationResponse(res);
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
+      setCreatePassword("");
+      setCreatePasswordConfirm("");
       await fetchAccount();
     } catch (err) {
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
       alert(mapError(err));
     } finally {
-      isUpdatingStatus.current = false;
-      setIsUpdatingStatusState(false);
+      if (mountedRef.current && mutationMemberId === memberId) {
+        isUpdatingStatus.current = false;
+        setIsUpdatingStatusState(false);
+      }
     }
   };
 
@@ -180,6 +190,7 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
     e.preventDefault();
     if (!data?.account) return;
     if (isResettingPassword.current) return;
+    const mutationMemberId = memberId;
 
     if (resetPassword.length < 12 || resetPassword.length > 256) {
       alert("Geçici şifre 12 ile 256 karakter arasında olmalıdır.");
@@ -200,6 +211,7 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
       });
 
       validateMemberPortalMutationResponse(res);
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
 
       setResetPassword("");
       setResetPasswordConfirm("");
@@ -207,12 +219,13 @@ export function MemberPortalAccountPanel({ memberId }: { memberId: number | null
 
       await fetchAccount();
     } catch (err) {
+      if (!mountedRef.current || mutationMemberId !== memberId) return;
       alert(mapError(err));
     } finally {
-      isResettingPassword.current = false;
-      setIsResettingPasswordState(false);
-      setResetPassword("");
-      setResetPasswordConfirm("");
+      if (mountedRef.current && mutationMemberId === memberId) {
+        isResettingPassword.current = false;
+        setIsResettingPasswordState(false);
+      }
     }
   };
 
