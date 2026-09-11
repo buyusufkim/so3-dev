@@ -63,3 +63,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 - completed/no_show reserve kayıtları tüketilmiş seans hakkıdır; remaining balance'ı düşürür fakat active reservation sayılmaz.
 - Package cancellation yalnız scheduled linked reservations nedeniyle bloklanır.
 
+
+## F.18A Member Portal Auth & Account Foundation
+- Member authentication is structurally isolated from admin authentication.
+- Member credentials and login attempts are stored in `member_accounts` and `member_login_attempts`.
+- Admin cookies are named `so3_admin_session`, while member cookies are `so3_member_session`. Both can coexist in the same browser.
+- A member account (`member_accounts`) maps one-to-one to a member profile (`members`).
+- Logging in requires both the `member_accounts` record and the `members` record to be `active` and not deleted.
+- There is no public registration. Accounts are exclusively provisioned by admins.
+- The `auth_version` field in `member_accounts` acts as a credential/session invalidation token. It increments on password reset, status changes, and self-initiated password changes, instantly terminating old sessions via `MemberAuthMiddleware`.
+- Future F.18B read APIs will enforce self-only data access tied directly to the `member_id` captured in the session.

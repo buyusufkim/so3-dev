@@ -58,29 +58,52 @@ class MemberAccountController
         ]);
     }
 
+    private function getJsonPayload()
+    {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') !== 0) {
+            Response::error('Unsupported Media Type', 'UNSUPPORTED_MEDIA_TYPE', 415);
+        }
+
+        $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+        if ($contentLength > 16384) {
+            Response::error('Payload Too Large', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
+        $rawBody = file_get_contents('php://input');
+        if (strlen($rawBody) > 16384) {
+            Response::error('Payload Too Large', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
+        $input = json_decode($rawBody, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($input)) {
+            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+        }
+        
+        return $input;
+    }
+
     public function createAccount($memberId)
     {
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         $adminId = $_SESSION['admin_id'];
 
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || !is_array($input)) {
-            Response::error('Geçersiz JSON payload', 'INVALID_JSON', 422);
-        }
+        $input = $this->getJsonPayload();
 
         $allowedKeys = ['username', 'password'];
         if (count(array_diff(array_keys($input), $allowedKeys)) > 0 || count(array_diff($allowedKeys, array_keys($input))) > 0) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
 
-        $username = trim($input['username'] ?? '');
-        $password = $input['password'] ?? '';
-
-        if (!is_string($username) || !is_string($password)) {
+        if (!array_key_exists('username', $input) || !is_string($input['username'])) {
+            Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
+        }
+        if (!array_key_exists('password', $input) || !is_string($input['password'])) {
             Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
         }
 
-        $username = strtolower($username);
+        $username = strtolower(trim($input['username']));
+        $password = $input['password'];
 
         if (strlen($username) < 3 || strlen($username) > 50 || !preg_match('/^[a-z0-9._-]+$/', $username)) {
             Response::error('Kullanıcı adı geçerli değil.', 'VALIDATION_ERROR', 422);
@@ -113,7 +136,13 @@ class MemberAccountController
             }
 
             $hash = password_hash($password, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT);
-            $uuid = bin2hex(random_bytes(18)); // Ensure UUID generation or reuse existing function
+            if ($hash === false) {
+                throw new \RuntimeException('Password hashing failed');
+            }
+            $data = random_bytes(16);
+            $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+            $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+            $uuid = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 
             $stmt = $this->db->prepare("
                 INSERT INTO member_accounts (uuid, member_id, username, password_hash, status, must_change_password, created_by, updated_by) 
@@ -156,18 +185,19 @@ class MemberAccountController
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         $adminId = $_SESSION['admin_id'];
 
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || !is_array($input) || !isset($input['status'])) {
-            Response::error('Geçersiz JSON payload', 'INVALID_JSON', 422);
-        }
+        $input = $this->getJsonPayload();
 
         $allowedKeys = ['status'];
         if (count(array_diff(array_keys($input), $allowedKeys)) > 0 || count(array_diff($allowedKeys, array_keys($input))) > 0) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
 
+        if (!array_key_exists('status', $input) || !is_string($input['status'])) {
+            Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
+        }
+
         $status = $input['status'];
-        if (!in_array($status, ['active', 'inactive'])) {
+        if (!in_array($status, ['active', 'inactive'], true)) {
             Response::error('Geçersiz durum.', 'VALIDATION_ERROR', 422);
         }
 
@@ -226,20 +256,17 @@ class MemberAccountController
         AuthMiddleware::hasRole(['super_admin', 'admin']);
         $adminId = $_SESSION['admin_id'];
 
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || !is_array($input) || !isset($input['password'])) {
-            Response::error('Geçersiz JSON payload', 'INVALID_JSON', 422);
-        }
+        $input = $this->getJsonPayload();
 
         $allowedKeys = ['password'];
         if (count(array_diff(array_keys($input), $allowedKeys)) > 0 || count(array_diff($allowedKeys, array_keys($input))) > 0) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
 
-        $password = $input['password'];
-        if (!is_string($password) || strlen($password) < 12 || strlen($password) > 256) {
+        if (!array_key_exists('password', $input) || !is_string($input['password']) || strlen($input['password']) < 12 || strlen($input['password']) > 256) {
             Response::error('Şifre geçerli değil.', 'VALIDATION_ERROR', 422);
         }
+        $password = $input['password'];
 
         $this->db->beginTransaction();
         try {
@@ -252,6 +279,9 @@ class MemberAccountController
             }
 
             $hash = password_hash($password, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT);
+            if ($hash === false) {
+                throw new \RuntimeException('Password hashing failed');
+            }
             $newVersion = (int)$account['auth_version'] + 1;
 
             $upd = $this->db->prepare("

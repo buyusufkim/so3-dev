@@ -38,7 +38,8 @@
     "verify:session-package-management-api": "node scripts/verify-session-package-management-api.mjs",
     "verify:session-package-management-ui": "node scripts/verify-session-package-management-ui.mjs",
     "verify:appointment-session-package-ledger": "node scripts/verify-appointment-session-package-ledger.mjs",
-    "verify:appointment-session-package-cutover": "node scripts/verify-appointment-session-package-cutover.mjs"
+    "verify:appointment-session-package-cutover": "node scripts/verify-appointment-session-package-cutover.mjs",
+    "verify:member-portal-auth-foundation": "node scripts/verify-member-portal-auth-foundation.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

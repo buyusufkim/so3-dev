@@ -23,6 +23,31 @@ class MemberAuthController
         Response::json(['csrf_token' => $token]);
     }
 
+    private function getJsonPayload()
+    {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') !== 0) {
+            Response::error('Unsupported Media Type', 'UNSUPPORTED_MEDIA_TYPE', 415);
+        }
+
+        $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+        if ($contentLength > 16384) {
+            Response::error('Payload Too Large', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
+        $rawBody = file_get_contents('php://input');
+        if (strlen($rawBody) > 16384) {
+            Response::error('Payload Too Large', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
+        $input = json_decode($rawBody, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($input)) {
+            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
+        }
+        
+        return $input;
+    }
+
     private function checkRateLimit($username, $ip)
     {
         $stmt = $this->db->prepare("
@@ -36,14 +61,8 @@ class MemberAuthController
         $attempts = $stmt->fetchColumn();
 
         if ($attempts >= 5) {
-            http_response_code(429);
             header('Retry-After: 900');
-            echo json_encode([
-                'success' => false,
-                'error' => 'Çok fazla başarısız deneme.',
-                'code' => 'TOO_MANY_REQUESTS'
-            ]);
-            exit;
+            Response::error('Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.', 'TOO_MANY_REQUESTS', 429);
         }
     }
 
@@ -71,24 +90,22 @@ class MemberAuthController
 
     public function login()
     {
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || !is_array($input)) {
-            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 422);
-        }
+        $input = $this->getJsonPayload();
 
         $allowedKeys = ['username', 'password'];
         if (count(array_diff(array_keys($input), $allowedKeys)) > 0 || count(array_diff($allowedKeys, array_keys($input))) > 0) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
 
-        $username = trim($input['username'] ?? '');
-        $password = $input['password'] ?? '';
-        
-        if (!is_string($username) || !is_string($password)) {
+        if (!array_key_exists('username', $input) || !is_string($input['username'])) {
+            Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
+        }
+        if (!array_key_exists('password', $input) || !is_string($input['password'])) {
             Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
         }
 
-        $username = strtolower($username);
+        $username = strtolower(trim($input['username']));
+        $password = $input['password'];
 
         if (strlen($username) < 3 || strlen($username) > 50 || !preg_match('/^[a-z0-9._-]+$/', $username)) {
             Response::error('Giriş bilgileri geçersiz.', 'UNAUTHORIZED', 401);
@@ -111,7 +128,7 @@ class MemberAuthController
         $stmt->execute([':username' => $username]);
         $identity = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        $dummyHash = '$2y$10$abcdefghijklmnopqrstuv'; // Dummy for timing attack mitigation
+        $dummyHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'; // valid fixed bcrypt hash for 'password'
         $hash = $identity ? $identity['password_hash'] : $dummyHash;
 
         $isValid = password_verify($password, $hash);
@@ -130,8 +147,10 @@ class MemberAuthController
 
         if (password_needs_rehash($identity['password_hash'], defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT)) {
             $newHash = password_hash($password, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT);
-            $upd = $this->db->prepare("UPDATE member_accounts SET password_hash = :hash WHERE id = :id");
-            $upd->execute([':hash' => $newHash, ':id' => $identity['account_id']]);
+            if ($newHash !== false) {
+                $upd = $this->db->prepare("UPDATE member_accounts SET password_hash = :hash WHERE id = :id");
+                $upd->execute([':hash' => $newHash, ':id' => $identity['account_id']]);
+            }
         }
 
         $upd = $this->db->prepare("UPDATE member_accounts SET last_login_at = NOW(), last_login_ip = :ip WHERE id = :id");
@@ -213,26 +232,23 @@ class MemberAuthController
         MemberAuthMiddleware::handle();
         CsrfMiddleware::handle();
 
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || !is_array($input)) {
-            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 422);
-        }
+        $input = $this->getJsonPayload();
 
         $allowedKeys = ['current_password', 'new_password'];
         if (count(array_diff(array_keys($input), $allowedKeys)) > 0 || count(array_diff($allowedKeys, array_keys($input))) > 0) {
             Response::error('Geçersiz payload.', 'VALIDATION_ERROR', 422);
         }
 
-        $currentPassword = $input['current_password'] ?? '';
-        $newPassword = $input['new_password'] ?? '';
-
-        if (!is_string($currentPassword) || $currentPassword === '' || strlen($currentPassword) > 256) {
+        if (!array_key_exists('current_password', $input) || !is_string($input['current_password']) || $input['current_password'] === '' || strlen($input['current_password']) > 256) {
             Response::error('Geçersiz format.', 'VALIDATION_ERROR', 422);
         }
 
-        if (!is_string($newPassword) || strlen($newPassword) < 12 || strlen($newPassword) > 256 || $currentPassword === $newPassword) {
+        if (!array_key_exists('new_password', $input) || !is_string($input['new_password']) || strlen($input['new_password']) < 12 || strlen($input['new_password']) > 256 || $input['current_password'] === $input['new_password']) {
             Response::error('Yeni şifre geçerli değil.', 'VALIDATION_ERROR', 422);
         }
+        
+        $currentPassword = $input['current_password'];
+        $newPassword = $input['new_password'];
 
         $this->db->beginTransaction();
 
@@ -246,6 +262,9 @@ class MemberAuthController
             }
 
             $newHash = password_hash($newPassword, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT);
+            if ($newHash === false) {
+                throw new \RuntimeException('Password hashing failed');
+            }
             $newVersion = (int)$account['auth_version'] + 1;
 
             $upd = $this->db->prepare("

@@ -113,7 +113,7 @@ if (fs.existsSync(freshInstallPath)) {
     const content = fs.readFileSync(freshInstallPath, 'utf8');
     check(content.includes('037_create_session_packages.sql'), 'fresh-install has parity with 037 schema and history');
     check(content.includes('CONSTRAINT `chk_sp_session_count` CHECK'), 'fresh-install parity includes table check constraints');
-    check(content.includes('Generated from migrations 001-037'), 'fresh-install header updated');
+    check(content.includes('Generated from migrations 001-038'), 'fresh-install header updated');
 }
 
 // 19. deployment doc 001-037
