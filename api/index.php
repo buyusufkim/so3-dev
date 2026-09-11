@@ -1064,22 +1064,22 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
     // Member Portal
     if ($requestUri === '/api/member/overview' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
-        (new MemberPortalController())->getOverview();
+        (new \Controllers\MemberPortalController())->getOverview();
         $matched = true;
     }
     if ($requestUri === '/api/member/session-packages' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
-        (new MemberPortalController())->getSessionPackages();
+        (new \Controllers\MemberPortalController())->getSessionPackages();
         $matched = true;
     }
     if ($requestUri === '/api/member/appointments' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
-        (new MemberPortalController())->getAppointments();
+        (new \Controllers\MemberPortalController())->getAppointments();
         $matched = true;
     }
     if ($requestUri === '/api/member/training-program' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
-        (new MemberPortalController())->getTrainingPrograms();
+        (new \Controllers\MemberPortalController())->getTrainingPrograms();
         $matched = true;
     }
 
