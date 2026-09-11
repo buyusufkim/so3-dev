@@ -80,6 +80,22 @@ try {
   check(validatorsCode.includes('validateAppointments'), 'Appointments validator missing');
   check(validatorsCode.includes('validateTrainingPrograms'), 'Training program validator missing');
   
+  step('Real Date Validation');
+  const dateRegexOnlyMatch = validatorsCode.match(/isValidDate[\s\S]*?return\s+\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(value\)/);
+  check(!dateRegexOnlyMatch, 'isValidDate must not be a regex-only one-liner');
+  check(validatorsCode.includes('parseInt') && validatorsCode.includes('match[1]') && validatorsCode.includes('match[2]'), 'Must parse year, month, day components');
+  check(validatorsCode.includes('month < 1') || validatorsCode.includes('month > 12'), 'Must validate month bounds');
+  check(validatorsCode.includes('daysInMonth') || validatorsCode.includes('31, 28'), 'Must perform days-in-month boundary checks');
+  check(validatorsCode.includes('% 4 === 0') || validatorsCode.includes('isLeap'), 'Must include leap year calculation logic');
+  
+  step('Real DateTime Validation');
+  const dateTimeRegexOnlyMatch = validatorsCode.match(/isValidDateTime[\s\S]*?return\s+\/\^\\d\{4\}-\\d\{2\}-\\d\{2\} \\d\{2\}:\\d\{2\}:\\d\{2\}\$\/\.test\(value\)/);
+  check(!dateTimeRegexOnlyMatch, 'isValidDateTime must not be a regex-only one-liner');
+  check(validatorsCode.includes('isValidDate('), 'isValidDateTime must reuse isValidDate for the date part');
+  check(validatorsCode.includes('hour > 23'), 'Must validate hour upper bound (23)');
+  check(validatorsCode.includes('minute > 59'), 'Must validate minute upper bound (59)');
+  check(validatorsCode.includes('second > 59'), 'Must validate second upper bound (59)');
+
   // 4. Routes
   step('Route Isolation');
   const routesPath = path.join(ROOT_DIR, 'src', 'routes', 'index.tsx');
@@ -143,6 +159,11 @@ try {
   const dataErrorIdx = dashboardCode.indexOf('if (dataError)');
   const overviewIdx = dashboardCode.indexOf('if (!overview)');
   check(dataErrorIdx !== -1 && overviewIdx !== -1 && dataErrorIdx < overviewIdx, 'dataError branch must be reachable before !overview');
+
+  step('Dashboard Tracked Request Lifecycle');
+  check(dashboardCode.includes('useRef<AbortController'), 'Dashboard must track AbortController in ref');
+  check(!dashboardCode.includes('fetchData(new AbortController())'), 'Dashboard must not use raw AbortController instantiation in retry');
+  check(dashboardCode.includes('current?.abort()'), 'Dashboard must abort active controller on cleanup or restart');
   
   // 9. Storage Leaks
   step('Storage Leak Prevention');

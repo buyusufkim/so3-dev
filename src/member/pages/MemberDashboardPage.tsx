@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useMemberAuth } from '../auth/MemberAuthContext';
 import { memberApiClient, MemberApiError } from '../api/client';
@@ -44,12 +44,19 @@ export function MemberDashboardPage() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
 
-  const fetchData = async (abortController?: AbortController) => {
+  const dataAbortRef = useRef<AbortController | null>(null);
+
+  const startDataLoad = useCallback(async () => {
+    dataAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    dataAbortRef.current = controller;
+
     try {
       setIsDataLoading(true);
       setDataError(null);
 
-      const signal = abortController?.signal;
+      const signal = controller.signal;
 
       const [o, p, a, t] = await Promise.all([
         memberApiClient.getOverview(signal),
@@ -58,14 +65,14 @@ export function MemberDashboardPage() {
         memberApiClient.getTrainingPrograms(signal)
       ]);
 
-      if (signal?.aborted) return;
+      if (signal.aborted) return;
 
       setOverview(o);
       setPackages(p);
       setAppointments(a);
       setPrograms(t);
     } catch (err) {
-      if (abortController?.signal.aborted) return;
+      if (controller.signal.aborted) return;
 
       if (err instanceof MemberApiError && err.code === 'PASSWORD_CHANGE_REQUIRED') {
         await refreshIdentity();
@@ -75,21 +82,20 @@ export function MemberDashboardPage() {
       
       setDataError('Veriler yüklenirken bir hata oluştu.');
     } finally {
-      if (!abortController?.signal.aborted) {
+      if (!controller.signal.aborted) {
         setIsDataLoading(false);
       }
     }
-  };
+  }, [navigate, refreshIdentity]);
 
   useEffect(() => {
     if (!isLoading && identity && !identity.account.must_change_password) {
-      const abortController = new AbortController();
-      fetchData(abortController);
+      void startDataLoad();
       return () => {
-        abortController.abort();
+        dataAbortRef.current?.abort();
       };
     }
-  }, [isLoading, identity]);
+  }, [isLoading, identity, startDataLoad]);
 
   if (!isLoading && !identity) {
     return <Navigate to="/uye/giris" replace />;
@@ -116,7 +122,7 @@ export function MemberDashboardPage() {
       <div className="bg-[#121212] border border-white/10 rounded-2xl p-8 text-center">
         <p className="text-red-400 mb-4">{dataError}</p>
         <button 
-          onClick={() => fetchData(new AbortController())}
+          onClick={() => startDataLoad()}
           className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-xl transition-colors text-sm font-medium"
         >
           Tekrar Dene

@@ -4,12 +4,44 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isValidDate(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12) return false;
+  if (day < 1) return false;
+
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let maxDays = daysInMonth[month - 1];
+
+  if (month === 2) {
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+    if (isLeap) maxDays = 29;
+  }
+
+  return day <= maxDays;
 }
 
 export function isValidDateTime(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return false;
+
+  const datePart = match[1];
+  if (!isValidDate(datePart)) return false;
+
+  const hour = parseInt(match[2], 10);
+  const minute = parseInt(match[3], 10);
+  const second = parseInt(match[4], 10);
+
+  if (hour < 0 || hour > 23) return false;
+  if (minute < 0 || minute > 59) return false;
+  if (second < 0 || second > 59) return false;
+
+  return true;
 }
 
 export type MemberAuthIdentity = {
