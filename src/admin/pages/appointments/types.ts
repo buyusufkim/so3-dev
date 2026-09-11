@@ -105,13 +105,15 @@ export function validateAppointmentCreateSuccessResponse(response: unknown, expe
   const appt = (response as Record<string, unknown>).appointment as Record<string, unknown>;
   if (!appt || typeof appt !== 'object') throw new Error('Geçersiz yanıt formatı.');
   
-  if (typeof appt.id !== 'number' || appt.id <= 0) throw new Error('Geçersiz id');
+  if (typeof appt.id !== 'number' || !Number.isFinite(appt.id) || !Number.isInteger(appt.id) || appt.id <= 0) throw new Error('Geçersiz id');
   if (typeof appt.uuid !== 'string' || appt.uuid.trim() === '') throw new Error('Geçersiz uuid');
   
   if (typeof appt.member_id !== 'number' || appt.member_id !== expectedMemberId) throw new Error('Member mismatch');
   
   if (expectedTrainerId !== null) {
-    if (typeof appt.trainer_id !== 'number' || appt.trainer_id !== expectedTrainerId) throw new Error('Trainer mismatch');
+    if (typeof appt.trainer_id !== 'number' || !Number.isFinite(appt.trainer_id) || !Number.isInteger(appt.trainer_id) || appt.trainer_id <= 0 || appt.trainer_id !== expectedTrainerId) throw new Error('Trainer mismatch');
+  } else {
+    if (typeof appt.trainer_id !== 'number' || !Number.isFinite(appt.trainer_id) || !Number.isInteger(appt.trainer_id) || appt.trainer_id <= 0) throw new Error('Trainer mismatch');
   }
   
   if (typeof appt.member_session_package_id !== 'number' || appt.member_session_package_id !== expectedPackageId) throw new Error('Package mismatch');

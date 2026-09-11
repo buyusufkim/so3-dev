@@ -57,3 +57,9 @@ Bu dosya, proje süresince alınan önemli mimari, teknolojik ve ürüne dair ka
 
 F.17C.2 cutover sonrası yeni appointment create işlemlerinde explicit member_session_package_id zorunludur.
 NULL association yalnız pre-cutover/historical appointment compatibility içindir.
+
+## F.17 Canonical Reserved Sessions Semantics
+- reserved_sessions yalnız halen scheduled durumda olan package-linked appointmentları ifade eder.
+- completed/no_show reserve kayıtları tüketilmiş seans hakkıdır; remaining balance'ı düşürür fakat active reservation sayılmaz.
+- Package cancellation yalnız scheduled linked reservations nedeniyle bloklanır.
+

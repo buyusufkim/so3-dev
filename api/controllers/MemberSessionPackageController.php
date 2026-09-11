@@ -56,9 +56,9 @@ class MemberSessionPackageController
         }
 
         $reservedStmt = $this->db->prepare("
-            SELECT member_session_package_id, COALESCE(SUM(ABS(delta)), 0) as reserved
-            FROM member_session_package_ledger
-            WHERE entry_type = 'reserve' AND member_session_package_id IN (
+            SELECT member_session_package_id, COUNT(*) as reserved
+            FROM appointments
+            WHERE status = 'scheduled' AND member_session_package_id IN (
                 SELECT id FROM member_session_packages WHERE member_id = :member_id
             )
             GROUP BY member_session_package_id
@@ -66,21 +66,8 @@ class MemberSessionPackageController
         $reservedStmt->execute([':member_id' => $memberId]);
         $reservedData = $reservedStmt->fetchAll(\PDO::FETCH_KEY_PAIR);
 
-        $releasedStmt = $this->db->prepare("
-            SELECT member_session_package_id, COALESCE(SUM(delta), 0) as released
-            FROM member_session_package_ledger
-            WHERE entry_type = 'release' AND member_session_package_id IN (
-                SELECT id FROM member_session_packages WHERE member_id = :member_id
-            )
-            GROUP BY member_session_package_id
-        ");
-        $releasedStmt->execute([':member_id' => $memberId]);
-        $releasedData = $releasedStmt->fetchAll(\PDO::FETCH_KEY_PAIR);
-
         foreach ($packages as &$pkg) {
-            $res = isset($reservedData[$pkg['id']]) ? (int)$reservedData[$pkg['id']] : 0;
-            $rel = isset($releasedData[$pkg['id']]) ? (int)$releasedData[$pkg['id']] : 0;
-            $pkg['reserved_sessions'] = $res - $rel; // Net reservations
+            $pkg['reserved_sessions'] = isset($reservedData[$pkg['id']]) ? (int)$reservedData[$pkg['id']] : 0;
 
             $storedStatus = $pkg['stored_status'];
             $effectiveStatus = 'active';
@@ -247,18 +234,25 @@ class MemberSessionPackageController
                 throw new \Exception('Package is already cancelled', 409);
             }
 
-            $resStmt = $this->db->prepare("
-                SELECT 
-                    COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN ABS(delta) ELSE 0 END), 0) as reserved,
-                    COALESCE(SUM(CASE WHEN entry_type = 'release' THEN delta ELSE 0 END), 0) as released
-                FROM member_session_package_ledger 
-                WHERE member_session_package_id = :id
-            ");
-            $resStmt->execute([':id' => $id]);
-            $resData = $resStmt->fetch(\PDO::FETCH_ASSOC);
+            $schStmt = $this->db->prepare("SELECT id FROM appointments WHERE member_session_package_id = :id AND status = 'scheduled'");
+            $schStmt->execute([':id' => $id]);
+            $scheduledAppts = $schStmt->fetchAll(\PDO::FETCH_ASSOC);
             
-            $netReservations = (int)$resData['reserved'] - (int)$resData['released'];
-            if ($netReservations > 0) {
+            if (!empty($scheduledAppts)) {
+                foreach ($scheduledAppts as $sappt) {
+                    $chkStmt = $this->db->prepare("
+                        SELECT 
+                            SUM(CASE WHEN entry_type = 'reserve' THEN 1 ELSE 0 END) as res_count,
+                            SUM(CASE WHEN entry_type = 'release' THEN 1 ELSE 0 END) as rel_count
+                        FROM member_session_package_ledger
+                        WHERE member_session_package_id = :pid AND appointment_id = :aid
+                    ");
+                    $chkStmt->execute([':pid' => $id, ':aid' => $sappt['id']]);
+                    $chk = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+                    if ((int)$chk['res_count'] !== 1 || (int)$chk['rel_count'] !== 0) {
+                        throw new \Exception('SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                    }
+                }
                 throw new \Exception('PACKAGE_HAS_ACTIVE_RESERVATIONS', 409);
             }
 
@@ -349,15 +343,13 @@ class MemberSessionPackageController
             $pkg['remaining_sessions'] = $pkg['total_sessions'] + $delta;
             
             $resStmt = $this->db->prepare("
-                SELECT 
-                    COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN ABS(delta) ELSE 0 END), 0) as reserved,
-                    COALESCE(SUM(CASE WHEN entry_type = 'release' THEN delta ELSE 0 END), 0) as released
-                FROM member_session_package_ledger 
-                WHERE member_session_package_id = :id
+                SELECT COUNT(*) as reserved
+                FROM appointments 
+                WHERE member_session_package_id = :id AND status = 'scheduled'
             ");
             $resStmt->execute([':id' => $id]);
             $resData = $resStmt->fetch(\PDO::FETCH_ASSOC);
-            $pkg['reserved_sessions'] = (int)$resData['reserved'] - (int)$resData['released'];
+            $pkg['reserved_sessions'] = (int)$resData['reserved'];
 
             $storedStatus = $pkg['stored_status'];
             $effectiveStatus = 'active';

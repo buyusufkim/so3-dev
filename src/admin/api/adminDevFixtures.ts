@@ -273,13 +273,15 @@ let packageLedgers: LedgerEntry[] = [];
 function getDerivedMsp(msp: DevMemberSessionPackage) {
   const ledgers = packageLedgers.filter(l => l.member_session_package_id === msp.id);
   const sumDelta = ledgers.reduce((acc, l) => acc + l.delta, 0);
-  const reserveCount = ledgers.filter(l => l.entry_type === 'reserve').length;
-  const releaseCount = ledgers.filter(l => l.entry_type === 'release').length;
+  
+  const reservedCount = mockAppointments.filter(
+    a => a.member_session_package_id === msp.id && a.status === 'scheduled'
+  ).length;
   
   return {
     ...msp,
     remaining_sessions: msp.total_sessions + sumDelta,
-    reserved_sessions: reserveCount - releaseCount
+    reserved_sessions: reservedCount
   };
 }
 
@@ -450,9 +452,16 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       return createError('Already cancelled', 409, 'CONFLICT');
     }
     
-    // DEV logic: If reserved sessions > 0, return PACKAGE_HAS_ACTIVE_RESERVATIONS
-    if (getDerivedMsp(pkg).reserved_sessions > 0) {
-       return createError('Has reservations', 409, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
+    const scheduledAppts = mockAppointments.filter(a => a.member_session_package_id === id && a.status === 'scheduled');
+    if (scheduledAppts.length > 0) {
+        for (const sappt of scheduledAppts) {
+            const resCount = packageLedgers.filter(l => l.member_session_package_id === id && l.appointment_id === sappt.id && l.entry_type === 'reserve').length;
+            const relCount = packageLedgers.filter(l => l.member_session_package_id === id && l.appointment_id === sappt.id && l.entry_type === 'release').length;
+            if (resCount !== 1 || relCount !== 0) {
+                return createError('Ledger Inconsistent', 409, 'SESSION_PACKAGE_LEDGER_INCONSISTENT');
+            }
+        }
+        return createError('Has reservations', 409, 'PACKAGE_HAS_ACTIVE_RESERVATIONS');
     }
     
     pkg.stored_status = 'cancelled';
@@ -2271,13 +2280,31 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     
     const date = url.searchParams.get('date');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return createError('Validation Error', 422);
+    const dateParts = date.split('-');
+    const y = parseInt(dateParts[0], 10);
+    const m = parseInt(dateParts[1], 10);
+    const d = parseInt(dateParts[2], 10);
+    if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return createError('Validation Error', 422);
+    if ([4, 6, 9, 11].includes(m) && d > 30) return createError('Validation Error', 422);
+    if (m === 2) {
+      const isLeap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+      if (isLeap && d > 29) return createError('Validation Error', 422);
+      if (!isLeap && d > 28) return createError('Validation Error', 422);
+    }
 
     const derivedPkgs = memberSessionPackages
       .filter(p => p.member_id === memberId && p.stored_status === 'active')
       .map(getDerivedMsp);
 
     for (const dp of derivedPkgs) {
-       if (dp.reserved_sessions < 0) return createError('Ledger Inconsistent', 409, 'SESSION_PACKAGE_LEDGER_INCONSISTENT');
+       const scheduledAppts = mockAppointments.filter(a => a.member_session_package_id === dp.id && a.status === 'scheduled');
+       for (const sappt of scheduledAppts) {
+           const resCount = packageLedgers.filter(l => l.member_session_package_id === dp.id && l.appointment_id === sappt.id && l.entry_type === 'reserve').length;
+           const relCount = packageLedgers.filter(l => l.member_session_package_id === dp.id && l.appointment_id === sappt.id && l.entry_type === 'release').length;
+           if (resCount !== 1 || relCount !== 0) {
+               return createError('Ledger Inconsistent', 409, 'SESSION_PACKAGE_LEDGER_INCONSISTENT');
+           }
+       }
     }
 
     const pkgs = derivedPkgs
@@ -2323,10 +2350,37 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     if (method === 'POST' && !idStr) {
       const p = (typeof reqBody === 'object' && reqBody !== null ? reqBody : {}) as Record<string, unknown>;
       
+      const allowedKeys = scope === 'trainer' ? ['member_id', 'member_session_package_id', 'starts_at', 'ends_at'] : ['member_id', 'trainer_id', 'member_session_package_id', 'starts_at', 'ends_at'];
+      const pKeys = Object.keys(p);
+      if (pKeys.length !== allowedKeys.length || !allowedKeys.every(k => pKeys.includes(k))) return createError('Validation Error', 422);
+
       if (typeof p.member_session_package_id !== 'number' || !Number.isInteger(p.member_session_package_id) || p.member_session_package_id <= 0) return createError('Validation Error', 422);
       if (typeof p.member_id !== 'number' || !Number.isInteger(p.member_id) || p.member_id <= 0) return createError('Validation Error', 422);
-      if (typeof p.starts_at !== 'string') return createError('Validation Error', 422);
-      if (typeof p.ends_at !== 'string') return createError('Validation Error', 422);
+      
+      if (typeof p.starts_at !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(p.starts_at)) return createError('Validation Error', 422);
+      if (typeof p.ends_at !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(p.ends_at)) return createError('Validation Error', 422);
+
+      const validateDateTime = (dt: string) => {
+        const parts = dt.split(' ');
+        const dateParts = parts[0].split('-');
+        const timeParts = parts[1].split(':');
+        const y = parseInt(dateParts[0], 10);
+        const m = parseInt(dateParts[1], 10);
+        const d = parseInt(dateParts[2], 10);
+        const hr = parseInt(timeParts[0], 10);
+        const min = parseInt(timeParts[1], 10);
+        const sec = parseInt(timeParts[2], 10);
+        if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31 || hr < 0 || hr > 23 || min < 0 || min > 59 || sec < 0 || sec > 59) return false;
+        if ([4, 6, 9, 11].includes(m) && d > 30) return false;
+        if (m === 2) {
+          const isLeap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+          if (isLeap && d > 29) return false;
+          if (!isLeap && d > 28) return false;
+        }
+        return true;
+      };
+
+      if (!validateDateTime(p.starts_at) || !validateDateTime(p.ends_at)) return createError('Validation Error', 422);
 
       let trainerId: number;
       if (scope === 'trainer') {
@@ -2397,6 +2451,11 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         appt.status = 'scheduled';
       } else if (action === 'cancel') {
         if (scope === 'trainer') return createError('Not found', 404);
+
+        const p = typeof reqBody === 'object' && reqBody !== null ? reqBody as Record<string, unknown> : {};
+        if (typeof p.cancellation_reason !== 'string') return createError('Validation Error', 422);
+        const reason = p.cancellation_reason.trim();
+        if (reason.length === 0 || reason.length > 255) return createError('Validation Error', 422);
         
         if (appt.member_session_package_id) {
           const apptReserves = packageLedgers.filter(l => l.member_session_package_id === appt.member_session_package_id && l.appointment_id === appt.id && l.entry_type === 'reserve').length;
@@ -2408,9 +2467,6 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
         
         appt.status = 'cancelled';
         if (appt.member_session_package_id) {
-          const p = typeof reqBody === 'object' && reqBody !== null ? reqBody as Record<string, unknown> : {};
-          const reason = typeof p.cancellation_reason === 'string' ? p.cancellation_reason : 'appointment_cancelled';
-          
           packageLedgers.push({
               id: Date.now(),
               uuid: 'dev-release-' + Date.now(),

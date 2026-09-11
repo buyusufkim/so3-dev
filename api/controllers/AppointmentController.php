@@ -83,42 +83,54 @@ class AppointmentController {
             SELECT msp.id, msp.package_name_snapshot as package_name, msp.total_sessions, msp.valid_from, msp.valid_until, msp.created_at,
                    COALESCE(
                        (SELECT SUM(delta) FROM member_session_package_ledger WHERE member_session_package_id = msp.id), 0
-                   ) as used_delta,
-                   COALESCE(
-                       (SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = msp.id AND entry_type = 'reserve'), 0
-                   ) as reserve_count,
-                   COALESCE(
-                       (SELECT COUNT(*) FROM member_session_package_ledger WHERE member_session_package_id = msp.id AND entry_type = 'release'), 0
-                   ) as release_count
+                   ) as used_delta
             FROM member_session_packages msp
             WHERE msp.member_id = ?
               AND msp.status = 'active'
               AND msp.valid_from <= ?
               AND (msp.valid_until IS NULL OR msp.valid_until >= ?)
         ");
-        $stmt->bindValue(1, $memberId, PDO::PARAM_INT);
-        $stmt->bindValue(2, $dateStr, PDO::PARAM_STR);
-        $stmt->bindValue(3, $dateStr, PDO::PARAM_STR);
+        $stmt->bindValue(1, $memberId, \PDO::PARAM_INT);
+        $stmt->bindValue(2, $dateStr, \PDO::PARAM_STR);
+        $stmt->bindValue(3, $dateStr, \PDO::PARAM_STR);
         $stmt->execute();
-        $packages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $packages = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         $items = [];
         foreach ($packages as $pkg) {
             $remaining = (int)$pkg['total_sessions'] + (int)$pkg['used_delta'];
             if ($remaining > 0) {
-                $reserved = (int)$pkg['reserve_count'] - (int)$pkg['release_count'];
-                if ($reserved < 0) {
-                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                $pid = (int)$pkg['id'];
+                
+                $schStmt = $this->db->prepare("SELECT id FROM appointments WHERE member_session_package_id = ? AND status = 'scheduled'");
+                $schStmt->execute([$pid]);
+                $scheduledAppts = $schStmt->fetchAll(\PDO::FETCH_ASSOC);
+                
+                foreach ($scheduledAppts as $sappt) {
+                    $chkStmt = $this->db->prepare("
+                        SELECT 
+                            SUM(CASE WHEN entry_type = 'reserve' THEN 1 ELSE 0 END) as res_count,
+                            SUM(CASE WHEN entry_type = 'release' THEN 1 ELSE 0 END) as rel_count
+                        FROM member_session_package_ledger
+                        WHERE member_session_package_id = ? AND appointment_id = ?
+                    ");
+                    $chkStmt->execute([$pid, $sappt['id']]);
+                    $chk = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+                    if ((int)$chk['res_count'] !== 1 || (int)$chk['rel_count'] !== 0) {
+                        Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                    }
                 }
+
+                $reserved = count($scheduledAppts);
+
                 $items[] = [
-                    'id' => (int)$pkg['id'],
+                    'id' => $pid,
                     'package_name' => $pkg['package_name'],
                     'total_sessions' => (int)$pkg['total_sessions'],
                     'remaining_sessions' => $remaining,
                     'reserved_sessions' => $reserved,
                     'valid_from' => $pkg['valid_from'],
-                    'valid_until' => $pkg['valid_until'],
-                    'created_at' => $pkg['created_at']
+                    'valid_until' => $pkg['valid_until']
                 ];
             }
         }
