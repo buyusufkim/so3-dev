@@ -104,3 +104,14 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 - reset forces password change and invalidates existing session through backend auth_version
 - no delete/impersonation/public signup
 - backend remains security source-of-truth
+
+## F.18E Member Progress Measurements Read Model
+* member portal measurements self-only read
+* fixed max 100
+* active/non-deleted measurements only
+* raw body metrics only
+* no progress notes
+* no measurement notes
+* no admin metadata
+* no member mutations
+* presentation trends later frontend concern
