@@ -19,6 +19,15 @@ const controller = fs.readFileSync(controllerPath, 'utf8');
 const indexPath = path.join(process.cwd(), 'api/index.php');
 const index = fs.readFileSync(indexPath, 'utf8');
 
+const dbPath = path.join(process.cwd(), 'api/core/Database.php');
+if (fs.existsSync(dbPath)) {
+    const dbContent = fs.readFileSync(dbPath, 'utf8');
+    if (!/PDO::ATTR_EMULATE_PREPARES\s*=>\s*false/.test(dbContent)) {
+        fail('PDO::ATTR_EMULATE_PREPARES => false not found in api/core/Database.php');
+    }
+    pass('PDO native prepare invariant verified');
+}
+
 // Schema Checks
 const schema030 = fs.readFileSync(path.join(process.cwd(), 'database/migrations/030_create_members.sql'), 'utf8');
 const schema022 = fs.readFileSync(path.join(process.cwd(), 'database/migrations/022_create_trainers.sql'), 'utf8');
@@ -80,10 +89,29 @@ if (controller.match(/\(int\)\$ex\['repetitions'\]/)) fail('repetitions is caste
 pass('Repetitions string contract verified');
 
 // Ledger integrity
-if (!controller.includes('l.member_session_package_id = :pkgId')) fail('Ledger integrity missing package pairing');
+const getSessionPackagesStr = controller.substring(controller.indexOf('getSessionPackages'), controller.indexOf('getAppointments'));
+if (!getSessionPackagesStr.includes('l.member_session_package_id = a.member_session_package_id')) {
+    fail('Ledger integrity missing exact package pairing (l.member_session_package_id = a.member_session_package_id)');
+}
+const stmtIntegrityMatch = getSessionPackagesStr.match(/\$stmtCheckIntegrity\s*=\s*\$this->db->prepare\("([\s\S]*?)"\);/);
+if (stmtIntegrityMatch) {
+    const sql = stmtIntegrityMatch[1];
+    const matchPkg = sql.match(/:pkgId/g);
+    if (matchPkg && matchPkg.length > 1) {
+        fail('Ledger integrity statement repeats :pkgId placeholder');
+    }
+}
+if (!getSessionPackagesStr.includes('a.member_id')) fail('Ledger integrity query must select a.member_id');
+if (!getSessionPackagesStr.includes("idata['member_id']")) fail('Ledger integrity loop missing exact member_id compare');
+if (!getSessionPackagesStr.includes('SESSION_PACKAGE_LEDGER_INCONSISTENT')) fail('Ledger integrity loop missing SESSION_PACKAGE_LEDGER_INCONSISTENT');
 pass('Package scheduled ledger integrity exact pairing verified');
 
 // Guard
+const guardStr = controller.substring(controller.indexOf('private function guard'), controller.indexOf('public function getOverview'));
+const authIdx = guardStr.indexOf('MemberAuthMiddleware::handle()');
+const rejectIdx = guardStr.indexOf('rejectQueryParams()');
+if (authIdx === -1 || rejectIdx === -1) fail('Guard missing MemberAuthMiddleware or rejectQueryParams');
+if (authIdx > rejectIdx) fail('MemberAuthMiddleware must be called before rejectQueryParams');
 if (!controller.includes("if (!$account)")) fail('Guard account missing check not found');
 pass('Guard missing account fail-closed verified');
 

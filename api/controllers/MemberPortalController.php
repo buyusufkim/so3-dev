@@ -27,10 +27,11 @@ class MemberPortalController
 
     private function guard()
     {
-        $this->rejectQueryParams();
         MemberAuthMiddleware::handle();
         $this->memberId = $_SESSION['member_id'];
         $this->accountId = $_SESSION['member_account_id'];
+
+        $this->rejectQueryParams();
 
         $stmt = $this->db->prepare("SELECT must_change_password FROM member_accounts WHERE id = :id");
         $stmt->execute([':id' => $this->accountId]);
@@ -144,15 +145,18 @@ class MemberPortalController
             $reservedSessions = (int)$stmtReserved->fetchColumn();
 
             $stmtCheckIntegrity = $this->db->prepare("
-                SELECT a.id, 
-                       (SELECT COUNT(*) FROM member_session_package_ledger l WHERE l.appointment_id = a.id AND l.member_session_package_id = :pkgId AND l.entry_type = 'reserve') as reserve_cnt,
-                       (SELECT COUNT(*) FROM member_session_package_ledger l WHERE l.appointment_id = a.id AND l.member_session_package_id = :pkgId AND l.entry_type = 'release') as release_cnt
+                SELECT a.id, a.member_id,
+                       (SELECT COUNT(*) FROM member_session_package_ledger l WHERE l.appointment_id = a.id AND l.member_session_package_id = a.member_session_package_id AND l.entry_type = 'reserve') as reserve_cnt,
+                       (SELECT COUNT(*) FROM member_session_package_ledger l WHERE l.appointment_id = a.id AND l.member_session_package_id = a.member_session_package_id AND l.entry_type = 'release') as release_cnt
                 FROM appointments a
                 WHERE a.member_session_package_id = :pkgId AND a.status = 'scheduled'
             ");
             $stmtCheckIntegrity->execute([':pkgId' => $pkgId]);
             $integrityData = $stmtCheckIntegrity->fetchAll(PDO::FETCH_ASSOC);
             foreach ($integrityData as $idata) {
+                if ((int)$idata['member_id'] !== (int)$this->memberId) {
+                    Response::error('Paket defteri tutarsız.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
                 if ($idata['reserve_cnt'] != 1 || $idata['release_cnt'] != 0) {
                     Response::error('Paket defteri tutarsız.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
                 }
