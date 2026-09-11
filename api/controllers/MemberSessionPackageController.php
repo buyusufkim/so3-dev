@@ -280,7 +280,14 @@ class MemberSessionPackageController
             if ($e->getCode() === 404) {
                 Response::error($e->getMessage(), 'NOT_FOUND', 404);
             } elseif ($e->getCode() === 409) {
-                Response::error($e->getMessage(), $e->getMessage() === 'PACKAGE_HAS_ACTIVE_RESERVATIONS' ? 'PACKAGE_HAS_ACTIVE_RESERVATIONS' : 'CONFLICT', 409);
+                $msg = $e->getMessage();
+                if ($msg === 'PACKAGE_HAS_ACTIVE_RESERVATIONS') {
+                    Response::error('Package has active reservations', 'PACKAGE_HAS_ACTIVE_RESERVATIONS', 409);
+                } elseif ($msg === 'SESSION_PACKAGE_LEDGER_INCONSISTENT') {
+                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                } else {
+                    Response::error($msg, 'CONFLICT', 409);
+                }
             } else {
                 Response::error('An unexpected error occurred', 'SERVER_ERROR', 500);
             }

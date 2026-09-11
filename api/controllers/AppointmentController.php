@@ -130,7 +130,8 @@ class AppointmentController {
                     'remaining_sessions' => $remaining,
                     'reserved_sessions' => $reserved,
                     'valid_from' => $pkg['valid_from'],
-                    'valid_until' => $pkg['valid_until']
+                    'valid_until' => $pkg['valid_until'],
+                    'created_at' => $pkg['created_at']
                 ];
             }
         }

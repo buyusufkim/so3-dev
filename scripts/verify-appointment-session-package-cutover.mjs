@@ -26,6 +26,15 @@ check(fixturesStr.includes('validateDateTime('), 'DEV create malformed DATETIME 
 check(fixturesStr.includes('cancellation_reason !== \'string\''), 'DEV cancel missing reason sentetik kabul etmiyor');
 check(!controllerStr.includes("handleCreate(['member_id', 'trainer_id', 'starts_at', 'ends_at']"), 'package-less backend create yeniden AÇILMADI');
 
+
+// F.17 Final Repair Checks
+check(controllerStr.includes("'created_at' => $pkg['created_at']"), "Options internal item includes created_at");
+check(controllerStr.includes("unset($item['created_at']);"), "Options internal created_at is unset before response");
+const usortCount = (controllerStr.match(/usort\(/g) || []).length;
+check(usortCount === 1, "Options uses exactly one usort");
+check(packageControllerStr.includes("Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409)"), "Package cancel catch block exactly maps SESSION_PACKAGE_LEDGER_INCONSISTENT");
+check(!packageControllerStr.includes("? 'PACKAGE_HAS_ACTIVE_RESERVATIONS' : 'CONFLICT'"), "Package cancel catch block doesn't use the ternary error mask");
+
 console.log("--- Semantic Fixture Self-Test ---");
 
 // We can just verify the DEV fixtures logic with a mock state
