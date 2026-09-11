@@ -40,7 +40,8 @@
     "verify:appointment-session-package-ledger": "node scripts/verify-appointment-session-package-ledger.mjs",
     "verify:appointment-session-package-cutover": "node scripts/verify-appointment-session-package-cutover.mjs",
     "verify:member-portal-auth-foundation": "node scripts/verify-member-portal-auth-foundation.mjs",
-    "verify:member-portal-read-model": "node scripts/verify-member-portal-read-model.mjs"
+    "verify:member-portal-read-model": "node scripts/verify-member-portal-read-model.mjs",
+    "verify:member-portal-frontend": "node scripts/verify-member-portal-frontend.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

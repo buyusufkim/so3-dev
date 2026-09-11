@@ -39,6 +39,14 @@ const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/Tra
 const ReceptionDashboard = lazy(() => import("../admin/pages/reception/ReceptionDashboard").then(m => ({ default: m.ReceptionDashboard })));
 const AppointmentListPage = lazy(() => import("../admin/pages/appointments/AppointmentListPage").then(m => ({ default: m.AppointmentListPage })));
 
+import { MemberSuspense } from '../member/components/MemberSuspense';
+import { MemberAuthProvider } from '../member/auth/MemberAuthContext';
+
+const MemberLayout = lazy(() => import("../member/layouts/MemberLayout").then(m => ({ default: m.MemberLayout })));
+const MemberLoginPage = lazy(() => import("../member/pages/MemberLoginPage").then(m => ({ default: m.MemberLoginPage })));
+const MemberChangePasswordPage = lazy(() => import("../member/pages/MemberChangePasswordPage").then(m => ({ default: m.MemberChangePasswordPage })));
+const MemberDashboardPage = lazy(() => import("../member/pages/MemberDashboardPage").then(m => ({ default: m.MemberDashboardPage })));
+
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
     {children}
@@ -91,6 +99,31 @@ const router = createBrowserRouter([
         element: <NotFound />,
       },
     ],
+  },
+  {
+    path: "/uye",
+    element: (
+      <MemberAuthProvider>
+        <MemberSuspense>
+          <MemberLayout />
+        </MemberSuspense>
+      </MemberAuthProvider>
+    ),
+    errorElement: <RouteErrorPage />,
+    children: [
+      {
+        index: true,
+        element: <MemberSuspense><MemberDashboardPage /></MemberSuspense>,
+      },
+      {
+        path: "giris",
+        element: <MemberSuspense><MemberLoginPage /></MemberSuspense>,
+      },
+      {
+        path: "sifre-degistir",
+        element: <MemberSuspense><MemberChangePasswordPage /></MemberSuspense>,
+      }
+    ]
   },
   {
     path: "/admin",

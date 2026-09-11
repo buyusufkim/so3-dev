@@ -1,0 +1,151 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+let currentStep = '';
+let hasErrors = false;
+
+function step(name) {
+  currentStep = name;
+}
+
+function check(condition, message) {
+  if (!condition) {
+    console.error(`❌ [${currentStep}] ${message}`);
+    hasErrors = true;
+  }
+}
+
+try {
+  // 1. Structure
+  step('Directory Structure');
+  const memberDir = path.join(ROOT_DIR, 'src', 'member');
+  check(fs.existsSync(memberDir), 'src/member directory missing');
+  
+  const apiClientPath = path.join(memberDir, 'api', 'client.ts');
+  check(fs.existsSync(apiClientPath), 'src/member/api/client.ts missing');
+  
+  // 2. Member API Client Isolation
+  step('Member API Client Isolation');
+  const apiClientCode = fs.readFileSync(apiClientPath, 'utf-8');
+  check(!apiClientCode.includes('src/admin/api/client'), 'Member client must not import admin client');
+  check(!apiClientCode.includes('adminDevFallback'), 'Member client must not import adminDevFallback');
+  check(apiClientCode.includes('/api/member-auth/csrf'), 'Member CSRF endpoint not found in client');
+  check(apiClientCode.includes('so3_member_auth_expired'), 'Member client must use so3_member_auth_expired event');
+  check(!apiClientCode.includes('so3_auth_expired'), 'Member client must not use admin auth expired event');
+  
+  check(apiClientCode.includes('/api/member-auth/login'), 'Login endpoint missing');
+  check(apiClientCode.includes('/api/member-auth/me'), 'Me endpoint missing');
+  check(apiClientCode.includes('/api/member-auth/logout'), 'Logout endpoint missing');
+  check(apiClientCode.includes('/api/member-auth/change-password'), 'Change password endpoint missing');
+  
+  check(apiClientCode.includes('/api/member/overview'), 'Overview read endpoint missing');
+  check(apiClientCode.includes('/api/member/session-packages'), 'Packages read endpoint missing');
+  check(apiClientCode.includes('/api/member/appointments'), 'Appointments read endpoint missing');
+  check(apiClientCode.includes('/api/member/training-program'), 'Training program read endpoint missing');
+  
+  check(!apiClientCode.includes('member_id='), 'No client member ID query params allowed');
+  
+  // 3. Response Validation
+  step('Strict Response Validators');
+  const validatorsPath = path.join(memberDir, 'api', 'validators.ts');
+  check(fs.existsSync(validatorsPath), 'validators.ts missing');
+  const validatorsCode = fs.readFileSync(validatorsPath, 'utf-8');
+  
+  check(!validatorsCode.includes('as any') || (validatorsCode.match(/as any/g) || []).length <= 1, 'Limit "as any" usage');
+  check(!validatorsCode.includes('@ts-ignore'), 'No @ts-ignore allowed');
+  check(!validatorsCode.includes('unknown as'), 'No "unknown as" casting allowed');
+  check(validatorsCode.includes('validateMemberAuthIdentity'), 'Auth identity validator missing');
+  check(validatorsCode.includes('validateMemberOverview'), 'Overview validator missing');
+  check(validatorsCode.includes('validateSessionPackages'), 'Packages validator missing');
+  check(validatorsCode.includes('validateAppointments'), 'Appointments validator missing');
+  check(validatorsCode.includes('validateTrainingPrograms'), 'Training program validator missing');
+  check(!validatorsCode.includes('parseInt(ex.repetitions'), 'Repetitions must remain string');
+  check(validatorsCode.includes('typeof ex.repetitions === \'string\''), 'Repetitions must be string validated');
+
+  // 4. Routes
+  step('Route Isolation');
+  const routesPath = path.join(ROOT_DIR, 'src', 'routes', 'index.tsx');
+  const routesCode = fs.readFileSync(routesPath, 'utf-8');
+  check(routesCode.includes('path: "/uye"'), '/uye route missing');
+  check(routesCode.includes('MemberAuthProvider'), 'MemberAuthProvider missing in routes');
+  check(routesCode.includes('MemberLayout'), 'MemberLayout missing in routes');
+  check(routesCode.includes('MemberLoginPage'), 'MemberLoginPage missing in routes');
+  check(routesCode.includes('MemberChangePasswordPage'), 'MemberChangePasswordPage missing in routes');
+  check(routesCode.includes('MemberDashboardPage'), 'MemberDashboardPage missing in routes');
+  
+  const adminBlock = routesCode.indexOf('path: "/admin"');
+  const uyeBlock = routesCode.indexOf('path: "/uye"');
+  check(uyeBlock < adminBlock || uyeBlock > adminBlock, 'Member routes must be peer to Admin routes, not under them');
+  
+  // 5. Layout & Auth Provider
+  step('Layout and Context');
+  const layoutPath = path.join(memberDir, 'layouts', 'MemberLayout.tsx');
+  const layoutCode = fs.readFileSync(layoutPath, 'utf-8');
+  check(layoutCode.includes('noindex,nofollow'), 'Layout must set noindex,nofollow');
+  check(layoutCode.includes('useMemberAuth'), 'Layout must use member auth');
+  check(!layoutCode.includes('admin'), 'Layout must not use admin internals');
+  
+  const authCtxPath = path.join(memberDir, 'auth', 'MemberAuthContext.tsx');
+  const authCtxCode = fs.readFileSync(authCtxPath, 'utf-8');
+  check(authCtxCode.includes('memberApiClient.me'), 'Provider must boot from /me');
+  check(authCtxCode.includes('so3_member_auth_expired'), 'Provider must listen to member auth expired event');
+  
+  // 6. Login
+  step('Login Semantics');
+  const loginPath = path.join(memberDir, 'pages', 'MemberLoginPage.tsx');
+  const loginCode = fs.readFileSync(loginPath, 'utf-8');
+  check(loginCode.includes('login(username'), 'Must call login client');
+  check(!loginCode.includes('Kayıt Ol') && !loginCode.includes('Hesap Oluştur'), 'No public signup allowed');
+  check(!loginCode.includes('Şifremi Unuttum'), 'No forgot password flow allowed');
+  
+  // 7. Password Change
+  step('Password Change Semantics');
+  const pwPath = path.join(memberDir, 'pages', 'MemberChangePasswordPage.tsx');
+  const pwCode = fs.readFileSync(pwPath, 'utf-8');
+  check(pwCode.includes('changePassword(currentPassword, newPassword)'), 'Must call changePassword client');
+  check(pwCode.includes('refreshIdentity'), 'Must refresh identity after change');
+  
+  // 8. Dashboard
+  step('Dashboard Constraints');
+  const dashboardPath = path.join(memberDir, 'pages', 'MemberDashboardPage.tsx');
+  const dashboardCode = fs.readFileSync(dashboardPath, 'utf-8');
+  check(dashboardCode.includes('AbortController'), 'Must use AbortController');
+  check(dashboardCode.includes('Promise.all'), 'Must load endpoints concurrently');
+  check(dashboardCode.includes('PASSWORD_CHANGE_REQUIRED'), 'Must handle PASSWORD_CHANGE_REQUIRED error');
+  check(!dashboardCode.includes('POST') && !dashboardCode.includes('PATCH'), 'No dashboard mutations allowed');
+  check(dashboardCode.includes('membership.status'), 'Membership status check missing');
+  check(dashboardCode.includes('remaining_sessions'), 'Packages check missing');
+  
+  // 9. Storage Leaks
+  step('Storage Leak Prevention');
+  const scanPaths = [apiClientPath, authCtxPath, loginPath, pwPath, dashboardPath];
+  for (const p of scanPaths) {
+    if (fs.existsSync(p)) {
+      const code = fs.readFileSync(p, 'utf-8');
+      check(!code.includes('localStorage.setItem(\'token'), 'No localStorage tokens allowed');
+      check(!code.includes('sessionStorage.setItem'), 'No sessionStorage tokens allowed');
+    }
+  }
+
+  // 10. Existing Verifiers & Artifacts
+  step('Existing Setup Verification');
+  check(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'verify-member-portal-auth-foundation.mjs')), 'F.18A verifier missing');
+  check(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'verify-member-portal-read-model.mjs')), 'F.18B verifier missing');
+  
+  const files = fs.readdirSync(ROOT_DIR);
+  check(!files.includes('patch.mjs'), 'Temp artifacts not allowed');
+  
+  if (hasErrors) {
+    process.exit(1);
+  } else {
+    console.log('✅ Member Portal Frontend Shell verified.');
+  }
+} catch (e) {
+  console.error(e);
+  process.exit(1);
+}

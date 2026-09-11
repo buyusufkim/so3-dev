@@ -83,3 +83,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 - Portal appointments are read-only, separated into upcoming and recent using explicit business timezone calculation.
 - Only active training programs are exposed; program internal notes and member operational notes remain excluded from the safe projection.
 - Measurements and progress features are deferred to a separate future phase.
+
+## F.18C Member Portal Frontend Shell & Dashboard
+- Member frontend domain is completely isolated under `/uye` route realm and `src/member` source directory.
+- Admin API client and Member API client are separate implementations; they do not share CSRF caches or authentication state.
+- Authentication relies strictly on HTTP-only cookies and a central `/me` endpoint acting as the source of truth; no localStorage tokens are used.
+- Forced password change (`must_change_password`) is strictly enforced at the route level; bypassing to the dashboard is not permitted.
+- The member dashboard consumes the four F.18B read-only endpoints concurrently and integrates a Race guard (AbortController).
+- Appointment and training program mutations are intentionally excluded to maintain the read-only safety of the portal.
+- The `/uye` route tree automatically applies `noindex,nofollow` robots meta to protect member privacy and SEO integrity.
+- There is no DEV authentication fallback for the member portal; if the backend is unavailable, it gracefully handles the failure without producing synthetic sessions.
