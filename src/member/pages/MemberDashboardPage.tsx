@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { useMemberAuth } from '../auth/MemberAuthContext';
 import { memberApiClient, MemberApiError } from '../api/client';
 import { 
@@ -220,6 +220,23 @@ export function MemberDashboardPage() {
           )}
         </div>
       </div>
+
+      
+      {/* Measurements CTA */}
+      <Link 
+        to="/uye/gelisim" 
+        className="block bg-gradient-to-r from-[#121212] to-[#1a1a1a] border border-white/10 hover:border-white/20 transition-colors rounded-2xl p-6 group cursor-pointer"
+      >
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-medium text-white mb-1">Gelişimim</h2>
+            <p className="text-sm text-white/50">Ölçüm geçmişini ve değişimlerini görüntüle.</p>
+          </div>
+          <div className="text-white/40 group-hover:text-white transition-colors">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </div>
+      </Link>
 
       {/* Packages */}
       <div>

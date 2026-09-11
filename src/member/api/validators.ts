@@ -452,3 +452,81 @@ export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[]
   });
 }
 
+
+export type MemberMeasurement = {
+  id: number;
+  uuid: string;
+  measured_at: string;
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+  trainer: {
+    id: number;
+    uuid: string;
+    name: string;
+    role_title: string;
+  } | null;
+};
+
+export function validateMeasurements(data: unknown): MemberMeasurement[] {
+  if (!isRecord(data) || !Array.isArray(data.items)) {
+    throw new Error('Invalid measurements response format');
+  }
+
+  const items: MemberMeasurement[] = [];
+  for (const item of data.items) {
+    if (!isRecord(item)) throw new Error('Invalid measurement item');
+    
+    if (typeof item.id !== 'number' || item.id <= 0 || !Number.isInteger(item.id)) throw new Error('Invalid id');
+    if (typeof item.uuid !== 'string' || !item.uuid.trim()) throw new Error('Invalid uuid');
+    if (!isValidDateTime(item.measured_at)) throw new Error('Invalid measured_at');
+    
+    // Validate metrics
+    const metrics = ['weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm'] as const;
+    for (const metric of metrics) {
+      const val = item[metric];
+      if (val !== null && typeof val !== 'number') throw new Error(`Invalid metric ${metric}`);
+      if (typeof val === 'number') {
+        if (!Number.isFinite(val)) throw new Error(`Metric ${metric} must be finite`);
+        if (metric === 'body_fat_percent' && (val < 0 || val > 100)) throw new Error(`Metric ${metric} out of bounds`);
+        if (metric !== 'body_fat_percent' && (val <= 0 || val > 9999.99)) throw new Error(`Metric ${metric} out of bounds`);
+      }
+    }
+
+    let trainer = null;
+    if (item.trainer !== null) {
+      if (!isRecord(item.trainer)) throw new Error('Invalid trainer format');
+      if (typeof item.trainer.id !== 'number' || item.trainer.id <= 0 || !Number.isInteger(item.trainer.id)) throw new Error('Invalid trainer id');
+      if (typeof item.trainer.uuid !== 'string' || !item.trainer.uuid.trim()) throw new Error('Invalid trainer uuid');
+      if (typeof item.trainer.name !== 'string' || !item.trainer.name.trim()) throw new Error('Invalid trainer name');
+      if (typeof item.trainer.role_title !== 'string') throw new Error('Invalid trainer role_title');
+      
+      trainer = {
+        id: item.trainer.id,
+        uuid: item.trainer.uuid,
+        name: item.trainer.name,
+        role_title: item.trainer.role_title
+      };
+    }
+
+    items.push({
+      id: item.id,
+      uuid: item.uuid,
+      measured_at: item.measured_at,
+      weight_kg: typeof item.weight_kg === 'number' ? item.weight_kg : null,
+      body_fat_percent: typeof item.body_fat_percent === 'number' ? item.body_fat_percent : null,
+      chest_cm: typeof item.chest_cm === 'number' ? item.chest_cm : null,
+      waist_cm: typeof item.waist_cm === 'number' ? item.waist_cm : null,
+      hip_cm: typeof item.hip_cm === 'number' ? item.hip_cm : null,
+      arm_cm: typeof item.arm_cm === 'number' ? item.arm_cm : null,
+      thigh_cm: typeof item.thigh_cm === 'number' ? item.thigh_cm : null,
+      trainer
+    });
+  }
+  
+  return items;
+}

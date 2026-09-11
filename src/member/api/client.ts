@@ -11,7 +11,9 @@ import {
   validateTrainingPrograms,
   validateMemberLoginResponse,
   MemberLoginResponse,
-  isRecord
+  isRecord,
+  MemberMeasurement,
+  validateMeasurements
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -169,5 +171,9 @@ export const memberApiClient = {
   async getTrainingPrograms(signal?: AbortSignal): Promise<MemberTrainingProgram[]> {
     const data = await request('/api/member/training-program', { signal });
     return validateTrainingPrograms(data);
+  },
+  async getMeasurements(signal?: AbortSignal): Promise<MemberMeasurement[]> {
+    const data = await request('/api/member/measurements', { signal });
+    return validateMeasurements(data);
   }
 };

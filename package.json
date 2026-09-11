@@ -43,7 +43,8 @@
     "verify:member-portal-read-model": "node scripts/verify-member-portal-read-model.mjs",
     "verify:member-portal-frontend": "node scripts/verify-member-portal-frontend.mjs",
     "verify:member-account-provisioning-ui": "node scripts/verify-member-account-provisioning-ui.mjs",
-    "verify:member-portal-measurements-read-model": "node scripts/verify-member-portal-measurements-read-model.mjs"
+    "verify:member-portal-measurements-read-model": "node scripts/verify-member-portal-measurements-read-model.mjs",
+    "verify:member-progress-ui": "node scripts/verify-member-progress-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

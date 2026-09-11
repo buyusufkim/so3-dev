@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Outlet, Navigate, useNavigate } from 'react-router-dom';
+import { Outlet, Navigate, useNavigate, NavLink } from 'react-router-dom';
 import { useMemberAuth } from '../auth/MemberAuthContext';
 import { LogOut } from 'lucide-react';
 
@@ -64,8 +64,27 @@ export function MemberLayout() {
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#851C35] selection:text-white">
       <header className="border-b border-white/10 bg-[#121212] sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/brand/so3-logo.png" alt="SO3" className="h-6 w-auto object-contain" />
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <img src="/brand/so3-logo.png" alt="SO3" className="h-6 w-auto object-contain" />
+            </div>
+            {isAuthenticated && identity && !identity.account.must_change_password && (
+              <nav className="hidden sm:flex items-center gap-1">
+                <NavLink 
+                  to="/uye" 
+                  end
+                  className={({isActive}) => `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  Ana Sayfa
+                </NavLink>
+                <NavLink 
+                  to="/uye/gelisim" 
+                  className={({isActive}) => `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  Gelişimim
+                </NavLink>
+              </nav>
+            )}
           </div>
           
           {isAuthenticated && identity && (
@@ -84,6 +103,25 @@ export function MemberLayout() {
             </div>
           )}
         </div>
+        {isAuthenticated && identity && !identity.account.must_change_password && (
+          <div className="sm:hidden border-t border-white/5 bg-[#0A0A0A]">
+            <nav className="max-w-5xl mx-auto px-4 flex items-center gap-4 py-2 overflow-x-auto">
+              <NavLink 
+                to="/uye" 
+                end
+                className={({isActive}) => `whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
+              >
+                Ana Sayfa
+              </NavLink>
+              <NavLink 
+                to="/uye/gelisim" 
+                className={({isActive}) => `whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
+              >
+                Gelişimim
+              </NavLink>
+            </nav>
+          </div>
+        )}
       </header>
       <main className="max-w-5xl mx-auto px-4 py-8">
         <Outlet />

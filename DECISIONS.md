@@ -115,3 +115,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no admin metadata
 * no member mutations
 * presentation trends later frontend concern
+
+## F.18F Member Progress UI
+* member progress UI route `/uye/gelisim`
+* measurement data read-only from F.18E
+* no progress notes / measurement notes
+* no health interpretation
+* presentation deltas are frontend-only and neutral
+* no chart dependency; lightweight SVG
+* history max 100 inherited from backend
+* dashboard links to progress but does not fetch measurement data

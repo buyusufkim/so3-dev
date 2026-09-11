@@ -45,7 +45,9 @@ import { MemberAuthProvider } from '../member/auth/MemberAuthContext';
 const MemberLayout = lazy(() => import("../member/layouts/MemberLayout").then(m => ({ default: m.MemberLayout })));
 const MemberLoginPage = lazy(() => import("../member/pages/MemberLoginPage").then(m => ({ default: m.MemberLoginPage })));
 const MemberChangePasswordPage = lazy(() => import("../member/pages/MemberChangePasswordPage").then(m => ({ default: m.MemberChangePasswordPage })));
+
 const MemberDashboardPage = lazy(() => import("../member/pages/MemberDashboardPage").then(m => ({ default: m.MemberDashboardPage })));
+const MemberProgressPage = lazy(() => import("../member/pages/MemberProgressPage").then(m => ({ default: m.MemberProgressPage })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -111,10 +113,16 @@ const router = createBrowserRouter([
     ),
     errorElement: <RouteErrorPage />,
     children: [
+      
       {
         index: true,
         element: <MemberSuspense><MemberDashboardPage /></MemberSuspense>,
       },
+      {
+        path: "gelisim",
+        element: <MemberSuspense><MemberProgressPage /></MemberSuspense>,
+      },
+
       {
         path: "giris",
         element: <MemberSuspense><MemberLoginPage /></MemberSuspense>,
