@@ -17,11 +17,12 @@ function step(name) {
 try {
   step('Repository Hygiene');
   const files = fs.readdirSync(ROOT_DIR);
-  const badFiles = files.filter(f => 
-    /^patch.*\\.(m?js)$/.test(f) || 
-    /^tmp.*\\.(m?js)$/.test(f) || 
+    const badFiles = files.filter(f => 
+    /^patch.*\.(m?js|php)$/.test(f) || 
+    /^tmp.*\.(m?js|php)$/.test(f) || 
     f.endsWith('.tmp') || 
-    f.endsWith('.fixed')
+    f.endsWith('.fixed') ||
+    f === 'add-get-measurements.php'
   );
   check(badFiles.length === 0, 'No temporary patch or artifact files allowed in repository root');
 
