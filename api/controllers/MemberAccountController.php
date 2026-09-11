@@ -158,12 +158,15 @@ class MemberAccountController
             ]);
             $accountId = $this->db->lastInsertId();
 
-            AuditLogger::log('member_account.create', $adminId, 'member_account', $accountId, [
-                'member_id' => $memberId,
-                'username' => $username
-            ]);
-
             $this->db->commit();
+            try {
+                AuditLogger::log('member_account.create', $adminId, 'member_account', $accountId, [
+                    'member_id' => $memberId,
+                    'username' => $username
+                ]);
+            } catch (\Throwable $auditError) {
+                error_log('AuditLog error: ' . $auditError->getMessage());
+            }
             
             Response::json(['success' => true]);
 
@@ -211,12 +214,12 @@ class MemberAccountController
                 throw new \Exception('NOT_FOUND', 404);
             }
 
+            $didChange = false;
             if ($account['status'] !== $status) {
                 $newVersion = (int)$account['auth_version'];
                 if ($status === 'inactive') {
                     $newVersion++;
                 }
-
                 $upd = $this->db->prepare("
                     UPDATE member_accounts 
                     SET status = :status, auth_version = :version, updated_by = :admin_id 
@@ -228,16 +231,22 @@ class MemberAccountController
                     ':admin_id' => $adminId,
                     ':id' => $accountId
                 ]);
-
-                AuditLogger::log('member_account.status_update', $adminId, 'member_account', $accountId, [
-                    'member_id' => $account['member_id'],
-                    'username' => $account['username'],
-                    'new_status' => $status,
-                    'auth_version' => $newVersion
-                ]);
+                $didChange = true;
             }
-
             $this->db->commit();
+
+            if ($didChange) {
+                try {
+                    AuditLogger::log('member_account.status_update', $adminId, 'member_account', $accountId, [
+                        'member_id' => $account['member_id'],
+                        'username' => $account['username'],
+                        'new_status' => $status,
+                        'auth_version' => $newVersion
+                    ]);
+                } catch (\Throwable $auditError) {
+                    error_log('AuditLog error: ' . $auditError->getMessage());
+                }
+            }
             Response::json(['success' => true]);
 
         } catch (\Throwable $e) {
@@ -297,13 +306,16 @@ class MemberAccountController
                 ':id' => $accountId
             ]);
 
-            AuditLogger::log('member_account.password_reset', $adminId, 'member_account', $accountId, [
-                'member_id' => $account['member_id'],
-                'username' => $account['username'],
-                'auth_version' => $newVersion
-            ]);
-
             $this->db->commit();
+            try {
+                AuditLogger::log('member_account.password_reset', $adminId, 'member_account', $accountId, [
+                    'member_id' => $account['member_id'],
+                    'username' => $account['username'],
+                    'auth_version' => $newVersion
+                ]);
+            } catch (\Throwable $auditError) {
+                error_log('AuditLog error: ' . $auditError->getMessage());
+            }
             Response::json(['success' => true]);
 
         } catch (\Throwable $e) {

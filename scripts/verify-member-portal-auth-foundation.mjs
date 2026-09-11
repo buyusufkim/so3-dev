@@ -135,6 +135,36 @@ if (accountController.includes('password_hash') && !accountController.includes('
     fail('password_hash is not fail-closed guarded in account controller');
 }
 
+
+const accCreateCommit = accountController.indexOf('$this->db->commit();', accCreateIndex);
+const accCreateAudit = accountController.indexOf('AuditLogger::log', accCreateIndex);
+if (accCreateAudit !== -1 && accCreateCommit !== -1 && accCreateAudit < accCreateCommit) {
+    fail('createAccount: AuditLogger called before commit()');
+}
+if (!accountController.substring(accCreateCommit, accountController.indexOf('Response::json', accCreateCommit)).includes('catch (\\Throwable $auditError)')) {
+    fail('createAccount: audit is not isolated with try/catch');
+}
+
+const accStatusIndex = accountController.indexOf('public function updateStatus');
+const accStatusCommit = accountController.indexOf('$this->db->commit();', accStatusIndex);
+const accStatusAudit = accountController.indexOf('AuditLogger::log', accStatusIndex);
+if (accStatusAudit !== -1 && accStatusCommit !== -1 && accStatusAudit < accStatusCommit) {
+    fail('updateStatus: AuditLogger called before commit()');
+}
+if (!accountController.substring(accStatusCommit, accountController.indexOf('Response::json', accStatusCommit)).includes('catch (\\Throwable $auditError)')) {
+    fail('updateStatus: audit is not isolated with try/catch');
+}
+
+const accResetIndex = accountController.indexOf('public function resetPassword');
+const accResetCommit = accountController.indexOf('$this->db->commit();', accResetIndex);
+const accResetAudit = accountController.indexOf('AuditLogger::log', accResetIndex);
+if (accResetAudit !== -1 && accResetCommit !== -1 && accResetAudit < accResetCommit) {
+    fail('resetPassword: AuditLogger called before commit()');
+}
+if (!accountController.substring(accResetCommit, accountController.indexOf('Response::json', accResetCommit)).includes('catch (\\Throwable $auditError)')) {
+    fail('resetPassword: audit is not isolated with try/catch');
+}
+
 checkFile('api/index.php', [
     '/api/member-auth/login',
     '/api/member-auth/me',
