@@ -27,5 +27,10 @@ use Core\Session;
 ErrorHandler::register();
 Config::load();
 if (!defined('SO3_SKIP_SESSION') || !SO3_SKIP_SESSION) {
-    Session::start();
+    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if (strpos($requestUri, '/api/member-auth/') === 0 || strpos($requestUri, '/api/member/') === 0) {
+        Session::start('member');
+    } else {
+        Session::start('admin');
+    }
 }

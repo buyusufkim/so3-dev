@@ -1002,6 +1002,64 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         }
     }
 
+
+    // Member Auth
+    if ($requestUri === '/api/member-auth/csrf' && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberAuthController.php';
+        (new \Controllers\MemberAuthController())->getCsrf();
+        $matched = true;
+    }
+    if ($requestUri === '/api/member-auth/login' && $method === 'POST') {
+        require_once __DIR__ . '/controllers/MemberAuthController.php';
+        (new \Controllers\MemberAuthController())->login();
+        $matched = true;
+    }
+    if ($requestUri === '/api/member-auth/me' && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberAuthController.php';
+        (new \Controllers\MemberAuthController())->me();
+        $matched = true;
+    }
+    if ($requestUri === '/api/member-auth/logout' && $method === 'POST') {
+        require_once __DIR__ . '/controllers/MemberAuthController.php';
+        (new \Controllers\MemberAuthController())->logout();
+        $matched = true;
+    }
+    if ($requestUri === '/api/member-auth/change-password' && $method === 'POST') {
+        require_once __DIR__ . '/controllers/MemberAuthController.php';
+        (new \Controllers\MemberAuthController())->changePassword();
+        $matched = true;
+    }
+
+    // Member Account Admin API
+    if (preg_match('#^/api/admin/members/([1-9]\d*)/account$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        require_once __DIR__ . '/controllers/MemberAccountController.php';
+        $controller = new \Controllers\MemberAccountController();
+        if ($method === 'GET') {
+            $controller->getAccount((int)$matches[1]);
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->createAccount((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/admin/member-accounts/([1-9]\d*)/status$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/MemberAccountController.php';
+            (new \Controllers\MemberAccountController())->updateStatus((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/admin/member-accounts/([1-9]\d*)/reset-password$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'POST') {
+            require_once __DIR__ . '/controllers/MemberAccountController.php';
+            (new \Controllers\MemberAccountController())->resetPassword((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
 if (!$matched) {
     Response::error('Not Found', 'NOT_FOUND', 404);
 }

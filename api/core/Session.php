@@ -8,7 +8,7 @@ class Session
     private const ABSOLUTE_TIMEOUT = 28800; // 8 hours
     private const IDLE_TIMEOUT = 1800; // 30 minutes
 
-    public static function start()
+    public static function start($realm = 'admin')
     {
         if (session_status() === PHP_SESSION_NONE) {
             $isProduction = Config::get('app_env') === 'production';
@@ -25,7 +25,8 @@ class Session
                 'samesite' => $isProduction ? 'Strict' : 'Lax'
             ]);
 
-            session_name(self::SESSION_NAME);
+            $cookieName = $realm === 'member' ? 'so3_member_session' : self::SESSION_NAME;
+            session_name($cookieName);
             session_start();
         }
 
