@@ -1,3 +1,17 @@
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isValidDate(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function isValidDateTime(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value);
+}
+
 export type MemberAuthIdentity = {
   account: {
     id: number;
@@ -16,41 +30,88 @@ export type MemberAuthIdentity = {
 };
 
 export function validateMemberAuthIdentity(data: unknown): MemberAuthIdentity {
-  if (!data || typeof data !== 'object') throw new Error('Invalid identity');
-  const d = data as Record<string, unknown>;
+  if (!isRecord(data)) throw new Error('Invalid identity');
+  if (!isRecord(data.account)) throw new Error('Invalid account');
+  if (!isRecord(data.member)) throw new Error('Invalid member');
 
-  if (!d.account || typeof d.account !== 'object') throw new Error('Invalid account');
-  const a = d.account as Record<string, unknown>;
+  const a = data.account;
+  const m = data.member;
   
-  if (typeof a.id !== 'number' || a.id <= 0) throw new Error('Invalid account id');
-  if (typeof a.uuid !== 'string' || !a.uuid) throw new Error('Invalid account uuid');
-  if (typeof a.username !== 'string' || !a.username) throw new Error('Invalid username');
+  if (typeof a.id !== 'number' || !Number.isInteger(a.id) || a.id <= 0) throw new Error('Invalid account id');
+  if (typeof a.uuid !== 'string' || !a.uuid.trim()) throw new Error('Invalid account uuid');
+  if (typeof a.username !== 'string' || !a.username.trim()) throw new Error('Invalid username');
   if (a.status !== 'active') throw new Error('Invalid account status');
   if (typeof a.must_change_password !== 'boolean') throw new Error('Invalid must_change_password');
 
-  if (!d.member || typeof d.member !== 'object') throw new Error('Invalid member');
-  const m = d.member as Record<string, unknown>;
-
-  if (typeof m.id !== 'number' || m.id <= 0) throw new Error('Invalid member id');
-  if (typeof m.uuid !== 'string' || !m.uuid) throw new Error('Invalid member uuid');
-  if (typeof m.first_name !== 'string' || !m.first_name) throw new Error('Invalid member first_name');
-  if (typeof m.last_name !== 'string' || !m.last_name) throw new Error('Invalid member last_name');
+  if (typeof m.id !== 'number' || !Number.isInteger(m.id) || m.id <= 0) throw new Error('Invalid member id');
+  if (typeof m.uuid !== 'string' || !m.uuid.trim()) throw new Error('Invalid member uuid');
+  if (typeof m.first_name !== 'string' || !m.first_name.trim()) throw new Error('Invalid member first_name');
+  if (typeof m.last_name !== 'string' || !m.last_name.trim()) throw new Error('Invalid member last_name');
   if (m.status !== 'active') throw new Error('Invalid member status');
 
   return {
     account: {
       id: a.id,
-      uuid: a.uuid,
-      username: a.username,
+      uuid: a.uuid.trim(),
+      username: a.username.trim(),
       status: 'active',
       must_change_password: a.must_change_password
     },
     member: {
       id: m.id,
-      uuid: m.uuid,
-      first_name: m.first_name,
-      last_name: m.last_name,
+      uuid: m.uuid.trim(),
+      first_name: m.first_name.trim(),
+      last_name: m.last_name.trim(),
       status: 'active'
+    }
+  };
+}
+
+export type MemberLoginResponse = {
+  account: {
+    id: number;
+    uuid: string;
+    username: string;
+    must_change_password: boolean;
+  };
+  member: {
+    id: number;
+    uuid: string;
+    first_name: string;
+    last_name: string;
+  };
+};
+
+export function validateMemberLoginResponse(data: unknown): MemberLoginResponse {
+  if (!isRecord(data)) throw new Error('Invalid login response');
+  if (!isRecord(data.account)) throw new Error('Invalid account');
+  if (!isRecord(data.member)) throw new Error('Invalid member');
+
+  const a = data.account;
+  const m = data.member;
+
+  if (typeof a.id !== 'number' || !Number.isInteger(a.id) || a.id <= 0) throw new Error('Invalid account id');
+  if (typeof a.uuid !== 'string' || !a.uuid.trim()) throw new Error('Invalid account uuid');
+  if (typeof a.username !== 'string' || !a.username.trim()) throw new Error('Invalid username');
+  if (typeof a.must_change_password !== 'boolean') throw new Error('Invalid must_change_password');
+
+  if (typeof m.id !== 'number' || !Number.isInteger(m.id) || m.id <= 0) throw new Error('Invalid member id');
+  if (typeof m.uuid !== 'string' || !m.uuid.trim()) throw new Error('Invalid member uuid');
+  if (typeof m.first_name !== 'string' || !m.first_name.trim()) throw new Error('Invalid member first_name');
+  if (typeof m.last_name !== 'string' || !m.last_name.trim()) throw new Error('Invalid member last_name');
+
+  return {
+    account: {
+      id: a.id,
+      uuid: a.uuid.trim(),
+      username: a.username.trim(),
+      must_change_password: a.must_change_password
+    },
+    member: {
+      id: m.id,
+      uuid: m.uuid.trim(),
+      first_name: m.first_name.trim(),
+      last_name: m.last_name.trim()
     }
   };
 }
@@ -61,11 +122,12 @@ export type MemberOverview = {
     uuid: string;
     first_name: string;
     last_name: string;
-    status: string;
+    phone: string;
+    email: string | null;
   };
   membership: {
-    membership_start_date: string | null;
-    membership_end_date: string | null;
+    start_date: string | null;
+    end_date: string | null;
     status: 'active' | 'upcoming' | 'expired' | 'not_set';
   };
   trainer: {
@@ -77,32 +139,56 @@ export type MemberOverview = {
 };
 
 export function validateMemberOverview(data: unknown): MemberOverview {
-  if (!data || typeof data !== 'object') throw new Error('Invalid overview');
-  const d = data as Record<string, unknown>;
+  if (!isRecord(data)) throw new Error('Invalid overview');
 
-  const m = d.member as Record<string, unknown>;
-  const ms = d.membership as Record<string, unknown>;
-  const t = d.trainer as Record<string, unknown> | null;
+  if (!isRecord(data.member)) throw new Error('Invalid member');
+  const m = data.member;
+  if (typeof m.id !== 'number' || !Number.isInteger(m.id) || m.id <= 0) throw new Error('Invalid member id');
+  if (typeof m.uuid !== 'string' || !m.uuid.trim()) throw new Error('Invalid member uuid');
+  if (typeof m.first_name !== 'string' || !m.first_name.trim()) throw new Error('Invalid member first_name');
+  if (typeof m.last_name !== 'string' || !m.last_name.trim()) throw new Error('Invalid member last_name');
+  if (typeof m.phone !== 'string' || !m.phone.trim()) throw new Error('Invalid member phone');
+  if (m.email !== null && typeof m.email !== 'string') throw new Error('Invalid member email');
+
+  if (!isRecord(data.membership)) throw new Error('Invalid membership');
+  const ms = data.membership;
+  if (ms.start_date !== null && !isValidDate(ms.start_date)) throw new Error('Invalid membership start_date');
+  if (ms.end_date !== null && !isValidDate(ms.end_date)) throw new Error('Invalid membership end_date');
+  if (ms.status !== 'active' && ms.status !== 'upcoming' && ms.status !== 'expired' && ms.status !== 'not_set') {
+    throw new Error('Invalid membership status');
+  }
+
+  let t = null;
+  if (data.trainer !== null) {
+    if (!isRecord(data.trainer)) throw new Error('Invalid trainer');
+    const tr = data.trainer;
+    if (typeof tr.id !== 'number' || !Number.isInteger(tr.id) || tr.id <= 0) throw new Error('Invalid trainer id');
+    if (typeof tr.uuid !== 'string' || !tr.uuid.trim()) throw new Error('Invalid trainer uuid');
+    if (typeof tr.name !== 'string' || !tr.name.trim()) throw new Error('Invalid trainer name');
+    if (typeof tr.role_title !== 'string') throw new Error('Invalid trainer role_title');
+    t = {
+      id: tr.id,
+      uuid: tr.uuid.trim(),
+      name: tr.name.trim(),
+      role_title: tr.role_title
+    };
+  }
 
   return {
     member: {
-      id: typeof m?.id === 'number' ? m.id : 0,
-      uuid: typeof m?.uuid === 'string' ? m.uuid : '',
-      first_name: typeof m?.first_name === 'string' ? m.first_name : '',
-      last_name: typeof m?.last_name === 'string' ? m.last_name : '',
-      status: typeof m?.status === 'string' ? m.status : ''
+      id: m.id,
+      uuid: m.uuid.trim(),
+      first_name: m.first_name.trim(),
+      last_name: m.last_name.trim(),
+      phone: m.phone.trim(),
+      email: m.email === null ? null : m.email.trim()
     },
     membership: {
-      membership_start_date: typeof ms?.membership_start_date === 'string' ? ms.membership_start_date : null,
-      membership_end_date: typeof ms?.membership_end_date === 'string' ? ms.membership_end_date : null,
-      status: ['active', 'upcoming', 'expired', 'not_set'].includes(ms?.status as string) ? (ms.status as any) : 'not_set'
+      start_date: ms.start_date,
+      end_date: ms.end_date,
+      status: ms.status
     },
-    trainer: t ? {
-      id: typeof t.id === 'number' ? t.id : 0,
-      uuid: typeof t.uuid === 'string' ? t.uuid : '',
-      name: typeof t.name === 'string' ? t.name : '',
-      role_title: typeof t.role_title === 'string' ? t.role_title : ''
-    } : null
+    trainer: t
   };
 }
 
@@ -115,25 +201,44 @@ export type MemberSessionPackage = {
   reserved_sessions: number;
   valid_from: string | null;
   valid_until: string | null;
+  stored_status: 'active' | 'cancelled';
   effective_status: 'active' | 'expired' | 'exhausted' | 'cancelled';
 };
 
 export function validateSessionPackages(data: unknown): MemberSessionPackage[] {
-  if (!data || typeof data !== 'object') throw new Error('Invalid packages');
-  const d = data as Record<string, unknown>;
-  if (!Array.isArray(d.items)) throw new Error('Invalid items array');
+  if (!isRecord(data)) throw new Error('Invalid packages');
+  if (!Array.isArray(data.items)) throw new Error('Invalid items array');
   
-  return d.items.map((i: any) => ({
-    id: typeof i.id === 'number' ? i.id : 0,
-    uuid: typeof i.uuid === 'string' ? i.uuid : '',
-    package_name: typeof i.package_name === 'string' ? i.package_name : '',
-    total_sessions: typeof i.total_sessions === 'number' ? i.total_sessions : 0,
-    remaining_sessions: typeof i.remaining_sessions === 'number' ? i.remaining_sessions : 0,
-    reserved_sessions: typeof i.reserved_sessions === 'number' ? i.reserved_sessions : 0,
-    valid_from: typeof i.valid_from === 'string' ? i.valid_from : null,
-    valid_until: typeof i.valid_until === 'string' ? i.valid_until : null,
-    effective_status: ['active', 'expired', 'exhausted', 'cancelled'].includes(i.effective_status) ? i.effective_status : 'cancelled'
-  }));
+  return data.items.map(i => {
+    if (!isRecord(i)) throw new Error('Invalid package item');
+    if (typeof i.id !== 'number' || !Number.isInteger(i.id) || i.id <= 0) throw new Error('Invalid package id');
+    if (typeof i.uuid !== 'string' || !i.uuid.trim()) throw new Error('Invalid package uuid');
+    if (typeof i.package_name !== 'string' || !i.package_name.trim()) throw new Error('Invalid package_name');
+    if (typeof i.total_sessions !== 'number' || !Number.isInteger(i.total_sessions) || i.total_sessions <= 0) throw new Error('Invalid total_sessions');
+    if (typeof i.remaining_sessions !== 'number' || !Number.isInteger(i.remaining_sessions)) throw new Error('Invalid remaining_sessions');
+    if (typeof i.reserved_sessions !== 'number' || !Number.isInteger(i.reserved_sessions) || i.reserved_sessions < 0) throw new Error('Invalid reserved_sessions');
+    
+    if (i.valid_from !== null && !isValidDate(i.valid_from)) throw new Error('Invalid valid_from');
+    if (i.valid_until !== null && !isValidDate(i.valid_until)) throw new Error('Invalid valid_until');
+    
+    if (i.stored_status !== 'active' && i.stored_status !== 'cancelled') throw new Error('Invalid stored_status');
+    if (i.effective_status !== 'active' && i.effective_status !== 'expired' && i.effective_status !== 'exhausted' && i.effective_status !== 'cancelled') {
+      throw new Error('Invalid effective_status');
+    }
+
+    return {
+      id: i.id,
+      uuid: i.uuid.trim(),
+      package_name: i.package_name.trim(),
+      total_sessions: i.total_sessions,
+      remaining_sessions: i.remaining_sessions,
+      reserved_sessions: i.reserved_sessions,
+      valid_from: i.valid_from,
+      valid_until: i.valid_until,
+      stored_status: i.stored_status,
+      effective_status: i.effective_status
+    };
+  });
 }
 
 export type MemberAppointment = {
@@ -161,31 +266,65 @@ export type MemberAppointmentsData = {
 };
 
 export function validateAppointments(data: unknown): MemberAppointmentsData {
-  if (!data || typeof data !== 'object') throw new Error('Invalid appointments');
-  const d = data as Record<string, unknown>;
+  if (!isRecord(data)) throw new Error('Invalid appointments');
   
-  const mapAppt = (i: any): MemberAppointment => ({
-    id: typeof i.id === 'number' ? i.id : 0,
-    uuid: typeof i.uuid === 'string' ? i.uuid : '',
-    starts_at: typeof i.starts_at === 'string' ? i.starts_at : '',
-    ends_at: typeof i.ends_at === 'string' ? i.ends_at : '',
-    status: ['scheduled', 'completed', 'cancelled', 'no_show'].includes(i.status) ? i.status : 'cancelled',
-    cancellation_reason: typeof i.cancellation_reason === 'string' ? i.cancellation_reason : null,
-    trainer: i.trainer ? {
-      id: typeof i.trainer.id === 'number' ? i.trainer.id : 0,
-      uuid: typeof i.trainer.uuid === 'string' ? i.trainer.uuid : '',
-      name: typeof i.trainer.name === 'string' ? i.trainer.name : '',
-      role_title: typeof i.trainer.role_title === 'string' ? i.trainer.role_title : ''
-    } : null,
-    session_package: i.session_package ? {
-      id: typeof i.session_package.id === 'number' ? i.session_package.id : 0,
-      package_name: typeof i.session_package.package_name === 'string' ? i.session_package.package_name : ''
-    } : null
-  });
+  if (!Array.isArray(data.upcoming)) throw new Error('Invalid upcoming appointments array');
+  if (!Array.isArray(data.recent)) throw new Error('Invalid recent appointments array');
+
+  const mapAppt = (i: unknown): MemberAppointment => {
+    if (!isRecord(i)) throw new Error('Invalid appointment item');
+    if (typeof i.id !== 'number' || !Number.isInteger(i.id) || i.id <= 0) throw new Error('Invalid appointment id');
+    if (typeof i.uuid !== 'string' || !i.uuid.trim()) throw new Error('Invalid appointment uuid');
+    if (!isValidDateTime(i.starts_at)) throw new Error('Invalid starts_at');
+    if (!isValidDateTime(i.ends_at)) throw new Error('Invalid ends_at');
+    
+    if (i.status !== 'scheduled' && i.status !== 'completed' && i.status !== 'cancelled' && i.status !== 'no_show') {
+      throw new Error('Invalid appointment status');
+    }
+    
+    if (i.cancellation_reason !== null && typeof i.cancellation_reason !== 'string') throw new Error('Invalid cancellation_reason');
+
+    let tr = null;
+    if (i.trainer !== null) {
+      if (!isRecord(i.trainer)) throw new Error('Invalid trainer');
+      if (typeof i.trainer.id !== 'number' || !Number.isInteger(i.trainer.id) || i.trainer.id <= 0) throw new Error('Invalid trainer id');
+      if (typeof i.trainer.uuid !== 'string' || !i.trainer.uuid.trim()) throw new Error('Invalid trainer uuid');
+      if (typeof i.trainer.name !== 'string' || !i.trainer.name.trim()) throw new Error('Invalid trainer name');
+      if (typeof i.trainer.role_title !== 'string') throw new Error('Invalid trainer role_title');
+      tr = {
+        id: i.trainer.id,
+        uuid: i.trainer.uuid.trim(),
+        name: i.trainer.name.trim(),
+        role_title: i.trainer.role_title
+      };
+    }
+
+    let sp = null;
+    if (i.session_package !== null) {
+      if (!isRecord(i.session_package)) throw new Error('Invalid session_package');
+      if (typeof i.session_package.id !== 'number' || !Number.isInteger(i.session_package.id) || i.session_package.id <= 0) throw new Error('Invalid session_package id');
+      if (typeof i.session_package.package_name !== 'string' || !i.session_package.package_name.trim()) throw new Error('Invalid session_package name');
+      sp = {
+        id: i.session_package.id,
+        package_name: i.session_package.package_name.trim()
+      };
+    }
+
+    return {
+      id: i.id,
+      uuid: i.uuid.trim(),
+      starts_at: i.starts_at,
+      ends_at: i.ends_at,
+      status: i.status,
+      cancellation_reason: i.cancellation_reason === null ? null : i.cancellation_reason.trim(),
+      trainer: tr,
+      session_package: sp
+    };
+  };
 
   return {
-    upcoming: Array.isArray(d.upcoming) ? d.upcoming.map(mapAppt) : [],
-    recent: Array.isArray(d.recent) ? d.recent.map(mapAppt) : []
+    upcoming: data.upcoming.map(mapAppt),
+    recent: data.recent.map(mapAppt)
   };
 }
 
@@ -216,31 +355,68 @@ export type MemberTrainingProgram = {
 };
 
 export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[] {
-  if (!data || typeof data !== 'object') throw new Error('Invalid training programs');
-  const d = data as Record<string, unknown>;
-  if (!Array.isArray(d.items)) throw new Error('Invalid items array');
+  if (!isRecord(data)) throw new Error('Invalid training programs');
+  if (!Array.isArray(data.items)) throw new Error('Invalid items array');
 
-  return d.items.map((i: any) => ({
-    id: typeof i.id === 'number' ? i.id : 0,
-    uuid: typeof i.uuid === 'string' ? i.uuid : '',
-    title: typeof i.title === 'string' ? i.title : '',
-    start_date: typeof i.start_date === 'string' ? i.start_date : null,
-    end_date: typeof i.end_date === 'string' ? i.end_date : null,
-    trainer: i.trainer ? {
-      id: typeof i.trainer.id === 'number' ? i.trainer.id : 0,
-      uuid: typeof i.trainer.uuid === 'string' ? i.trainer.uuid : '',
-      name: typeof i.trainer.name === 'string' ? i.trainer.name : '',
-      role_title: typeof i.trainer.role_title === 'string' ? i.trainer.role_title : ''
-    } : null,
-    exercises: Array.isArray(i.exercises) ? i.exercises.map((ex: any) => ({
-      id: typeof ex.id === 'number' ? ex.id : 0,
-      exercise_name: typeof ex.exercise_name === 'string' ? ex.exercise_name : '',
-      sets: typeof ex.sets === 'number' ? ex.sets : null,
-      repetitions: typeof ex.repetitions === 'string' ? ex.repetitions : null,
-      duration_seconds: typeof ex.duration_seconds === 'number' ? ex.duration_seconds : null,
-      rest_seconds: typeof ex.rest_seconds === 'number' ? ex.rest_seconds : null,
-      instructions: typeof ex.instructions === 'string' ? ex.instructions : null,
-      sort_order: typeof ex.sort_order === 'number' ? ex.sort_order : 0
-    })) : []
-  }));
+  return data.items.map(i => {
+    if (!isRecord(i)) throw new Error('Invalid program item');
+    if (typeof i.id !== 'number' || !Number.isInteger(i.id) || i.id <= 0) throw new Error('Invalid program id');
+    if (typeof i.uuid !== 'string' || !i.uuid.trim()) throw new Error('Invalid program uuid');
+    if (typeof i.title !== 'string' || !i.title.trim()) throw new Error('Invalid title');
+    
+    if (i.start_date !== null && !isValidDate(i.start_date)) throw new Error('Invalid start_date');
+    if (i.end_date !== null && !isValidDate(i.end_date)) throw new Error('Invalid end_date');
+
+    let tr = null;
+    if (i.trainer !== null) {
+      if (!isRecord(i.trainer)) throw new Error('Invalid trainer');
+      if (typeof i.trainer.id !== 'number' || !Number.isInteger(i.trainer.id) || i.trainer.id <= 0) throw new Error('Invalid trainer id');
+      if (typeof i.trainer.uuid !== 'string' || !i.trainer.uuid.trim()) throw new Error('Invalid trainer uuid');
+      if (typeof i.trainer.name !== 'string' || !i.trainer.name.trim()) throw new Error('Invalid trainer name');
+      if (typeof i.trainer.role_title !== 'string') throw new Error('Invalid trainer role_title');
+      tr = {
+        id: i.trainer.id,
+        uuid: i.trainer.uuid.trim(),
+        name: i.trainer.name.trim(),
+        role_title: i.trainer.role_title
+      };
+    }
+
+    if (!Array.isArray(i.exercises)) throw new Error('Invalid exercises array');
+
+    const exercises = i.exercises.map(ex => {
+      if (!isRecord(ex)) throw new Error('Invalid exercise item');
+      if (typeof ex.id !== 'number' || !Number.isInteger(ex.id) || ex.id <= 0) throw new Error('Invalid exercise id');
+      if (typeof ex.exercise_name !== 'string' || !ex.exercise_name.trim()) throw new Error('Invalid exercise_name');
+      
+      if (ex.sets !== null && (typeof ex.sets !== 'number' || !Number.isInteger(ex.sets))) throw new Error('Invalid sets');
+      if (ex.repetitions !== null && typeof ex.repetitions !== 'string') throw new Error('Invalid repetitions');
+      if (ex.duration_seconds !== null && (typeof ex.duration_seconds !== 'number' || !Number.isInteger(ex.duration_seconds))) throw new Error('Invalid duration_seconds');
+      if (ex.rest_seconds !== null && (typeof ex.rest_seconds !== 'number' || !Number.isInteger(ex.rest_seconds))) throw new Error('Invalid rest_seconds');
+      if (ex.instructions !== null && typeof ex.instructions !== 'string') throw new Error('Invalid instructions');
+      if (typeof ex.sort_order !== 'number' || !Number.isInteger(ex.sort_order)) throw new Error('Invalid sort_order');
+
+      return {
+        id: ex.id,
+        exercise_name: ex.exercise_name.trim(),
+        sets: ex.sets,
+        repetitions: ex.repetitions,
+        duration_seconds: ex.duration_seconds,
+        rest_seconds: ex.rest_seconds,
+        instructions: ex.instructions === null ? null : ex.instructions.trim(),
+        sort_order: ex.sort_order
+      };
+    });
+
+    return {
+      id: i.id,
+      uuid: i.uuid.trim(),
+      title: i.title.trim(),
+      start_date: i.start_date,
+      end_date: i.end_date,
+      trainer: tr,
+      exercises
+    };
+  });
 }
+

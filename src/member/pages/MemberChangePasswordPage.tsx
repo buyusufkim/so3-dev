@@ -19,6 +19,7 @@ export function MemberChangePasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!currentPassword || !newPassword || !confirmPassword) return;
 
     if (newPassword.length < 12) {
@@ -43,8 +44,19 @@ export function MemberChangePasswordPage() {
 
     try {
       await memberApiClient.changePassword(currentPassword, newPassword);
-      await refreshIdentity();
-      navigate('/uye', { replace: true });
+      const freshIdentity = await refreshIdentity();
+      
+      if (freshIdentity) {
+        if (!freshIdentity.account.must_change_password) {
+          navigate('/uye', { replace: true });
+        } else {
+          setError('Şifre değiştirildi ancak hesabınızın durumu güncellenemedi.');
+          setIsSubmitting(false);
+        }
+      } else {
+        setError('Oturum bilgileri güncellenemedi.');
+        setIsSubmitting(false);
+      }
     } catch (err) {
       if (err instanceof MemberApiError) {
         if (err.code === 'INVALID_CREDENTIALS') {

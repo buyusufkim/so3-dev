@@ -8,7 +8,10 @@ import {
   MemberAppointmentsData,
   validateAppointments,
   MemberTrainingProgram,
-  validateTrainingPrograms
+  validateTrainingPrograms,
+  validateMemberLoginResponse,
+  MemberLoginResponse,
+  isRecord
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -27,20 +30,29 @@ export class MemberApiError extends Error {
 
 let csrfTokenCache: string | null = null;
 
-async function fetchCsrfToken(): Promise<string> {
+function unwrapSuccessEnvelope(json: unknown): unknown {
+  if (!isRecord(json)) throw new MemberApiError('Geçersiz sunucu yanıtı.', 500, 'INVALID_RESPONSE');
+  if (!('data' in json)) throw new MemberApiError('Geçersiz sunucu yanıtı.', 500, 'INVALID_RESPONSE');
+  return json.data;
+}
+
+async function fetchCsrfToken(signal?: AbortSignal): Promise<string> {
   if (csrfTokenCache) return csrfTokenCache;
 
-  const res = await fetch('/api/member-auth/csrf');
+  const res = await fetch('/api/member-auth/csrf', { signal });
   if (!res.ok) {
     throw new MemberApiError('Güvenlik jetonu alınamadı.', res.status, 'CSRF_FAILED');
   }
-  const data = await res.json();
-  if (!data || typeof data.csrf_token !== 'string') {
+
+  const json = await res.json();
+  const data = unwrapSuccessEnvelope(json);
+
+  if (!isRecord(data) || typeof data.csrf_token !== 'string' || !data.csrf_token.trim()) {
     throw new MemberApiError('Geçersiz güvenlik jetonu.', 500, 'CSRF_INVALID');
   }
   
-  csrfTokenCache = data.csrf_token;
-  return data.csrf_token;
+  csrfTokenCache = data.csrf_token.trim();
+  return csrfTokenCache;
 }
 
 export function clearMemberCsrfCache() {
@@ -58,7 +70,7 @@ async function request(endpoint: string, options: RequestInit = {}): Promise<unk
 
   if (options.method && options.method !== 'GET' && options.method !== 'HEAD') {
     headers.set('Content-Type', 'application/json');
-    const csrfToken = await fetchCsrfToken();
+    const csrfToken = await fetchCsrfToken(options.signal ?? undefined);
     headers.set('X-CSRF-Token', csrfToken);
   }
 
@@ -72,77 +84,90 @@ async function request(endpoint: string, options: RequestInit = {}): Promise<unk
       handle401();
     }
 
-    let data: unknown;
+    let json: unknown;
     try {
-      data = await res.json();
+      json = await res.json();
     } catch {
       if (!res.ok) {
         throw new MemberApiError('Bir hata oluştu.', res.status, 'UNKNOWN_ERROR');
       }
-      return null; // Empty response OK for some endpoints (like logout) if ok
+      return null;
     }
 
     if (!res.ok) {
-      const d = data as Record<string, unknown>;
-      const errorObj = d.error as Record<string, unknown> | undefined;
-      const message = typeof errorObj?.message === 'string' ? errorObj.message : 'Bir hata oluştu.';
-      const code = typeof errorObj?.code === 'string' ? errorObj.code : 'UNKNOWN_ERROR';
-      const details = errorObj?.details;
-      throw new MemberApiError(message, res.status, code, details);
+      if (isRecord(json) && isRecord(json.error)) {
+        const errorObj = json.error;
+        const message = typeof errorObj.message === 'string' ? errorObj.message : 'Bir hata oluştu.';
+        const code = typeof errorObj.code === 'string' ? errorObj.code : 'UNKNOWN_ERROR';
+        const details = errorObj.details;
+        throw new MemberApiError(message, res.status, code, details);
+      }
+      throw new MemberApiError('Bir hata oluştu.', res.status, 'UNKNOWN_ERROR');
     }
 
-    return data;
+    return unwrapSuccessEnvelope(json);
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
     if (err instanceof MemberApiError) throw err;
     throw new MemberApiError('Bağlantı hatası.', 0, 'NETWORK_ERROR');
   }
 }
 
 export const memberApiClient = {
-  async login(username: string, password: string): Promise<unknown> {
+  async login(username: string, password: string, signal?: AbortSignal): Promise<MemberLoginResponse> {
     const data = await request('/api/member-auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password }),
+      signal
     });
     clearMemberCsrfCache();
-    return data;
+    return validateMemberLoginResponse(data);
   },
 
-  async me(): Promise<MemberAuthIdentity> {
-    const data = await request('/api/member-auth/me');
+  async me(signal?: AbortSignal): Promise<MemberAuthIdentity> {
+    const data = await request('/api/member-auth/me', { signal });
     return validateMemberAuthIdentity(data);
   },
 
-  async logout(): Promise<void> {
-    await request('/api/member-auth/logout', { method: 'POST' });
+  async logout(signal?: AbortSignal): Promise<void> {
+    const data = await request('/api/member-auth/logout', { method: 'POST', signal });
     clearMemberCsrfCache();
+    if (!isRecord(data) || data.success !== true) {
+      throw new MemberApiError('Geçersiz sunucu yanıtı.', 500, 'INVALID_RESPONSE');
+    }
   },
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await request('/api/member-auth/change-password', {
+  async changePassword(currentPassword: string, newPassword: string, signal?: AbortSignal): Promise<void> {
+    const data = await request('/api/member-auth/change-password', {
       method: 'POST',
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      signal
     });
     clearMemberCsrfCache();
+    if (!isRecord(data) || data.success !== true) {
+      throw new MemberApiError('Geçersiz sunucu yanıtı.', 500, 'INVALID_RESPONSE');
+    }
   },
 
-  async getOverview(): Promise<MemberOverview> {
-    const data = await request('/api/member/overview');
+  async getOverview(signal?: AbortSignal): Promise<MemberOverview> {
+    const data = await request('/api/member/overview', { signal });
     return validateMemberOverview(data);
   },
 
-  async getSessionPackages(): Promise<MemberSessionPackage[]> {
-    const data = await request('/api/member/session-packages');
+  async getSessionPackages(signal?: AbortSignal): Promise<MemberSessionPackage[]> {
+    const data = await request('/api/member/session-packages', { signal });
     return validateSessionPackages(data);
   },
 
-  async getAppointments(): Promise<MemberAppointmentsData> {
-    const data = await request('/api/member/appointments');
+  async getAppointments(signal?: AbortSignal): Promise<MemberAppointmentsData> {
+    const data = await request('/api/member/appointments', { signal });
     return validateAppointments(data);
   },
 
-  async getTrainingPrograms(): Promise<MemberTrainingProgram[]> {
-    const data = await request('/api/member/training-program');
+  async getTrainingPrograms(signal?: AbortSignal): Promise<MemberTrainingProgram[]> {
+    const data = await request('/api/member/training-program', { signal });
     return validateTrainingPrograms(data);
   }
 };

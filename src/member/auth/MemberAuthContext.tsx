@@ -1,12 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { memberApiClient } from '../api/client';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import { memberApiClient, MemberApiError } from '../api/client';
 import { MemberAuthIdentity } from '../api/validators';
 
 type MemberAuthContextType = {
   identity: MemberAuthIdentity | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  refreshIdentity: () => Promise<void>;
+  authError: string | null;
+  refreshIdentity: () => Promise<MemberAuthIdentity | null>;
+  retryAuth: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -15,36 +17,61 @@ const MemberAuthContext = createContext<MemberAuthContextType | undefined>(undef
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<MemberAuthIdentity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchIdentity = async () => {
+  const fetchIdentity = async (signal?: AbortSignal): Promise<MemberAuthIdentity | null> => {
     try {
-      const me = await memberApiClient.me();
+      const me = await memberApiClient.me(signal);
       setIdentity(me);
+      setAuthError(null);
+      return me;
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return null;
+      }
       setIdentity(null);
+      if (err instanceof MemberApiError && err.status === 401) {
+        setAuthError(null); // Valid unauthenticated state
+      } else {
+        const msg = err instanceof Error ? err.message : 'Bağlantı hatası.';
+        setAuthError(msg);
+      }
+      return null;
     }
   };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      setIsLoading(true);
-      await fetchIdentity();
-      setIsLoading(false);
-    };
-    initAuth();
+  const initAuth = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    setIsLoading(true);
+    await fetchIdentity(abortControllerRef.current.signal);
+    setIsLoading(false);
+  };
 
+  useEffect(() => {
+    initAuth();
     const handleAuthExpired = () => {
       setIdentity(null);
+      setAuthError(null);
     };
-
     window.addEventListener('so3_member_auth_expired', handleAuthExpired);
     return () => {
       window.removeEventListener('so3_member_auth_expired', handleAuthExpired);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, []);
 
   const refreshIdentity = async () => {
-    await fetchIdentity();
+    return await fetchIdentity();
+  };
+
+  const retryAuth = async () => {
+    await initAuth();
   };
 
   const logout = async () => {
@@ -54,6 +81,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       // Ignore errors on logout
     }
     setIdentity(null);
+    setAuthError(null);
   };
 
   return (
@@ -62,7 +90,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         identity,
         isLoading,
         isAuthenticated: !!identity,
+        authError,
         refreshIdentity,
+        retryAuth,
         logout
       }}
     >

@@ -29,8 +29,8 @@ try {
   const apiClientPath = path.join(memberDir, 'api', 'client.ts');
   check(fs.existsSync(apiClientPath), 'src/member/api/client.ts missing');
   
-  // 2. Member API Client Isolation
-  step('Member API Client Isolation');
+  // 2. Member API Client Isolation & Envelopes
+  step('Member API Client Isolation & Envelopes');
   const apiClientCode = fs.readFileSync(apiClientPath, 'utf-8');
   check(!apiClientCode.includes('src/admin/api/client'), 'Member client must not import admin client');
   check(!apiClientCode.includes('adminDevFallback'), 'Member client must not import adminDevFallback');
@@ -50,23 +50,36 @@ try {
   
   check(!apiClientCode.includes('member_id='), 'No client member ID query params allowed');
   
+  check(apiClientCode.includes('unwrapSuccessEnvelope'), 'Must unwrap success envelope');
+  check(!apiClientCode.includes('data.csrf_token') || apiClientCode.includes('unwrapSuccessEnvelope'), 'CSRF must unwrap envelope securely');
+  
   // 3. Response Validation
   step('Strict Response Validators');
   const validatorsPath = path.join(memberDir, 'api', 'validators.ts');
   check(fs.existsSync(validatorsPath), 'validators.ts missing');
   const validatorsCode = fs.readFileSync(validatorsPath, 'utf-8');
   
-  check(!validatorsCode.includes('as any') || (validatorsCode.match(/as any/g) || []).length <= 1, 'Limit "as any" usage');
-  check(!validatorsCode.includes('@ts-ignore'), 'No @ts-ignore allowed');
-  check(!validatorsCode.includes('unknown as'), 'No "unknown as" casting allowed');
+  check(!validatorsCode.includes('as any') && !apiClientCode.includes('as any'), 'NO "as any" allowed');
+  check(!validatorsCode.includes(': any') && !apiClientCode.includes(': any'), 'NO ": any" allowed');
+  check(!validatorsCode.includes('@ts-ignore'), 'NO @ts-ignore allowed');
+  check(!validatorsCode.includes('unknown as'), 'NO "unknown as" allowed');
+  
+  check(!validatorsCode.includes('? value : 0') && !validatorsCode.includes(': 0,'), 'No silent normalization to 0');
+  check(!validatorsCode.includes('? value : ""') && !validatorsCode.includes(': "",'), 'No silent normalization to ""');
+  check(!validatorsCode.includes('Array.isArray') || !validatorsCode.includes('? d.upcoming.map') || !validatorsCode.includes(': []'), 'No fallback to [] for required arrays');
+  
+  check(!validatorsCode.includes('member.status'), 'Member overview contract should not have member.status');
+  check(!validatorsCode.includes('membership.membership_start_date'), 'Membership start date field is start_date');
+  check(!validatorsCode.includes('membership.membership_end_date'), 'Membership end date field is end_date');
+  
+  check(validatorsCode.includes('validateMemberLoginResponse'), 'Login response validator missing');
+  check(apiClientCode.includes('validateMemberLoginResponse'), 'Login endpoint must use login validator');
   check(validatorsCode.includes('validateMemberAuthIdentity'), 'Auth identity validator missing');
   check(validatorsCode.includes('validateMemberOverview'), 'Overview validator missing');
   check(validatorsCode.includes('validateSessionPackages'), 'Packages validator missing');
   check(validatorsCode.includes('validateAppointments'), 'Appointments validator missing');
   check(validatorsCode.includes('validateTrainingPrograms'), 'Training program validator missing');
-  check(!validatorsCode.includes('parseInt(ex.repetitions'), 'Repetitions must remain string');
-  check(validatorsCode.includes('typeof ex.repetitions === \'string\''), 'Repetitions must be string validated');
-
+  
   // 4. Routes
   step('Route Isolation');
   const routesPath = path.join(ROOT_DIR, 'src', 'routes', 'index.tsx');
@@ -94,6 +107,8 @@ try {
   const authCtxCode = fs.readFileSync(authCtxPath, 'utf-8');
   check(authCtxCode.includes('memberApiClient.me'), 'Provider must boot from /me');
   check(authCtxCode.includes('so3_member_auth_expired'), 'Provider must listen to member auth expired event');
+  check(authCtxCode.includes('401'), 'Auth context must separate 401 error');
+  check(authCtxCode.includes('authError'), 'Auth context must track authError');
   
   // 6. Login
   step('Login Semantics');
@@ -109,6 +124,8 @@ try {
   const pwCode = fs.readFileSync(pwPath, 'utf-8');
   check(pwCode.includes('changePassword(currentPassword, newPassword)'), 'Must call changePassword client');
   check(pwCode.includes('refreshIdentity'), 'Must refresh identity after change');
+  check(pwCode.includes('freshIdentity'), 'Change password must use freshIdentity');
+  check(pwCode.includes('!freshIdentity.account.must_change_password'), 'Must verify must_change_password flag is false');
   
   // 8. Dashboard
   step('Dashboard Constraints');
@@ -120,6 +137,12 @@ try {
   check(!dashboardCode.includes('POST') && !dashboardCode.includes('PATCH'), 'No dashboard mutations allowed');
   check(dashboardCode.includes('membership.status'), 'Membership status check missing');
   check(dashboardCode.includes('remaining_sessions'), 'Packages check missing');
+  check(dashboardCode.includes('controller.signal') || dashboardCode.includes('abortController?.signal'), 'Dashboard must pass AbortSignal');
+  check(apiClientCode.includes('signal?: AbortSignal'), 'Client endpoints must accept AbortSignal');
+  
+  const dataErrorIdx = dashboardCode.indexOf('if (dataError)');
+  const overviewIdx = dashboardCode.indexOf('if (!overview)');
+  check(dataErrorIdx !== -1 && overviewIdx !== -1 && dataErrorIdx < overviewIdx, 'dataError branch must be reachable before !overview');
   
   // 9. Storage Leaks
   step('Storage Leak Prevention');
@@ -143,8 +166,9 @@ try {
   if (hasErrors) {
     process.exit(1);
   } else {
-    console.log('✅ Member Portal Frontend Shell verified.');
+    console.log('✅ PASS — F.18C MEMBER PORTAL FRONTEND SHELL & DASHBOARD CLOSED');
   }
+
 } catch (e) {
   console.error(e);
   process.exit(1);

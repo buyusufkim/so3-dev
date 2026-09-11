@@ -4,7 +4,7 @@ import { useMemberAuth } from '../auth/MemberAuthContext';
 import { LogOut } from 'lucide-react';
 
 export function MemberLayout() {
-  const { identity, isLoading, isAuthenticated, logout } = useMemberAuth();
+  const { identity, isLoading, isAuthenticated, logout, authError, retryAuth } = useMemberAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,7 +20,6 @@ export function MemberLayout() {
       newMeta.content = 'noindex,nofollow';
       document.head.appendChild(newMeta);
     }
-
     return () => {
       // Restore on unmount
       if (metaRobots) {
@@ -36,6 +35,22 @@ export function MemberLayout() {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white/50 text-sm">
         Yükleniyor...
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center text-white/70 px-4">
+        <div className="bg-[#121212] p-8 rounded-xl border border-white/10 max-w-sm w-full text-center">
+          <div className="text-red-400 mb-6 font-medium">{authError}</div>
+          <button
+            onClick={retryAuth}
+            className="px-6 py-2 bg-[#851C35] hover:bg-[#851C35]/90 text-white rounded-lg transition-colors text-sm w-full"
+          >
+            Tekrar Dene
+          </button>
+        </div>
       </div>
     );
   }
@@ -70,7 +85,6 @@ export function MemberLayout() {
           )}
         </div>
       </header>
-
       <main className="max-w-5xl mx-auto px-4 py-8">
         <Outlet />
       </main>

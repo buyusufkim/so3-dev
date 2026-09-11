@@ -29,8 +29,18 @@ export function MemberLoginPage() {
 
     try {
       await memberApiClient.login(username.trim(), password);
-      await refreshIdentity();
-      // the effect of refreshIdentity will cause identity to become non-null, triggering the redirect above on next render
+      const freshIdentity = await refreshIdentity();
+      
+      if (freshIdentity) {
+        if (freshIdentity.account.must_change_password) {
+          navigate('/uye/sifre-degistir', { replace: true });
+        } else {
+          navigate('/uye', { replace: true });
+        }
+      } else {
+        setError('Oturum bilgileri alınamadı.');
+        setIsSubmitting(false);
+      }
     } catch (err) {
       if (err instanceof MemberApiError) {
         if (err.status === 401) {

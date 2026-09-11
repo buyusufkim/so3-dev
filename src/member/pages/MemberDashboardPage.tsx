@@ -52,10 +52,10 @@ export function MemberDashboardPage() {
       const signal = abortController?.signal;
 
       const [o, p, a, t] = await Promise.all([
-        memberApiClient.getOverview(),
-        memberApiClient.getSessionPackages(),
-        memberApiClient.getAppointments(),
-        memberApiClient.getTrainingPrograms()
+        memberApiClient.getOverview(signal),
+        memberApiClient.getSessionPackages(signal),
+        memberApiClient.getAppointments(signal),
+        memberApiClient.getTrainingPrograms(signal)
       ]);
 
       if (signal?.aborted) return;
@@ -99,7 +99,7 @@ export function MemberDashboardPage() {
     return <Navigate to="/uye/sifre-degistir" replace />;
   }
 
-  if (isDataLoading || !overview) {
+  if (isDataLoading) {
     return (
       <div className="flex flex-col gap-6 animate-pulse">
         <div className="h-24 bg-[#121212] border border-white/5 rounded-2xl"></div>
@@ -116,11 +116,19 @@ export function MemberDashboardPage() {
       <div className="bg-[#121212] border border-white/10 rounded-2xl p-8 text-center">
         <p className="text-red-400 mb-4">{dataError}</p>
         <button 
-          onClick={() => fetchData()}
+          onClick={() => fetchData(new AbortController())}
           className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-xl transition-colors text-sm font-medium"
         >
           Tekrar Dene
         </button>
+      </div>
+    );
+  }
+
+  if (!overview) {
+    return (
+      <div className="bg-[#121212] border border-white/10 rounded-2xl p-8 text-center text-white/50">
+        Geçersiz sunucu yanıtı.
       </div>
     );
   }
@@ -177,11 +185,11 @@ export function MemberDashboardPage() {
           <div className="flex items-center gap-6 text-sm">
             <div>
               <div className="text-white/40 mb-1 text-xs">Başlangıç</div>
-              <div className="text-white/90">{formatDate(overview.membership.membership_start_date)}</div>
+              <div className="text-white/90">{formatDate(overview.membership.start_date)}</div>
             </div>
             <div>
               <div className="text-white/40 mb-1 text-xs">Bitiş</div>
-              <div className="text-white/90">{formatDate(overview.membership.membership_end_date)}</div>
+              <div className="text-white/90">{formatDate(overview.membership.end_date)}</div>
             </div>
           </div>
         </div>
