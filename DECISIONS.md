@@ -73,3 +73,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 - There is no public registration. Accounts are exclusively provisioned by admins.
 - The `auth_version` field in `member_accounts` acts as a credential/session invalidation token. It increments on password reset, status changes, and self-initiated password changes, instantly terminating old sessions via `MemberAuthMiddleware`.
 - Future F.18B read APIs will enforce self-only data access tied directly to the `member_id` captured in the session.
+
+## F.18B Member Portal Self-Service Read Model
+- Member portal content is read exclusively through the session `member_id` via self-only endpoints.
+- Client member selector does not exist; horizontal access is prevented by design.
+- The `must_change_password` flag blocks all member content access, routing through a password-change-required guard.
+- Membership and session package remain separate domains with distinct effective status derivations.
+- Package remaining/reserved logic reuses F.17 canonical semantics and ledger integrity rules.
+- Portal appointments are read-only, separated into upcoming and recent using explicit business timezone calculation.
+- Only active training programs are exposed; program internal notes and member operational notes remain excluded from the safe projection.
+- Measurements and progress features are deferred to a separate future phase.
