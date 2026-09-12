@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useMemberAuth } from '../auth/MemberAuthContext';
 import { memberApiClient, MemberApiError } from '../api/client';
 import { MemberMeasurement } from '../api/validators';
@@ -111,6 +111,11 @@ export function MemberProgressPage() {
       else setSelectedMetric(availableMetrics[0]);
     }
   }, [availableMetrics, measurements, selectedMetric]);
+
+
+  if (!isAuthLoading && !identity) {
+    return <Navigate to="/uye/giris" replace />;
+  }
 
   if (isAuthLoading || (isLoading && measurements.length === 0)) {
     return (

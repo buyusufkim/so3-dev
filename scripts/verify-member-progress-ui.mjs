@@ -123,7 +123,18 @@ try {
   check(progressCode.includes('abortControllerRef.current.abort()'), 'Must cleanup AbortController');
   check(progressCode.includes("err.code === 'PASSWORD_CHANGE_REQUIRED'"), 'Must handle PASSWORD_CHANGE_REQUIRED error');
 
+
+  step('Unauthenticated Redirect Guard');
+  check(progressCode.includes('!isAuthLoading && !identity'), 'Must have !isAuthLoading && !identity guard');
+  check(progressCode.includes('<Navigate to="/uye/giris"') && progressCode.includes('replace'), 'Must redirect unauthenticated to /uye/giris with replace');
+  check(progressCode.includes("navigate('/uye/sifre-degistir'"), 'Must redirect forced-password users to /uye/sifre-degistir');
+  
+  const unauthIndex = progressCode.indexOf('!isAuthLoading && !identity');
+  const skeletonIndex = progressCode.indexOf('isAuthLoading || (isLoading && measurements.length === 0)');
+  check(unauthIndex !== -1 && skeletonIndex !== -1 && unauthIndex < skeletonIndex, 'Auth guard must run before skeleton loader');
+
   console.log('✅ PASS — F.18F MEMBER PROGRESS UI CLOSED');
+
 } catch (err) {
   console.error(err);
   process.exit(1);
