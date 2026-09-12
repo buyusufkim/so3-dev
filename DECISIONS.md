@@ -125,3 +125,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no chart dependency; lightweight SVG
 * history max 100 inherited from backend
 * dashboard links to progress but does not fetch measurement data
+
+## F.19A Trainer Mobile Workspace Shell
+* trainer remains in existing admin/staff auth realm
+* existing `/admin/...` trainer routes remain canonical
+* mobile trainer workspace is presentation-layer only
+* trainer mobile uses compact header + 3-item bottom navigation
+* desktop trainer retains existing sidebar
+* admin/editor/reception layout behavior unchanged
+* no duplicated auth bootstrap
+* no new backend/API contract

@@ -2,6 +2,7 @@ import { Outlet, Navigate, useNavigate, useLocation, NavLink } from "react-route
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { AdminUser, getRoleStartRoute, hasRoleAccess, isAdminUser } from "../auth/roles";
+import { TrainerMobileNavigation } from "../components/TrainerMobileNavigation";
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -81,11 +82,12 @@ export function AdminLayout() {
   const isTrainer = admin?.role === 'trainer';
   const isReception = admin?.role === 'reception';
   const showCMS = isSuperOrAdmin || isEditor;
+  const isTrainerMobile = isTrainer;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-white flex font-sans min-w-0 w-full">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#121212] border-r border-white/10 flex flex-col">
+      <aside className={`w-64 bg-[#121212] border-r border-white/10 flex-col ${isTrainerMobile ? 'hidden lg:flex' : 'flex'}`}>
         <div className="p-6 border-b border-white/10">
           <img src="/brand/so3-logo.png" alt="SO3 Control" className="h-8" />
           <div className="mt-2 text-xs font-semibold tracking-widest text-[#851C35]">CONTROL</div>
@@ -172,11 +174,14 @@ export function AdminLayout() {
       </aside>
       
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <header className="h-16 border-b border-white/10 px-8 flex items-center justify-between">
+      <main className={`flex-1 overflow-auto min-w-0 w-full ${isTrainerMobile ? 'pb-24 lg:pb-0' : ''}`}>
+        {isTrainerMobile && (
+          <TrainerMobileNavigation onLogout={handleLogout} displayName={admin?.display_name || 'Eğitmen'} />
+        )}
+        <header className={`h-16 border-b border-white/10 px-8 items-center justify-between ${isTrainerMobile ? 'hidden lg:flex' : 'flex'}`}>
           <h1 className="text-lg font-semibold">SO3 Control</h1>
         </header>
-        <div className="p-8">
+        <div className={isTrainerMobile ? 'px-4 py-6 lg:p-8' : 'p-8'}>
           <Outlet />
         </div>
       </main>
