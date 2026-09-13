@@ -164,7 +164,7 @@ export function TrainerDashboard() {
   const hasAnyAttention = hasNoProgramMembers || hasDraftPrograms || hasExpiredMemberships || hasExpiredPrograms;
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col space-y-5 lg:space-y-8 lg:block">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -232,7 +232,7 @@ export function TrainerDashboard() {
       </div>
 
       {/* Dikkat Gerektirenler */}
-      <div className="space-y-4">
+      <div className="space-y-3 lg:space-y-4 order-2 lg:order-none">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-400" />
           <h3 className="text-base font-semibold text-white">Dikkat Gerektirenler</h3>
@@ -254,7 +254,7 @@ export function TrainerDashboard() {
                   </div>
                   <div className="divide-y divide-white/5">
                     {data.attention.members_without_active_program.map((item) => (
-                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                      <div key={item.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium text-white truncate">
                             {item.first_name} {item.last_name}
@@ -266,7 +266,7 @@ export function TrainerDashboard() {
                         </div>
                         <Link
                           to={`/admin/my-members/${item.id}/training-programs`}
-                          className="text-xs font-medium px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap"
+                          className="text-xs font-medium px-2.5 py-2 sm:py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap w-full sm:w-auto text-center min-h-[40px] sm:min-h-0 flex items-center justify-center"
                         >
                           Programları Aç
                         </Link>
@@ -287,7 +287,7 @@ export function TrainerDashboard() {
                   </div>
                   <div className="divide-y divide-white/5">
                     {data.attention.draft_programs.map((item) => (
-                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                      <div key={item.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium text-white truncate">
                             {item.title}
@@ -302,7 +302,7 @@ export function TrainerDashboard() {
                         </div>
                         <Link
                           to={`/admin/my-members/${item.member_id}/training-programs/${item.id}`}
-                          className="text-xs font-medium px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap"
+                          className="text-xs font-medium px-2.5 py-2 sm:py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap w-full sm:w-auto text-center min-h-[40px] sm:min-h-0 flex items-center justify-center"
                         >
                           Programı Aç
                         </Link>
@@ -323,7 +323,7 @@ export function TrainerDashboard() {
                   </div>
                   <div className="divide-y divide-white/5">
                     {data.attention.expired_active_memberships.map((item) => (
-                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                      <div key={item.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium text-white truncate">
                             {item.first_name} {item.last_name}
@@ -335,7 +335,7 @@ export function TrainerDashboard() {
                         </div>
                         <Link
                           to={`/admin/my-members/${item.id}`}
-                          className="text-xs font-medium px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap"
+                          className="text-xs font-medium px-2.5 py-2 sm:py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap w-full sm:w-auto text-center min-h-[40px] sm:min-h-0 flex items-center justify-center"
                         >
                           Üyeyi İncele
                         </Link>
@@ -356,7 +356,7 @@ export function TrainerDashboard() {
                   </div>
                   <div className="divide-y divide-white/5">
                     {data.attention.expired_active_programs.map((item) => (
-                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                      <div key={item.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium text-white truncate">
                             {item.title}
@@ -371,7 +371,7 @@ export function TrainerDashboard() {
                         </div>
                         <Link
                           to={`/admin/my-members/${item.member_id}/training-programs/${item.id}`}
-                          className="text-xs font-medium px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap"
+                          className="text-xs font-medium px-2.5 py-2 sm:py-1.5 bg-white/5 hover:bg-white/10 text-white rounded transition whitespace-nowrap w-full sm:w-auto text-center min-h-[40px] sm:min-h-0 flex items-center justify-center"
                         >
                           Programı Aç
                         </Link>
@@ -386,7 +386,7 @@ export function TrainerDashboard() {
       </div>
 
       {/* Recent Members */}
-      <div className="space-y-4">
+      <div className="space-y-3 lg:space-y-4 order-5 lg:order-none">
         <div className="flex justify-between items-center">
           <h3 className="text-base font-semibold text-white">Son Güncellenen Üyeler</h3>
           <Link
@@ -403,7 +403,8 @@ export function TrainerDashboard() {
               Henüz atanmış veya güncellenen üye bulunmuyor.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="overflow-x-auto hidden lg:block">
               <table className="w-full text-left text-sm">
                 <thead className="bg-white/5 border-b border-white/10">
                   <tr>
@@ -449,6 +450,42 @@ export function TrainerDashboard() {
                 </tbody>
               </table>
             </div>
+            
+            {/* Mobile View */}
+            <div className="divide-y divide-white/10 lg:hidden">
+              {data.recent_members.map((member) => (
+                <Link
+                  key={member.id}
+                  to={`/admin/my-members/${member.id}`}
+                  className="block p-4 hover:bg-white/5 transition"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-white truncate">
+                        {member.first_name} {member.last_name}
+                      </div>
+                      <div className="text-[10px] text-white/40 font-mono mt-0.5 truncate">{member.uuid}</div>
+                      <div className="text-xs text-white/50 mt-1">
+                        {formatSafeDate(member.updated_at)}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${
+                          member.status === 'active'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                        }`}
+                      >
+                        {member.status === 'active' ? 'Aktif' : 'Pasif'}
+                      </span>
+                      <ArrowRight className="w-4 h-4 text-white/30" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            </>
           )}
         </div>
       </div>

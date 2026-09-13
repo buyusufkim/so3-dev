@@ -24,6 +24,7 @@
     "verify:reception-membership-renewal": "node scripts/verify-reception-membership-renewal.mjs",
     "verify:reception-frontend": "node scripts/verify-reception-frontend.mjs",
     "verify:trainer-mobile-workspace-shell": "node scripts/verify-trainer-mobile-workspace-shell.mjs",
+    "verify:trainer-dashboard-mobile": "node scripts/verify-trainer-dashboard-mobile.mjs",
     "verify:appointment-read-create": "node scripts/verify-appointment-read-create.mjs",
     "verify:appointment-reschedule": "node scripts/verify-appointment-reschedule.mjs",
     "verify:appointment-cancel": "node scripts/verify-appointment-cancel.mjs",

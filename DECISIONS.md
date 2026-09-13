@@ -135,3 +135,12 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * admin/editor/reception layout behavior unchanged
 * no duplicated auth bootstrap
 * no new backend/API contract
+
+## F.19B Trainer Dashboard Mobile Density
+* dashboard backend contract unchanged
+* mobile prioritizes attention work
+* member metrics use compact mobile summary
+* program metrics use 2x2 mobile grid
+* recent members remain fully accessible
+* no appointment preview or notification invention
+* desktop information scope preserved
