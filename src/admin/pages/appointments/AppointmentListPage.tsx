@@ -205,12 +205,13 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <h2 className="text-xl font-medium">{pageTitle}</h2>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h1 className="text-xl font-medium">{pageTitle}</h1>
         <button 
+          type="button"
           onClick={() => { if (!isAnyModalOpen) setIsCreateModalOpen(true); }}
           disabled={!!isAnyModalOpen}
-          className="px-4 py-2 bg-[#851C35] text-white text-sm font-medium rounded hover:bg-[#6a162a] transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto min-h-[44px] px-4 py-2 bg-[#851C35] text-white text-sm font-medium rounded hover:bg-[#6a162a] transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14"/>
@@ -220,39 +221,56 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
       </div>
 
       <div className="bg-[#121212] border border-white/10 rounded-lg p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <button 
-            onClick={handlePrevDay}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm"
-          >
-            Önceki Gün
-          </button>
-          
-          <input 
-            type="date"
-            value={selectedDate}
-            onChange={(e) => {
-              if (e.target.value) {
-                setSelectedDate(e.target.value);
-              }
-            }}
-            className="px-4 py-2 bg-black border border-white/20 rounded focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] text-white text-sm"
-          />
-          
-          <button 
-            onClick={handleToday}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm"
-          >
-            Bugün
-          </button>
-          
-          <button 
-            onClick={handleNextDay}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm"
-          >
-            Sonraki Gün
-          </button>
-        </div>
+        {scope === 'trainer' ? (
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-start">
+              <button type="button" onClick={handlePrevDay} className="flex-1 lg:flex-none px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition flex items-center justify-center min-h-[44px]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <div className="lg:hidden flex-1 text-center font-medium text-sm text-white">
+                {selectedDate}
+              </div>
+              <button type="button" onClick={handleNextDay} className="flex-1 lg:flex-none px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition flex items-center justify-center min-h-[44px]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+              <button type="button" onClick={handleToday} className="flex-1 lg:flex-none px-4 py-2 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm min-h-[44px]">
+                Bugün
+              </button>
+            </div>
+            <input 
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                }
+              }}
+              className="w-full lg:w-auto px-4 py-2 bg-black border border-white/20 rounded focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] text-white text-sm min-h-[44px]"
+            />
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-4">
+            <button type="button" onClick={handlePrevDay} className="px-4 py-2 min-h-[44px] bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm">
+              Önceki Gün
+            </button>
+            <input 
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                }
+              }}
+              className="px-4 py-2 min-h-[44px] bg-black border border-white/20 rounded focus:border-[#851C35] focus:outline-none focus:ring-1 focus:ring-[#851C35] text-white text-sm"
+            />
+            <button type="button" onClick={handleToday} className="px-4 py-2 min-h-[44px] bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm">
+              Bugün
+            </button>
+            <button type="button" onClick={handleNextDay} className="px-4 py-2 min-h-[44px] bg-white/5 border border-white/10 rounded hover:bg-white/10 transition text-sm">
+              Sonraki Gün
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -263,8 +281,9 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
         <div className="flex flex-col items-center justify-center h-48 bg-[#121212] border border-white/10 rounded-lg gap-4">
           <p className="text-red-400">{error}</p>
           <button 
+            type="button"
             onClick={() => fetchAppointments(selectedDate)}
-            className="px-4 py-2 bg-[#851C35] hover:bg-[#6a162a] transition rounded text-sm text-white"
+            className="px-4 py-2 min-h-[44px] bg-[#851C35] hover:bg-[#6a162a] transition rounded text-sm text-white"
           >
             Tekrar Dene
           </button>
@@ -274,7 +293,64 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
           Bu tarih için randevu bulunmuyor.
         </div>
       ) : (
-        <div className="bg-[#121212] border border-white/10 rounded-lg overflow-hidden">
+        <>
+          {scope === 'trainer' && (
+            <div className="lg:hidden space-y-4">
+              {items.map((item) => (
+                <div key={item.appointment.id} className="bg-[#121212] border border-white/10 rounded-lg p-4 space-y-4">
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="min-w-0">
+                      <div className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>{extractTime(item.appointment.starts_at)}</span>
+                        <span className="text-white/40">-</span>
+                        <span className="text-white/60">{extractTime(item.appointment.ends_at)}</span>
+                      </div>
+                      <div className="text-white/90 font-medium mt-1 truncate">
+                        {item.member.first_name} {item.member.last_name}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <span className={`inline-block px-2.5 py-1 rounded text-[11px] uppercase tracking-wider font-medium ${statusColors[item.appointment.status]}`}>
+                        {statusLabels[item.appointment.status]}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {item.appointment.status === 'scheduled' && (
+                    <div className="grid grid-cols-1 gap-2 pt-2 border-t border-white/5">
+                      <button
+                        type="button"
+                        onClick={() => { if (!isAnyModalOpen) setRescheduleItem(item); }}
+                        disabled={!!isAnyModalOpen}
+                        className="w-full px-4 py-2.5 min-h-[44px] bg-white/5 text-white text-sm font-medium rounded hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Yeniden Planla
+                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { if (!isAnyModalOpen) setTerminalItem({ item, action: 'completed' }); }}
+                          disabled={!!isAnyModalOpen}
+                          className="w-full px-4 py-2.5 min-h-[44px] bg-green-500/10 text-green-400 hover:bg-green-500/20 text-sm font-medium rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Tamamla
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { if (!isAnyModalOpen) setTerminalItem({ item, action: 'no_show' }); }}
+                          disabled={!!isAnyModalOpen}
+                          className="w-full px-4 py-2.5 min-h-[44px] bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Gelmedi
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className={`bg-[#121212] border border-white/10 rounded-lg overflow-hidden ${scope === 'trainer' ? 'hidden lg:block' : ''}`}>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-white/5 text-xs uppercase tracking-widest text-white/50">
@@ -314,6 +390,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                     {item.appointment.status === 'scheduled' && (
                       <div className="flex items-center justify-end gap-3">
                         <button
+                          type="button"
                           onClick={() => {
                             if (!isAnyModalOpen) setRescheduleItem(item);
                           }}
@@ -324,6 +401,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                         </button>
                         {(scope === 'admin' || scope === 'reception') && (
                           <button
+                            type="button"
                             onClick={() => {
                               if (!isAnyModalOpen) setCancelItem(item);
                             }}
@@ -336,6 +414,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                         {(scope === 'admin' || scope === 'trainer') && (
                           <>
                             <button
+                              type="button"
                               onClick={() => {
                                 if (!isAnyModalOpen) setTerminalItem({ item, action: 'completed' });
                               }}
@@ -345,6 +424,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
                               Tamamla
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 if (!isAnyModalOpen) setTerminalItem({ item, action: 'no_show' });
                               }}
@@ -363,6 +443,7 @@ export function AppointmentListPage({ scope }: AppointmentListPageProps) {
             </tbody>
           </table>
         </div>
+        </>
       )}
       
       {isCreateModalOpen && !rescheduleItem && !cancelItem && !terminalItem && (

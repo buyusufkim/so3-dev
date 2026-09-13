@@ -98,11 +98,12 @@ export function AppointmentTerminalModal({ scope, item, action, onClose, onSucce
   const buttonText = action === 'completed' ? 'Tamamla' : 'İşaretle';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="terminal-modal-title" className="bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-full">
-        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="terminal-modal-title" className="bg-[#1a1a1a] border border-white/10 rounded-t-xl sm:rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)]">
+        <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between">
           <h2 id="terminal-modal-title" className="text-lg font-medium text-white">{actionTitle}</h2>
           <button 
+            type="button"
             onClick={() => { if (!isSubmitting) onClose(); }}
             disabled={isSubmitting}
             className="text-white/50 hover:text-white transition disabled:opacity-50"
@@ -113,7 +114,7 @@ export function AppointmentTerminalModal({ scope, item, action, onClose, onSucce
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto">
+        <div className="p-4 sm:p-6 overflow-y-auto">
           {submitError && (
             <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded text-sm">
               {submitError}
@@ -127,12 +128,12 @@ export function AppointmentTerminalModal({ scope, item, action, onClose, onSucce
           </form>
         </div>
 
-        <div className="p-6 border-t border-white/10 flex items-center justify-end gap-3 bg-black/20">
+        <div className="p-4 sm:p-6 border-t border-white/10 bg-black/20 flex flex-col-reverse sm:flex-row justify-end gap-3">
           <button 
             type="button"
             onClick={() => { if (!isSubmitting) onClose(); }}
             disabled={isSubmitting}
-            className="px-5 py-2.5 rounded font-medium text-sm text-white/70 hover:bg-white/5 hover:text-white transition disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded font-medium text-sm text-white/70 hover:bg-white/5 hover:text-white transition disabled:opacity-50"
           >
             Vazgeç
           </button>
@@ -140,7 +141,7 @@ export function AppointmentTerminalModal({ scope, item, action, onClose, onSucce
             type="submit"
             form="appointment-terminal-form"
             disabled={isSubmitting}
-            className={`px-5 py-2.5 rounded font-medium text-sm text-white transition disabled:opacity-50 flex items-center gap-2 ${buttonColor}`}
+            className={`w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded font-medium text-sm text-white transition disabled:opacity-50 flex items-center justify-center gap-2 ${buttonColor}`}
           >
             {isSubmitting && (
               <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

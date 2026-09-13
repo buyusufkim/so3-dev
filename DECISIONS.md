@@ -149,3 +149,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * true mobile grid implementations (grid-cols-3 and grid-cols-2 lg:grid-cols-4)
 * true mobile semantic ordering (order-1 to order-5)
 * verifier non-mutating check
+
+## F.19C Trainer Mobile Appointments Workspace
+* trainer appointments remain shared AppointmentListPage
+* trainer mobile uses card list; desktop retains table
+* lifecycle permissions unchanged
+* trainer cannot cancel
+* create/reschedule/complete/no-show contracts unchanged
+* no new appointment API
+* modals receive responsive presentation-only improvements
+* request generation/abort safety preserved

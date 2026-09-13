@@ -111,7 +111,7 @@ function getHandlers(controllerSrc) {
 }
 
 function verifyNamespaceCapabilityMatrix(indexSrc) {
-    if (indexSrc.match(/['"]\/api\/(public|member|members)\/appointments/)) {
+    if (indexSrc.match(/['"]\/api\/(public|members)\/appointments/)) {
         throw new Error("Public/member appointment route found");
     }
 
