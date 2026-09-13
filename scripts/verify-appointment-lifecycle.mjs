@@ -112,8 +112,11 @@ function getHandlers(controllerSrc) {
 
 function verifyNamespaceCapabilityMatrix(indexSrc) {
     // 1. Forbid public and members
-    if (indexSrc.match(/['"]\/api\/(public|members)\/appointments/)) {
-        throw new Error("Public/members appointment route found");
+    if (indexSrc.includes('/api/public/appointments')) {
+        throw new Error("Public appointment route found");
+    }
+    if (indexSrc.includes('/api/members/appointments')) {
+        throw new Error("Members plural appointment route found");
     }
 
     // 2. Exact canonical member GET route check
@@ -132,8 +135,8 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
 
     // 3. Forbid any other /api/member/appointments usage
     const maskedIndexSrc = indexSrc.replace(canonicalMemberRouteRegex, "");
-    if (maskedIndexSrc.match(/['"]\/api\/member\/appointments/)) {
-        throw new Error("Public/member appointment route found");
+    if (maskedIndexSrc.includes('/api/member/appointments')) {
+        throw new Error("Unauthorized member appointment route/subpath found");
     }
 
     const extractBalancedBracket = (src, startIdx) => {
@@ -714,6 +717,18 @@ checkInvariant("Negative: MEMBER MUTATION INJECTED", () => {
 checkInvariant("Negative: CANONICAL MEMBER GET REMOVED", () => {
     const regex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'GET'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(regex, "")));
+});
+checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT SUBPATH INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/([1-9]\\d*)$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT CANCEL INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/([1-9]\\d*)/cancel$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT RESCHEDULE INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: DYNAMIC PUBLIC APPOINTMENT SUBPATH INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/public/appointments/([1-9]\\d*)$#', $requestUri, $matches); '/api/public/events'")));
 });
 checkInvariant("Negative: ADMIN CANCEL CALLING RESCHEDULE", () => {
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/->cancelAdminAppointment\(\S+\)/, "->rescheduleAdminAppointment((int)$matches[1])")));
