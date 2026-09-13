@@ -67,12 +67,12 @@ export function TrainerMemberDetail() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-6">
         <div className="flex items-center gap-4">
-          <Link to="/admin/my-members" className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition">
+          <Link to="/admin/my-members" aria-label="Üye listesine dön" className="min-w-10 min-h-10 flex items-center justify-center bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition shrink-0">
             <ArrowLeft className="w-4 h-4 text-white/70" />
           </Link>
-          <h2 className="text-2xl font-bold">Üye Detayı Yükleniyor...</h2>
+          <h1 className="text-xl lg:text-2xl font-bold">Üye Detayı Yükleniyor...</h1>
         </div>
       </div>
     );
@@ -80,18 +80,18 @@ export function TrainerMemberDetail() {
 
   if (error || !member) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/admin/my-members" className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition">
+      <div className="space-y-4 lg:space-y-6">
+        <div className="flex items-center gap-4 mb-4 lg:mb-6">
+          <Link to="/admin/my-members" aria-label="Üye listesine dön" className="min-w-10 min-h-10 flex items-center justify-center bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition shrink-0">
             <ArrowLeft className="w-4 h-4 text-white/70" />
           </Link>
-          <h2 className="text-2xl font-bold">Hata</h2>
+          <h1 className="text-xl lg:text-2xl font-bold">Hata</h1>
         </div>
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-lg text-sm text-center">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 lg:p-6 rounded-lg text-sm text-center">
           {error || 'Üye bulunamadı.'}
         </div>
         <div className="flex justify-center">
-          <Link to="/admin/my-members" className="text-[#851C35] hover:text-[#a02240] text-sm font-medium transition">
+          <Link to="/admin/my-members" className="text-[#851C35] hover:text-[#a02240] text-sm font-medium transition min-h-10 flex items-center">
             Listeye Dön
           </Link>
         </div>

@@ -82,14 +82,16 @@ export function TrainerMembersList() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <input
             type="text"
-            placeholder="Üye ara (Ad, Soyad, Tel, E-posta)..."
+            aria-label="Üye ara"
+            placeholder="Üye ara (Ad, Soyad)..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-white/10 rounded pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#851C35] transition"
+            className="min-h-[44px] w-full bg-[#1A1A1A] border border-white/10 rounded pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#851C35] transition"
           />
         </div>
         <div className="w-full sm:w-48">
           <select
+            aria-label="Durum Filtresi"
             value={status}
             onChange={(e) => {
               const val = e.target.value;
@@ -98,7 +100,7 @@ export function TrainerMembersList() {
                 setPage(1);
               }
             }}
-            className="w-full bg-[#1A1A1A] border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#851C35] transition"
+            className="min-h-[44px] w-full bg-[#1A1A1A] border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#851C35] transition"
           >
             <option value="">Tüm Durumlar</option>
             <option value="active">Aktif</option>
@@ -113,7 +115,7 @@ export function TrainerMembersList() {
         </div>
       )}
 
-      <div className="bg-[#121212] border border-white/10 rounded-lg overflow-x-auto">
+      <div className="bg-[#121212] border border-white/10 rounded-lg overflow-x-auto hidden lg:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-white/5 border-b border-white/10">
             <tr>
@@ -173,6 +175,45 @@ export function TrainerMembersList() {
         </table>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 lg:hidden">
+        {loading ? (
+          <div className="p-8 text-center text-white/50 bg-[#121212] border border-white/10 rounded-lg">
+            Yükleniyor...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="p-8 text-center text-white/50 bg-[#121212] border border-white/10 rounded-lg">
+            Üye bulunamadı.
+          </div>
+        ) : (
+          items.map((item) => (
+            <Link
+              key={item.id}
+              to={`/admin/my-members/${item.id}`}
+              className="block bg-[#121212] border border-white/10 rounded-lg p-4 min-h-[44px] hover:border-white/20 transition"
+            >
+              <div className="flex justify-between items-start mb-2 gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium text-white truncate">{item.first_name} {item.last_name}</div>
+                  <div className="text-xs text-white/40 font-mono mt-0.5 truncate">{item.uuid}</div>
+                </div>
+                <span className={`shrink-0 inline-flex px-2 py-1 rounded text-[10px] font-medium ${
+                  item.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {item.status === 'active' ? 'Aktif' : 'Pasif'}
+                </span>
+              </div>
+              <div className="space-y-1 text-sm text-white/70">
+                <div className="truncate"><span className="text-white/40">Tel:</span> {item.phone}</div>
+                {item.email && <div className="truncate"><span className="text-white/40">E-posta:</span> {item.email}</div>}
+                <div className="pt-1 text-xs text-white/50">
+                  Kayıt: {new Date(item.created_at).toLocaleDateString('tr-TR')}
+                </div>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+
       {!loading && items.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white/60">
           <div>
@@ -180,9 +221,10 @@ export function TrainerMembersList() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1 bg-[#1A1A1A] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition"
+              className="min-h-[44px] px-3 py-1 bg-[#1A1A1A] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition"
             >
               Önceki
             </button>
@@ -190,9 +232,10 @@ export function TrainerMembersList() {
               Sayfa {page} / {lastPage}
             </span>
             <button
+              type="button"
               onClick={() => setPage(p => Math.min(lastPage, p + 1))}
               disabled={page === lastPage}
-              className="px-3 py-1 bg-[#1A1A1A] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition"
+              className="min-h-[44px] px-3 py-1 bg-[#1A1A1A] border border-white/10 rounded disabled:opacity-50 hover:bg-white/5 transition"
             >
               Sonraki
             </button>

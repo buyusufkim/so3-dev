@@ -13,18 +13,21 @@ export function TrainerMemberWorkspaceNav({ memberId, active }: TrainerMemberWor
     {
       id: "member" as const,
       label: "Üye Bilgileri",
+      shortLabel: "Bilgiler",
       to: `/admin/my-members/${memberId}`,
       icon: User,
     },
     {
       id: "progress" as const,
       label: "Gelişim Takibi",
+      shortLabel: "Gelişim",
       to: `/admin/my-members/${memberId}/progress`,
       icon: Activity,
     },
     {
       id: "programs" as const,
       label: "Antrenman Programları",
+      shortLabel: "Programlar",
       to: `/admin/my-members/${memberId}/training-programs`,
       icon: Dumbbell,
     },
@@ -33,7 +36,7 @@ export function TrainerMemberWorkspaceNav({ memberId, active }: TrainerMemberWor
   return (
     <nav
       aria-label="Üye Çalışma Alanı Navigasyonu"
-      className="bg-[#121212] border border-white/10 rounded-xl p-1.5 flex flex-wrap items-center gap-1.5"
+      className="bg-[#121212] border border-white/10 rounded-xl p-1.5 grid grid-cols-3 gap-1.5"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -43,14 +46,15 @@ export function TrainerMemberWorkspaceNav({ memberId, active }: TrainerMemberWor
             key={tab.id}
             to={tab.to}
             aria-current={isActive ? "page" : undefined}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1 sm:px-3.5 py-2 min-h-[44px] rounded-lg text-[10px] sm:text-sm font-medium transition ${
               isActive
                 ? "bg-[#851C35] text-white shadow-sm"
                 : "text-white/60 hover:text-white hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#851C35]/50"
             }`}
           >
-            <Icon className="w-4 h-4 shrink-0" />
-            <span>{tab.label}</span>
+            <Icon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+            <span className="sm:hidden text-center leading-tight">{tab.shortLabel}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </Link>
         );
       })}
