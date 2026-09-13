@@ -15,7 +15,17 @@ function checkInvariant(name, test) {
 console.log("👉 Repository Hygiene");
 checkInvariant("No temporary artifacts in root", () => {
     const files = fs.readdirSync('.');
-    const forbidden = [/^patch.*\.m?js$/, /^tmp.*\.m?js$/, /\.tmp$/, /\.fixed$/, /^add-.*\.php$/];
+    const forbidden = [
+        /^patch.*\.js$/,
+        /^patch.*\.mjs$/,
+        /^patch.*\.php$/,
+        /^tmp.*\.js$/,
+        /^tmp.*\.mjs$/,
+        /^tmp.*\.php$/,
+        /\.tmp$/,
+        /\.fixed$/,
+        /^add-.*\.php$/
+    ];
     const found = files.filter(f => forbidden.some(regex => regex.test(f)));
     if (found.length > 0) {
         throw new Error(`Temporary artifacts found: ${found.join(', ')}`);
@@ -95,7 +105,34 @@ checkInvariant("Mobile Workspace Nav Grid & Accessibility", () => {
 checkInvariant("Touch Targets", () => {
     if (!listSrc.match(/min-h-\[44px\]/)) throw new Error("Missing touch target for list inputs/buttons");
     if (!navSrc.match(/min-h-\[44px\]/)) throw new Error("Missing touch target for nav links");
-    if (!detailSrc.match(/min-w-10 min-h-10/)) throw new Error("Missing touch target for detail back button");
+});
+
+checkInvariant("Successful Member Detail Mobile Presentation", () => {
+    const parts = detailSrc.split('if (error || !member)');
+    if (parts.length < 2) throw new Error("Could not find error/member branch to isolate successful render");
+    const successSrc = parts[1];
+
+    if (!successSrc.match(/<h1[^>]*>[^<]*\{member\.first_name\}\s+\{member\.last_name\}[^<]*<\/h1>/)) {
+        throw new Error("Missing member name as h1 in successful render");
+    }
+    
+    const backLinkRegex = /<Link[^>]+to="\/admin\/my-members"[^>]*>/;
+    const backLinkMatch = successSrc.match(backLinkRegex);
+    if (!backLinkMatch) throw new Error("Missing successful back link");
+    
+    if (!backLinkMatch[0].includes('aria-label="Üye listesine dön"')) {
+        throw new Error("Missing aria-label on successful back link");
+    }
+    if (!backLinkMatch[0].includes('min-w-10') || !backLinkMatch[0].includes('min-h-10')) {
+        throw new Error("Successful back link is not touch safe");
+    }
+
+    if (!successSrc.includes('space-y-4 lg:space-y-6')) throw new Error("Missing successful root compact mobile spacing");
+    if (!successSrc.includes('p-4 lg:p-6')) throw new Error("Missing successful cards p-4 + desktop spacing");
+    if (!successSrc.includes('grid-cols-1 sm:grid-cols-2')) throw new Error("Missing membership grid base grid-cols-1 + responsive two-column");
+    if (!successSrc.includes('<TrainerMemberWorkspaceNav memberId={member.id} active="member" />')) {
+        throw new Error("TrainerMemberWorkspaceNav active member missing or changed in successful render");
+    }
 });
 
 console.log("✅ All F.19D.1 Mobile Member Workspace checks passed!");

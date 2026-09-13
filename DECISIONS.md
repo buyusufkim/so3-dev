@@ -159,3 +159,11 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no new appointment API
 * modals receive responsive presentation-only improvements
 * request generation/abort safety preserved
+
+## F.19D.1 Trainer Mobile Member Workspace Entry & Navigation
+* canonical `/admin/my-members` retained
+* mobile member list uses cards, desktop table retained
+* shared member workspace navigation is mobile-first three-tab navigation
+* member detail responsive optimization is presentation-only
+* member/progress/program API contracts unchanged
+* no new mutations
