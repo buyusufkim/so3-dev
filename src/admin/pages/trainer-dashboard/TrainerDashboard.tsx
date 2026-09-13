@@ -145,6 +145,7 @@ export function TrainerDashboard() {
         <h3 className="text-lg font-semibold text-white">Yükleme Başarısız</h3>
         <p className="text-sm text-white/60">{error}</p>
         <button
+          type="button"
           onClick={() => setRefreshKey((k) => k + 1)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#851C35] hover:bg-[#a02240] text-white text-sm font-medium rounded transition"
         >
@@ -166,9 +167,9 @@ export function TrainerDashboard() {
   return (
     <div className="flex flex-col space-y-5 lg:space-y-8 lg:block">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 order-1 lg:order-none">
         <div>
-          <h2 className="text-2xl font-bold text-white">Eğitmen Paneli</h2>
+          <h1 className="text-2xl font-bold text-white">Eğitmen Paneli</h1>
           <p className="text-white/50 text-sm mt-1">
             Hoş geldin, {data.trainer.display_name}.
           </p>
@@ -184,49 +185,49 @@ export function TrainerDashboard() {
       </div>
 
       {/* Member Metrics */}
-      <div>
+      <div className="order-3 lg:order-none">
         <div className="flex items-center gap-2 mb-3">
           <Users className="w-4 h-4 text-[#851C35]" />
           <h3 className="text-sm font-semibold uppercase tracking-wider text-white/70">Üye Durumu</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-5">
-            <div className="text-xs uppercase tracking-wider text-white/50 font-medium">Toplam Üye</div>
-            <div className="text-3xl font-bold text-white mt-2">{data.members.total}</div>
+        <div className="grid grid-cols-3 gap-2 lg:gap-4">
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-5 flex flex-col justify-center items-center lg:items-start text-center lg:text-left">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-white/50 font-medium leading-tight">Toplam</div>
+            <div className="text-xl lg:text-3xl font-bold text-white mt-1 lg:mt-2">{data.members.total}</div>
           </div>
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-5">
-            <div className="text-xs uppercase tracking-wider text-green-400/80 font-medium">Aktif Üye</div>
-            <div className="text-3xl font-bold text-green-400 mt-2">{data.members.active}</div>
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-5 flex flex-col justify-center items-center lg:items-start text-center lg:text-left">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-green-400/80 font-medium leading-tight">Aktif</div>
+            <div className="text-xl lg:text-3xl font-bold text-green-400 mt-1 lg:mt-2">{data.members.active}</div>
           </div>
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-5">
-            <div className="text-xs uppercase tracking-wider text-red-400/80 font-medium">Pasif Üye</div>
-            <div className="text-3xl font-bold text-red-400 mt-2">{data.members.inactive}</div>
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-5 flex flex-col justify-center items-center lg:items-start text-center lg:text-left">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-red-400/80 font-medium leading-tight">Pasif</div>
+            <div className="text-xl lg:text-3xl font-bold text-red-400 mt-1 lg:mt-2">{data.members.inactive}</div>
           </div>
         </div>
       </div>
 
       {/* Training Program Metrics */}
-      <div>
+      <div className="order-4 lg:order-none">
         <div className="flex items-center gap-2 mb-3">
           <Dumbbell className="w-4 h-4 text-[#851C35]" />
           <h3 className="text-sm font-semibold uppercase tracking-wider text-white/70">Antrenman Programları</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-4">
-            <div className="text-xs uppercase tracking-wider text-white/50 font-medium">Toplam Program</div>
-            <div className="text-2xl font-bold text-white mt-1">{data.training_programs.total}</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-4">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-white/50 font-medium leading-tight">Toplam Program</div>
+            <div className="text-lg lg:text-2xl font-bold text-white mt-1">{data.training_programs.total}</div>
           </div>
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-4">
-            <div className="text-xs uppercase tracking-wider text-green-400/80 font-medium">Aktif</div>
-            <div className="text-2xl font-bold text-green-400 mt-1">{data.training_programs.active}</div>
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-4">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-green-400/80 font-medium leading-tight">Aktif</div>
+            <div className="text-lg lg:text-2xl font-bold text-green-400 mt-1">{data.training_programs.active}</div>
           </div>
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-4">
-            <div className="text-xs uppercase tracking-wider text-amber-400/80 font-medium">Taslak</div>
-            <div className="text-2xl font-bold text-amber-400 mt-1">{data.training_programs.draft}</div>
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-4">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-amber-400/80 font-medium leading-tight">Taslak</div>
+            <div className="text-lg lg:text-2xl font-bold text-amber-400 mt-1">{data.training_programs.draft}</div>
           </div>
-          <div className="bg-[#121212] border border-white/10 rounded-lg p-4">
-            <div className="text-xs uppercase tracking-wider text-white/40 font-medium">Arşiv</div>
-            <div className="text-2xl font-bold text-white/60 mt-1">{data.training_programs.archived}</div>
+          <div className="bg-[#121212] border border-white/10 rounded-lg p-3 lg:p-4">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-white/40 font-medium leading-tight">Arşiv</div>
+            <div className="text-lg lg:text-2xl font-bold text-white/60 mt-1">{data.training_programs.archived}</div>
           </div>
         </div>
       </div>

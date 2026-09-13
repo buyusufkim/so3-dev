@@ -144,3 +144,8 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * recent members remain fully accessible
 * no appointment preview or notification invention
 * desktop information scope preserved
+
+## F.19B Trainer Dashboard Mobile Density Repair
+* true mobile grid implementations (grid-cols-3 and grid-cols-2 lg:grid-cols-4)
+* true mobile semantic ordering (order-1 to order-5)
+* verifier non-mutating check

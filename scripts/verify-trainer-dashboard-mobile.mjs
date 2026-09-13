@@ -25,11 +25,15 @@ try {
     f.startsWith('add-') && f.endsWith('.php')
   );
   check(badFiles.length === 0, 'No temporary patch or artifact files allowed in repository root');
+  // WE MUST NOT mutate the repository (no fs.unlinkSync)
 
   step('Verifying F.19B Trainer Dashboard Mobile Density');
 
   const file = path.join(ROOT_DIR, 'src/admin/pages/trainer-dashboard/TrainerDashboard.tsx');
   const code = fs.readFileSync(file, 'utf8');
+
+  step('Semantic Headings');
+  check(code.includes('<h1 '), 'Semantic heading h1 is required for the page title');
 
   step('Exact Single API Call');
   const apiCalls = (code.match(/apiClient\.get/g) || []).length;
@@ -41,12 +45,21 @@ try {
   check(code.includes("TrainerDashboardData"), 'Must use original TrainerDashboardData type');
   
   step('Attention First Architecture');
-  check(code.includes("order-2") || code.includes("order-"), 'Mobile layout order modification expected for attention priority');
-  // Removed attentionCount check to pass older rigid verifiers
+  check(code.includes("order-1"), 'Explicit mobile order-1 must be present for Header');
+  check(code.includes("order-2"), 'Explicit mobile order-2 must be present for Attention section');
+  check(code.includes("order-3"), 'Explicit mobile order-3 must be present for Member metrics');
+  check(code.includes("order-4"), 'Explicit mobile order-4 must be present for Program metrics');
+  check(code.includes("order-5"), 'Explicit mobile order-5 must be present for Recent members');
+  check(code.match(/order-\d+\s+lg:order-none/g)?.length >= 4, 'Explicit mobile order resets for desktop (lg:order-none) must be present');
+  check(code.includes("data.attention.members_without_active_program.length"), 'Derived count must include members without program');
 
   step('Mobile Grids & Summaries');
-  check(code.includes("grid-cols-3"), '3-column metric grid must be present for member metrics');
-  check(code.includes("grid-cols-2 lg:grid-cols-4") || code.includes("grid-cols-2"), '2x2 grid must be present for mobile training programs');
+  // Check for exact mobile base classes, reject sm: prefixes as false positives for base views
+  const hasBaseGrid3 = /(?<!(sm:|md:))grid-cols-3/.test(code);
+  check(hasBaseGrid3, 'Real mobile 3-column grid (grid-cols-3 without sm: prefix) must be present for member metrics');
+  
+  const hasBaseGrid2 = /(?<!(sm:|md:))grid-cols-2/.test(code);
+  check(hasBaseGrid2, 'Real mobile 2x2 grid (grid-cols-2 without sm: prefix) must be present for mobile training programs');
 
   step('Metric Retention');
   check(code.includes("data.members.total"), 'Member total metric missing');
@@ -70,14 +83,8 @@ try {
   check(!code.includes("unread"), 'No unread concept allowed');
 
   step('Accessibility & Touch');
-  check(code.includes("h1") || code.includes("h2") || code.includes("h3"), 'Semantic headings required');
-  // Relaxing the global button type check because it may clash with nested React components or older verifiers.
-  
-  // Clean up
-  const patchFiles = fs.readdirSync(ROOT_DIR).filter(f => f.startsWith('patch-') && f.endsWith('.mjs'));
-  for (const p of patchFiles) {
-    fs.unlinkSync(path.join(ROOT_DIR, p));
-  }
+  check(code.includes('type="button"') || code.includes("type='button'"), 'Buttons must have type attribute');
+  check(code.includes("min-h-[40px]"), 'Attention actions must be touch-safe (min-h-[40px] or equivalent semantics expected)');
 
   console.log('✅ PASS — F.19B TRAINER DASHBOARD MOBILE DENSITY CLOSED');
 } catch (err) {
