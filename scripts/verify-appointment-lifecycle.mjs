@@ -111,7 +111,28 @@ function getHandlers(controllerSrc) {
 }
 
 function verifyNamespaceCapabilityMatrix(indexSrc) {
+    // 1. Forbid public and members
     if (indexSrc.match(/['"]\/api\/(public|members)\/appointments/)) {
+        throw new Error("Public/members appointment route found");
+    }
+
+    // 2. Exact canonical member GET route check
+    const canonicalMemberRouteRegex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'GET'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
+    const match = indexSrc.match(canonicalMemberRouteRegex);
+    if (!match) {
+        throw new Error("Missing exact canonical GET /api/member/appointments route block");
+    }
+    
+    const block = match[1];
+    if (!block.includes("require_once __DIR__ . '/controllers/MemberPortalController.php';") || 
+        (!block.includes("new \\Controllers\\MemberPortalController()") && !block.includes("new \Controllers\MemberPortalController()")) || 
+        !block.includes("->getAppointments();")) {
+        throw new Error("Canonical GET /api/member/appointments route block must use MemberPortalController->getAppointments()");
+    }
+
+    // 3. Forbid any other /api/member/appointments usage
+    const maskedIndexSrc = indexSrc.replace(canonicalMemberRouteRegex, "");
+    if (maskedIndexSrc.match(/['"]\/api\/member\/appointments/)) {
         throw new Error("Public/member appointment route found");
     }
 
@@ -683,6 +704,16 @@ checkInvariant("Negative: TRAINER OWN-READ SCOPE REMOVAL", () => {
 
 checkInvariant("Negative: PUBLIC APPOINTMENT ROUTE INJECTED", () => {
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "'/api/public/appointments' => function() {}, '/api/public/events'")));
+});
+checkInvariant("Negative: MEMBERS APPOINTMENT ROUTE INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "'/api/members/appointments' => function() {}, '/api/public/events'")));
+});
+checkInvariant("Negative: MEMBER MUTATION INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "'/api/member/appointments' => function() {}, '/api/public/events'")));
+});
+checkInvariant("Negative: CANONICAL MEMBER GET REMOVED", () => {
+    const regex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'GET'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(regex, "")));
 });
 checkInvariant("Negative: ADMIN CANCEL CALLING RESCHEDULE", () => {
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/->cancelAdminAppointment\(\S+\)/, "->rescheduleAdminAppointment((int)$matches[1])")));
