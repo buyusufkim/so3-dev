@@ -125,17 +125,18 @@ export function TrainerTrainingProgramsList() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
           <Link
             to={`/admin/my-members/${memberId}`}
-            className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition text-white/70 hover:text-white"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition text-white/70 hover:text-white shrink-0"
+            aria-label="Üye detayına dön"
             title="Üye Detayına Dön"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Antrenman Programları</h1>
-            <p className="text-white/50 text-sm mt-1">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">Antrenman Programları</h1>
+            <p className="text-white/50 text-xs sm:text-sm mt-0.5 truncate">
               Üyenize ait antrenman programları listesi
             </p>
           </div>
@@ -143,7 +144,7 @@ export function TrainerTrainingProgramsList() {
 
         <Link
           to={`/admin/my-members/${memberId}/training-programs/new`}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition shrink-0"
+          className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition shrink-0 shadow-sm"
         >
           <Plus className="w-4 h-4" />
           Yeni Program
@@ -152,13 +153,13 @@ export function TrainerTrainingProgramsList() {
 
       <TrainerMemberWorkspaceNav memberId={memberId} active="programs" />
 
-      <div className="flex flex-wrap gap-4 bg-[#121212] p-4 rounded-lg border border-white/10">
-        <div className="space-y-1">
-          <label className="text-xs text-white/50 font-medium uppercase">Durum</label>
+      <div className="flex flex-wrap gap-4 bg-[#121212] p-4 rounded-xl border border-white/10">
+        <div className="space-y-1.5 w-full sm:w-64">
+          <label className="text-xs text-white/50 font-medium uppercase tracking-wider">Durum</label>
           <select
             value={statusFilter}
             onChange={(e) => handleStatusChange(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-white/30"
+            className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
           >
             <option value="all">Tümü</option>
             <option value="draft">Taslak</option>
@@ -169,18 +170,58 @@ export function TrainerTrainingProgramsList() {
       </div>
 
       {error ? (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded text-sm">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm">
           {error}
         </div>
       ) : loading ? (
-        <div className="text-white/50">Yükleniyor...</div>
+        <div className="text-white/50 p-4">Yükleniyor...</div>
       ) : items.length === 0 ? (
-        <div className="text-center py-12 bg-[#121212] border border-white/10 rounded-lg">
-          <p className="text-white/50">Kayıt bulunamadı.</p>
+        <div className="text-center py-12 bg-[#121212] border border-white/10 rounded-xl">
+          <p className="text-white/50 text-sm">Kayıt bulunamadı.</p>
         </div>
       ) : (
-        <div className="bg-[#121212] border border-white/10 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden shadow-sm">
+          {/* Mobile Cards (< lg) */}
+          <div className="lg:hidden divide-y divide-white/10">
+            {items.map((item) => (
+              <Link
+                key={item.id}
+                to={`/admin/my-members/${memberId}/training-programs/${item.id}`}
+                className="block p-4 hover:bg-white/[0.03] transition space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-white text-base leading-snug line-clamp-2">
+                    {item.title}
+                  </h3>
+                  <div className="shrink-0 pt-0.5">
+                    {getStatusBadge(item.status)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-white/70 bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Başlangıç</span>
+                    <span className="mt-0.5 block font-medium">{item.start_date || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Bitiş</span>
+                    <span className="mt-0.5 block font-medium">{item.end_date || "-"}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-white/50 pt-1">
+                  <span>Oluşturulma: {new Date(item.created_at).toLocaleDateString("tr-TR")}</span>
+                  <span className="inline-flex items-center gap-1 text-white font-medium">
+                    <Edit2 className="w-3.5 h-3.5" />
+                    Düzenle
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop Table (>= lg) */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-white/5 border-b border-white/10">
                 <tr>
@@ -205,7 +246,7 @@ export function TrainerTrainingProgramsList() {
                     <td className="px-4 py-3 text-right">
                       <Link
                         to={`/admin/my-members/${memberId}/training-programs/${item.id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 text-white rounded text-xs font-medium transition"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded text-xs font-medium transition"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         Düzenle
@@ -218,23 +259,25 @@ export function TrainerTrainingProgramsList() {
           </div>
 
           {lastPage > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 text-sm">
-              <span className="text-white/50">
+            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-white/10 gap-3 text-sm">
+              <span className="text-white/50 text-xs sm:text-sm text-center sm:text-left">
                 Toplam {total} kayıttan {(page - 1) * perPage + 1}-
                 {Math.min(page * perPage, total)} arası gösteriliyor
               </span>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
+                  type="button"
                   disabled={page === 1}
                   onClick={() => setPage((p) => p - 1)}
-                  className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs"
+                  className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition text-center"
                 >
                   Önceki
                 </button>
                 <button
+                  type="button"
                   disabled={page === lastPage}
                   onClick={() => setPage((p) => p + 1)}
-                  className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs"
+                  className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition text-center"
                 >
                   Sonraki
                 </button>

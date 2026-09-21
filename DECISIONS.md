@@ -177,3 +177,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * all existing backend contracts, changed-only PATCH semantics, and submission safety locks preserved
 * zero business mutation or schema changes
 
+## F.19D.3 Trainer Training Programs Mobile Workflow
+* canonical routes `/admin/my-members/:memberId/training-programs`, `.../new`, `.../:programId` retained
+* training programs list adopts mobile card layout (<lg) while retaining desktop table (lg+)
+* whole-card navigation on mobile with touch-safe targets (min-h-[44px])
+* training program editor uses mobile-first responsive density, touch-safe form inputs, and semantic h1
+* unsaved changes guard (`useBlocker`, `beforeunload`) and submission safety locks strictly preserved
+* exercises panel adopts mobile card presentation (<lg) and preserves desktop table (lg+) with full row/button IDs
+* exercise editor modal implements accessible bottom-sheet layout with dynamic viewport-safe height (`100dvh`)
+* strict API namespace isolation (`/api/trainer/*`), soft-archive on programs vs hard-delete on exercises unchanged
+* zero backend or database migration changes
+
+

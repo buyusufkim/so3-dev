@@ -324,31 +324,33 @@ export function TrainerTrainingProgramEditor() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 hover:bg-white/10 rounded-full transition text-white/70 hover:text-white"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition text-white/70 hover:text-white shrink-0"
+            aria-label="Program listesine dön"
+            title="Program listesine dön"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h2 className="text-xl font-semibold mb-1">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">
               {isNew ? "Yeni Program Oluştur" : "Program Düzenle"}
-            </h2>
-            <p className="text-sm text-white/50">
+            </h1>
+            <p className="text-xs sm:text-sm text-white/50 mt-0.5 truncate">
               Antrenman programı detayları ve ayarları
             </p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           {!isNew && (
             <button
               type="button"
               onClick={handleArchive}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 text-sm font-medium rounded transition disabled:opacity-50"
+              className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 text-sm font-medium rounded-lg transition disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
               Programı Arşivle
@@ -358,7 +360,7 @@ export function TrainerTrainingProgramEditor() {
             type="submit"
             form="trainer-program-form"
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition disabled:opacity-50"
+            className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition disabled:opacity-50 shadow-sm"
           >
             <Save className="w-4 h-4" />
             {saving ? "Kaydediliyor..." : "Kaydet"}
@@ -367,13 +369,13 @@ export function TrainerTrainingProgramEditor() {
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded text-sm">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm">
           {error}
         </div>
       )}
 
       {successMessage && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded text-sm">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl text-sm">
           {successMessage}
         </div>
       )}
@@ -381,36 +383,34 @@ export function TrainerTrainingProgramEditor() {
       <form
         id="trainer-program-form"
         onSubmit={handleSubmit}
-        className="bg-[#121212] border border-white/10 rounded-lg p-6 space-y-8"
+        className="bg-[#121212] border border-white/10 rounded-xl p-4 sm:p-6 space-y-5 sm:space-y-6 shadow-sm"
       >
         {!isNew && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-white/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-white/10">
             <div className="space-y-1">
-              <span className="text-xs text-white/50 uppercase font-medium">Üye</span>
+              <span className="text-xs text-white/50 uppercase font-medium tracking-wider">Üye</span>
               <div className="text-sm font-medium">{memberInfo?.name || "-"}</div>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-white/50 uppercase font-medium">Eğitmen</span>
+              <span className="text-xs text-white/50 uppercase font-medium tracking-wider">Eğitmen</span>
               <div className="text-sm font-medium">{trainerInfo?.name || "-"}</div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Program Başlığı *</label>
-            <input
-              type="text"
-              required
-              value={formData.title}
-              onChange={(e) => handleFieldChange("title", e.target.value)}
-              placeholder="Örn: 4 Haftalık Güç ve Kondisyon Programı"
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
-            />
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Program Başlığı *</label>
+          <input
+            type="text"
+            required
+            value={formData.title}
+            onChange={(e) => handleFieldChange("title", e.target.value)}
+            placeholder="Örn: 4 Haftalık Güç ve Kondisyon Programı"
+            className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
+          />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Durum *</label>
             <select
@@ -420,7 +420,7 @@ export function TrainerTrainingProgramEditor() {
                   handleFieldChange("status", e.target.value);
                 }
               }}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+              className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
             >
               <option value="draft">Taslak</option>
               <option value="active">Aktif</option>
@@ -433,7 +433,7 @@ export function TrainerTrainingProgramEditor() {
               type="date"
               value={formData.start_date}
               onChange={(e) => handleFieldChange("start_date", e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+              className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
           <div className="space-y-2">
@@ -442,7 +442,7 @@ export function TrainerTrainingProgramEditor() {
               type="date"
               value={formData.end_date}
               onChange={(e) => handleFieldChange("end_date", e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+              className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
         </div>
@@ -450,10 +450,10 @@ export function TrainerTrainingProgramEditor() {
         <div className="space-y-2">
           <label className="text-sm font-medium">Notlar</label>
           <textarea
-            rows={5}
+            rows={4}
             value={formData.notes}
             onChange={(e) => handleFieldChange("notes", e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
+            className="w-full min-h-[100px] bg-white/5 border border-white/10 rounded-lg p-4 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
             placeholder="Program hakkında genel açıklamalar, hedefler veya özel notlar..."
           />
         </div>
@@ -462,7 +462,7 @@ export function TrainerTrainingProgramEditor() {
       {!isNew && canonicalProgramId ? (
         <TrainerProgramExercisesPanel programId={parseInt(canonicalProgramId, 10)} />
       ) : (
-        <div className="bg-[#121212] border border-white/10 rounded-lg p-6 text-center text-white/50 text-sm">
+        <div className="bg-[#121212] border border-white/10 rounded-xl p-6 text-center text-white/50 text-sm">
           Egzersiz eklemek için önce programı kaydedin.
         </div>
       )}

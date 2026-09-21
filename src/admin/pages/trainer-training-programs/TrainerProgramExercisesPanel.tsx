@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Pen, Trash2, Plus } from "lucide-react";
+import { Pen, Trash2, Plus, X } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
   TrainerProgramExercise,
@@ -309,13 +309,13 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
 
   return (
     <div id="trainer-program-exercises-panel" className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">Egzersizler</h3>
         <button
           id="btn-add-exercise"
           type="button"
           onClick={openNewModal}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition"
+          className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition shadow-sm shrink-0"
         >
           <Plus className="w-4 h-4" />
           Yeni Egzersiz
@@ -323,18 +323,85 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
       </div>
 
       {error && (
-        <div id="trainer-exercises-error" className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded text-sm">
+        <div id="trainer-exercises-error" className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm">
           {error}
         </div>
       )}
 
       {exercises.length === 0 ? (
-        <div id="trainer-exercises-empty" className="text-center py-8 text-white/50 border border-white/10 rounded-lg">
+        <div id="trainer-exercises-empty" className="text-center py-8 text-white/50 border border-white/10 rounded-xl">
           Henüz egzersiz eklenmemiş.
         </div>
       ) : (
-        <div id="trainer-exercises-table-container" className="bg-[#121212] border border-white/10 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+        <div id="trainer-exercises-table-container" className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden shadow-sm">
+          {/* Mobile Cards (< lg) */}
+          <div className="lg:hidden divide-y divide-white/10">
+            {exercises.map((ex) => (
+              <div key={ex.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className="shrink-0 px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
+                      #{ex.sort_order}
+                    </span>
+                    <h4 className="font-semibold text-white text-base leading-snug">
+                      {ex.exercise_name}
+                    </h4>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Set</span>
+                    <span className="mt-0.5 block text-white/80 font-medium">{ex.sets ?? "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Tekrar</span>
+                    <span className="mt-0.5 block text-white/80 font-medium">{ex.repetitions ?? "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Süre</span>
+                    <span className="mt-0.5 block text-white/80 font-medium">{ex.duration_seconds ? `${ex.duration_seconds} sn` : "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-white/40 block text-[10px] uppercase font-medium">Dinlenme</span>
+                    <span className="mt-0.5 block text-white/80 font-medium">{ex.rest_seconds !== null && ex.rest_seconds !== undefined ? `${ex.rest_seconds} sn` : "-"}</span>
+                  </div>
+                </div>
+
+                {ex.instructions && (
+                  <div className="text-xs text-white/60 bg-white/[0.01] p-2.5 rounded-lg border border-white/5">
+                    <span className="font-semibold text-white/80">Talimat: </span>
+                    <span>{ex.instructions}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(ex)}
+                    className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition"
+                    aria-label="Egzersizi Düzenle"
+                  >
+                    <Pen className="w-3.5 h-3.5" />
+                    Düzenle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(ex.id)}
+                    disabled={deletingId === ex.id}
+                    className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                    aria-label="Egzersizi Sil"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Sil
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table (>= lg) */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-white/5 border-b border-white/10">
                 <tr>
@@ -397,17 +464,34 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
       )}
 
       {isModalOpen && (
-        <div id="trainer-exercise-modal-backdrop" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div id="trainer-exercise-modal" className="bg-[#1a1a1a] border border-white/10 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-white/10">
-              <h3 className="text-xl font-semibold">
+        <div
+          id="trainer-exercise-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trainer-exercise-form-title"
+        >
+          <div
+            id="trainer-exercise-modal"
+            className="bg-[#1a1a1a] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[calc(100dvh-env(safe-area-inset-top))] sm:max-h-[calc(100dvh-2rem)] flex flex-col shadow-2xl overflow-hidden"
+          >
+            <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between shrink-0">
+              <h3 id="trainer-exercise-form-title" className="text-lg sm:text-xl font-semibold text-white truncate">
                 {editingId ? "Egzersizi Düzenle" : "Yeni Egzersiz Ekle"}
               </h3>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="p-2 -mr-2 text-white/50 hover:text-white rounded-lg transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Kapat"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
               {formError && (
-                <div id="trainer-exercise-form-error" className="mb-4 bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded text-sm">
+                <div id="trainer-exercise-form-error" className="mb-4 bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-lg text-sm">
                   {formError}
                 </div>
               )}
@@ -422,11 +506,11 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                     value={formData.exerciseName}
                     onChange={(e) => handleFieldChange("exerciseName", e.target.value)}
                     placeholder="Örn: Barbell Squat"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                    className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Set</label>
                     <input
@@ -435,7 +519,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                       value={formData.sets}
                       onChange={(e) => handleFieldChange("sets", e.target.value)}
                       placeholder="Örn: 3"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
@@ -446,12 +530,12 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                       value={formData.repetitions}
                       onChange={(e) => handleFieldChange("repetitions", e.target.value)}
                       placeholder="Örn: 10-12"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Süre (saniye)</label>
                     <input
@@ -460,7 +544,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                       value={formData.durationSeconds}
                       onChange={(e) => handleFieldChange("durationSeconds", e.target.value)}
                       placeholder="Örn: 60"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
@@ -471,7 +555,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                       value={formData.restSeconds}
                       onChange={(e) => handleFieldChange("restSeconds", e.target.value)}
                       placeholder="Örn: 30"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                     />
                   </div>
                 </div>
@@ -485,7 +569,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                       required
                       value={formData.sortOrder}
                       onChange={(e) => handleFieldChange("sortOrder", e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors"
+                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                     />
                   </div>
                 </div>
@@ -497,20 +581,20 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                     rows={3}
                     value={formData.instructions}
                     onChange={(e) => handleFieldChange("instructions", e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
+                    className="w-full min-h-[80px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
                     placeholder="Egzersiz hakkında notlar..."
                   />
                 </div>
               </form>
             </div>
 
-            <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+            <div className="p-4 sm:p-6 border-t border-white/10 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
               <button
                 id="btn-cancel-exercise"
                 type="button"
                 onClick={handleCloseModal}
                 disabled={formSaving}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded transition disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center justify-center"
               >
                 İptal
               </button>
@@ -519,7 +603,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                 type="submit"
                 form="trainer-exercise-form"
                 disabled={formSaving}
-                className="px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-white/90 transition disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition disabled:opacity-50 flex items-center justify-center shadow-sm"
               >
                 {formSaving ? "Kaydediliyor..." : "Kaydet"}
               </button>
