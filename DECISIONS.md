@@ -188,4 +188,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * strict API namespace isolation (`/api/trainer/*`), soft-archive on programs vs hard-delete on exercises unchanged
 * zero backend or database migration changes
 
+## F.20A Membership Renewal Watch Read Model Foundation
+* existing reception renew transaction remains canonical
+* membership_renewals remains append-only history
+* current renewal state derives from members membership dates
+* renewal-watch is GET-only and side-effect free
+* business date is Europe/Istanbul
+* active non-deleted members with non-null end date only
+* 14-day default configurable watch window
+* no notification persistence/delivery in F.20A
+
+
 
