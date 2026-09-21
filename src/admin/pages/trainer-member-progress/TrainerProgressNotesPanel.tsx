@@ -389,7 +389,9 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
           <button
             type="button"
             onClick={() => setActionError(null)}
-            className="text-red-400/60 hover:text-red-400 p-1"
+            className="min-h-10 min-w-10 sm:min-h-[44px] sm:min-w-[44px] flex items-center justify-center p-2 text-red-400/60 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition shrink-0"
+            title="Hata mesajını kapat"
+            aria-label="Hata mesajını kapat"
           >
             <X className="w-4 h-4" />
           </button>
@@ -407,7 +409,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
             <button
               type="button"
               onClick={() => handleFilterChange("active")}
-              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[44px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "active"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -418,7 +420,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
             <button
               type="button"
               onClick={() => handleFilterChange("deleted")}
-              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[44px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "deleted"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -429,7 +431,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
             <button
               type="button"
               onClick={() => handleFilterChange("all")}
-              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[44px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "all"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -529,7 +531,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                               type="button"
                               disabled={restoringId === n.id || archivingId !== null || isMutatingRef.current}
                               onClick={(e) => handleRestore(e, n.id)}
-                              className="min-h-[38px] sm:min-h-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                              className="min-h-[44px] sm:min-h-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
                               title="Gelişim Notunu Geri Yükle"
                               aria-label="Gelişim Notunu Geri Yükle"
                             >
@@ -592,7 +594,13 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
         </div>
 
         {/* Right 1 Col: Progress Note Detail Card */}
-        <div className={`lg:col-span-1 ${selectedNoteId ? "order-1 lg:order-2" : "order-2 lg:order-2"}`}>
+        <div
+          className={`lg:col-span-1 ${
+            selectedNoteId
+              ? "order-1 lg:order-2"
+              : "hidden lg:block order-2 lg:order-2"
+          }`}
+        >
           <div className="bg-[#121212] border border-white/10 rounded-xl p-4 sm:p-5 min-h-[220px] lg:min-h-[420px] lg:sticky lg:top-6">
             {!selectedNoteId ? (
               <div className="h-full min-h-[200px] lg:min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-4 sm:p-6 space-y-2">

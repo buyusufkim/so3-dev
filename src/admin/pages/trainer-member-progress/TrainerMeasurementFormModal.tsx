@@ -349,12 +349,13 @@ export function TrainerMeasurementFormModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="trainer-measurement-form-title"
     >
-      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-2xl flex flex-col max-h-[92vh] sm:max-h-[90vh] shadow-2xl overflow-hidden">
+      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-2xl flex flex-col max-h-[calc(100dvh-env(safe-area-inset-top))] sm:max-h-[calc(100dvh-2rem)] shadow-2xl overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10 bg-[#18181b]/50">
           <div className="min-w-0 flex-1 pr-2">
-            <h2 className="text-base sm:text-xl font-bold text-white truncate">
+            <h2 id="trainer-measurement-form-title" className="text-base sm:text-xl font-bold text-white truncate">
               {initialData ? "Ölçümü Düzenle" : "Yeni Ölçüm Kaydı"}
             </h2>
             <p className="text-xs text-white/50 mt-0.5 truncate">

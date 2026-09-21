@@ -171,9 +171,9 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 ## F.19D.2 Trainer Progress Mobile Actions
 * canonical `/admin/my-members/:memberId/progress` retained
 * 2-column grid mobile tab navigation between measurements and progress notes
-* measurements & progress notes list-detail layouts adopt responsive mobile order (detail above list when selected)
+* measurements & progress notes list-detail layouts adopt responsive mobile order (detail above list when selected; empty-detail placeholder hidden on mobile)
 * create/edit/archive/restore action buttons and pagination controls meet touch-safe standards (min-h-[44px])
-* measurement and progress note form modals upgraded to responsive mobile bottom sheets (`items-end sm:items-center`, `rounded-t-2xl sm:rounded-2xl`, `max-h-[92vh]`)
+* form modals use mobile bottom-sheet presentation with dynamic viewport-safe height
 * all existing backend contracts, changed-only PATCH semantics, and submission safety locks preserved
 * zero business mutation or schema changes
 

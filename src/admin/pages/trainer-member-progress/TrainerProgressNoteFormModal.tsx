@@ -229,12 +229,13 @@ export function TrainerProgressNoteFormModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="trainer-progress-note-form-title"
     >
-      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-xl max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-xl max-h-[calc(100dvh-env(safe-area-inset-top))] sm:max-h-[calc(100dvh-2rem)] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10 shrink-0">
           <div className="min-w-0 flex-1 pr-2">
-            <h3 className="text-base sm:text-lg font-bold text-white truncate">
+            <h3 id="trainer-progress-note-form-title" className="text-base sm:text-lg font-bold text-white truncate">
               {initialData ? "Gelişim Notunu Düzenle" : "Yeni Gelişim Notu"}
             </h3>
             <p className="text-xs text-white/50 mt-1 truncate">
