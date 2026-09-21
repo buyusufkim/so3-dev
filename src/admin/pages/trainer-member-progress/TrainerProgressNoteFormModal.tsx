@@ -225,15 +225,19 @@ export function TrainerProgressNoteFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#121212] border border-white/10 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-xl max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 shrink-0">
-          <div>
-            <h3 className="text-lg font-bold text-white">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10 shrink-0">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="text-base sm:text-lg font-bold text-white truncate">
               {initialData ? "Gelişim Notunu Düzenle" : "Yeni Gelişim Notu"}
             </h3>
-            <p className="text-xs text-white/50 mt-1">
+            <p className="text-xs text-white/50 mt-1 truncate">
               {initialData
                 ? "Gelişim notu kaydını ve tarihini güncelleyin."
                 : "Üyenin antrenman adaptasyonu ve gelişim sürecine ait not ekleyin."}
@@ -243,17 +247,18 @@ export function TrainerProgressNoteFormModal({
             type="button"
             disabled={saving}
             onClick={handleClose}
-            className="p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition disabled:opacity-50"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition disabled:opacity-50 shrink-0"
             title="Kapat"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 custom-scrollbar">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm">
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 sm:p-4 rounded-xl text-xs sm:text-sm">
               {error}
             </div>
           )}
@@ -272,7 +277,7 @@ export function TrainerProgressNoteFormModal({
                 setRecordedAt(e.target.value);
                 setIsDirty(true);
               }}
-              className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#851C35] disabled:opacity-50 transition"
+              className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl px-4 py-2.5 text-base sm:text-sm min-h-[44px] text-white focus:outline-none focus:border-[#851C35] disabled:opacity-50 transition"
             />
           </div>
 
@@ -287,7 +292,7 @@ export function TrainerProgressNoteFormModal({
               </span>
             </div>
             <textarea
-              rows={8}
+              rows={6}
               value={note}
               disabled={saving}
               onChange={(e) => {
@@ -295,18 +300,18 @@ export function TrainerProgressNoteFormModal({
                 setIsDirty(true);
               }}
               placeholder="Antrenman performansı, kondisyon seviyesi, form ve teknik geri bildirimler..."
-              className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#851C35] disabled:opacity-50 transition resize-y"
+              className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl p-4 text-base sm:text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#851C35] disabled:opacity-50 transition resize-y min-h-[140px]"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-white/10 flex items-center justify-end gap-3 shrink-0 bg-white/[0.01]">
+        <div className="p-3 sm:p-6 border-t border-white/10 flex items-center justify-end gap-2 sm:gap-3 shrink-0 bg-white/[0.01]">
           <button
             type="button"
             disabled={saving}
             onClick={handleClose}
-            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded-xl text-sm font-medium transition disabled:opacity-50"
+            className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded-xl text-xs sm:text-sm font-medium transition disabled:opacity-50 flex items-center justify-center"
           >
             İptal
           </button>
@@ -314,14 +319,14 @@ export function TrainerProgressNoteFormModal({
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2 bg-[#851C35] hover:bg-[#851C35]/90 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-[#851C35]/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-2 px-5 py-2 bg-[#851C35] hover:bg-[#851C35]/90 text-white rounded-xl text-xs sm:text-sm font-medium transition shadow-lg shadow-[#851C35]/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {saving ? "Kaydediliyor..." : initialData ? "Güncelle" : "Kaydet"}
+            <span>{saving ? "Kaydediliyor..." : initialData ? "Güncelle" : "Kaydet"}</span>
           </button>
         </div>
       </div>

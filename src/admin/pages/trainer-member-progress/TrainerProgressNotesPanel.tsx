@@ -397,17 +397,17 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
       )}
 
       {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-[#121212] border border-white/10 p-4 rounded-xl">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-white/40" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-white/40 mr-1">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 bg-[#121212] border border-white/10 p-3 sm:p-4 rounded-xl">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+          <Filter className="w-4 h-4 text-white/40 shrink-0" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-white/40 mr-1 hidden sm:inline">
             Filtrele:
           </span>
-          <div className="inline-flex rounded-lg bg-white/5 p-1 border border-white/5">
+          <div className="inline-flex rounded-lg bg-white/5 p-1 border border-white/5 flex-1 sm:flex-initial">
             <button
               type="button"
               onClick={() => handleFilterChange("active")}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "active"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -418,7 +418,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
             <button
               type="button"
               onClick={() => handleFilterChange("deleted")}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "deleted"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -429,7 +429,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
             <button
               type="button"
               onClick={() => handleFilterChange("all")}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+              className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                 deletedFilter === "all"
                   ? "bg-[#851C35] text-white shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/5"
@@ -440,25 +440,25 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
           </div>
         </div>
 
-        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="text-xs text-white/40">
-            Toplam <span className="text-white font-medium">{total}</span> kayıt listeleniyor
+        <div className="flex items-center gap-3 sm:gap-4 justify-between sm:justify-end">
+          <div className="text-xs text-white/40 truncate">
+            Toplam <span className="text-white font-medium">{total}</span> kayıt
           </div>
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0 min-h-[44px] sm:min-h-0"
           >
             <Plus className="w-4 h-4" />
-            Yeni Gelişim Notu
+            <span>Yeni Gelişim Notu</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Grid: List (2 cols) + Detail (1 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Left 2 Cols: Notes List */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={`lg:col-span-2 space-y-4 ${selectedNoteId ? "order-2 lg:order-1" : "order-1 lg:order-1"}`}>
           <div className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden min-h-[420px] flex flex-col justify-between">
             {loading ? (
               <div className="flex-1 flex flex-col items-center justify-center p-12 text-white/50 space-y-3">
@@ -476,7 +476,7 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                     setSelectedNoteId(null);
                     setDetail(null);
                   }}
-                  className="px-4 py-1.5 bg-white/10 hover:bg-white/15 text-white rounded-lg text-xs font-medium transition"
+                  className="px-4 py-1.5 bg-white/10 hover:bg-white/15 text-white rounded-lg text-xs font-medium transition min-h-[44px]"
                 >
                   Tekrar Dene
                 </button>
@@ -529,8 +529,9 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                               type="button"
                               disabled={restoringId === n.id || archivingId !== null || isMutatingRef.current}
                               onClick={(e) => handleRestore(e, n.id)}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded text-xs font-medium transition disabled:opacity-50"
+                              className="min-h-[38px] sm:min-h-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
                               title="Gelişim Notunu Geri Yükle"
+                              aria-label="Gelişim Notunu Geri Yükle"
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${restoringId === n.id ? "animate-spin" : ""}`} />
                               <span>{restoringId === n.id ? "Geri Yükleniyor..." : "Geri Yükle"}</span>
@@ -567,8 +568,9 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                     type="button"
                     disabled={page <= 1}
                     onClick={() => handlePageChange(Math.max(1, page - 1))}
-                    className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center"
                     title="Önceki Sayfa"
+                    aria-label="Önceki Sayfa"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -577,8 +579,9 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                     type="button"
                     disabled={page >= lastPage}
                     onClick={() => handlePageChange(Math.min(lastPage, page + 1))}
-                    className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center"
                     title="Sonraki Sayfa"
+                    aria-label="Sonraki Sayfa"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -589,18 +592,18 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
         </div>
 
         {/* Right 1 Col: Progress Note Detail Card */}
-        <div className="lg:col-span-1">
-          <div className="bg-[#121212] border border-white/10 rounded-xl p-5 min-h-[420px] sticky top-6">
+        <div className={`lg:col-span-1 ${selectedNoteId ? "order-1 lg:order-2" : "order-2 lg:order-2"}`}>
+          <div className="bg-[#121212] border border-white/10 rounded-xl p-4 sm:p-5 min-h-[220px] lg:min-h-[420px] lg:sticky lg:top-6">
             {!selectedNoteId ? (
-              <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-6 space-y-2">
+              <div className="h-full min-h-[200px] lg:min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-4 sm:p-6 space-y-2">
                 <FileText className="w-8 h-8 opacity-25 text-[#851C35]" />
                 <p className="font-medium text-white/60">Gelişim Notu Detayı</p>
                 <p className="leading-relaxed">
-                  Detaylı not içeriğini görüntülemek için sol taraftaki listeden aktif bir nota tıklayın.
+                  Detaylı not içeriğini görüntülemek için listeden aktif bir nota tıklayın.
                 </p>
               </div>
             ) : detailLoading ? (
-              <div className="h-full min-h-[380px] flex flex-col items-center justify-center p-8 text-white/50">
+              <div className="h-full min-h-[200px] lg:min-h-[380px] flex flex-col items-center justify-center p-6 sm:p-8 text-white/50">
                 <div className="w-7 h-7 border-2 border-[#851C35]/30 border-t-[#851C35] rounded-full animate-spin mb-3" />
                 <span className="text-xs">Gelişim notu detayı alınıyor...</span>
               </div>
@@ -611,7 +614,8 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                   <button
                     type="button"
                     onClick={handleCloseDetail}
-                    className="p-1 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
+                    aria-label="Detayı Kapat"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -621,48 +625,49 @@ export function TrainerProgressNotesPanel({ memberId }: TrainerProgressNotesPane
                 </div>
               </div>
             ) : detail ? (
-              <div className="space-y-5">
+              <div className="space-y-4 sm:space-y-5">
                 {/* Detail Card Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="text-xs text-white/50 font-medium">Gelişim Notu</div>
-                    <h4 className="text-base font-bold text-white mt-0.5">
+                    <h4 className="text-base font-bold text-white mt-0.5 truncate">
                       {formatDateTime(detail.recorded_at)}
                     </h4>
-                    <div className="text-[11px] text-white/40 font-mono mt-0.5">
+                    <div className="text-[11px] text-white/40 font-mono mt-0.5 truncate">
                       {detail.uuid}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0">
                     {detail.deleted_at === null && (
                       <>
                         <button
                           type="button"
                           disabled={archivingId === detail.id || isMutatingRef.current}
                           onClick={() => handleOpenEdit(detail)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition disabled:opacity-50"
+                          className="min-h-[44px] flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded-lg border border-white/10 text-xs font-medium transition disabled:opacity-50"
                           title="Gelişim Notunu Düzenle"
                         >
                           <Pencil className="w-3.5 h-3.5" />
-                          Düzenle
+                          <span>Düzenle</span>
                         </button>
                         <button
                           type="button"
                           disabled={archivingId === detail.id || isMutatingRef.current}
                           onClick={() => handleArchive(detail.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded border border-red-500/20 text-xs font-medium transition disabled:opacity-50"
+                          className="min-h-[44px] flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg border border-red-500/20 text-xs font-medium transition disabled:opacity-50"
                           title="Gelişim Notunu Arşivle"
                         >
                           <Archive className="w-3.5 h-3.5" />
-                          {archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}
+                          <span>{archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}</span>
                         </button>
                       </>
                     )}
                     <button
                       type="button"
                       onClick={handleCloseDetail}
-                      className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
                       title="Kapat"
+                      aria-label="Gelişim Notu Detayını Kapat"
                     >
                       <X className="w-4 h-4" />
                     </button>

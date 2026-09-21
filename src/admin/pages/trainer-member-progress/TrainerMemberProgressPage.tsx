@@ -457,15 +457,16 @@ export function TrainerMemberProgressPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
+      <div className="space-y-4 lg:space-y-6">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link
             to={isValidMemberId ? `/admin/my-members/${memberId}` : "/admin/my-members"}
-            className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition"
+            className="min-h-[44px] min-w-[44px] p-2.5 sm:p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition flex items-center justify-center shrink-0"
+            aria-label="Üye Detayına Dön"
           >
             <ArrowLeft className="w-4 h-4 text-white/70" />
           </Link>
-          <h2 className="text-2xl font-bold">Gelişim Takibi Yükleniyor...</h2>
+          <h2 className="text-xl sm:text-2xl font-bold">Gelişim Takibi Yükleniyor...</h2>
         </div>
       </div>
     );
@@ -473,23 +474,24 @@ export function TrainerMemberProgressPage() {
 
   if (error || !member) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="space-y-4 lg:space-y-6">
+        <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
           <Link
             to={isValidMemberId ? `/admin/my-members/${memberId}` : "/admin/my-members"}
-            className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition"
+            className="min-h-[44px] min-w-[44px] p-2.5 sm:p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition flex items-center justify-center shrink-0"
+            aria-label="Üye Detayına Dön"
           >
             <ArrowLeft className="w-4 h-4 text-white/70" />
           </Link>
-          <h2 className="text-2xl font-bold">Hata</h2>
+          <h2 className="text-xl sm:text-2xl font-bold">Hata</h2>
         </div>
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-lg text-sm text-center">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 sm:p-6 rounded-lg text-sm text-center">
           {error || "Üye bulunamadı."}
         </div>
         <div className="flex justify-center">
           <Link
             to={isValidMemberId ? `/admin/my-members/${memberId}` : "/admin/my-members"}
-            className="text-[#851C35] hover:text-[#a02240] text-sm font-medium transition"
+            className="min-h-[44px] inline-flex items-center text-[#851C35] hover:text-[#a02240] text-sm font-medium transition"
           >
             {isValidMemberId ? "Üye Detayına Dön" : "Üye Listesine Dön"}
           </Link>
@@ -499,24 +501,25 @@ export function TrainerMemberProgressPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 lg:space-y-6 max-w-7xl mx-auto">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full sm:w-auto">
           <Link
             to={`/admin/my-members/${member.id}`}
-            className="p-2 bg-[#121212] border border-white/10 rounded hover:bg-white/5 transition"
+            className="min-h-[44px] min-w-[44px] p-2.5 sm:p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5 transition shrink-0 flex items-center justify-center"
             title="Üye Detayına Dön"
+            aria-label="Üye Detayına Dön"
           >
             <ArrowLeft className="w-4 h-4 text-white/70" />
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h2 className="text-lg sm:text-2xl font-bold text-white truncate">
                 {member.first_name} {member.last_name}
               </h2>
               <span
-                className={`inline-flex px-2.5 py-0.5 rounded text-xs font-medium ${
+                className={`inline-flex px-2 sm:px-2.5 py-0.5 rounded text-[11px] sm:text-xs font-medium shrink-0 ${
                   member.status === "active"
                     ? "bg-green-500/20 text-green-400 border border-green-500/30"
                     : "bg-red-500/20 text-red-400 border border-red-500/30"
@@ -525,7 +528,7 @@ export function TrainerMemberProgressPage() {
                 {member.status === "active" ? "Aktif" : "Pasif"}
               </span>
             </div>
-            <div className="text-sm text-white/50 font-mono mt-0.5">
+            <div className="text-xs text-white/50 font-mono mt-0.5 truncate">
               Gelişim Takibi Workspace • {member.uuid}
             </div>
           </div>
@@ -535,44 +538,52 @@ export function TrainerMemberProgressPage() {
       {/* Workspace Navigation */}
       <TrainerMemberWorkspaceNav memberId={member.id} active="progress" />
 
-      {/* Navigation Tabs */}
-      <div className="bg-[#121212] border border-white/10 rounded-xl p-2 flex flex-wrap gap-2">
+      {/* Navigation Tabs - Mobile 2-column Grid */}
+      <div
+        className="bg-[#121212] border border-white/10 rounded-xl p-1.5 sm:p-2 grid grid-cols-2 gap-1.5 sm:gap-2"
+        role="tablist"
+        aria-label="Gelişim Takibi Sekmeleri"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "measurements"}
           onClick={() => setActiveTab("measurements")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
+          className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition min-h-[44px] ${
             activeTab === "measurements"
               ? "bg-[#851C35] text-white shadow-sm"
               : "text-white/60 hover:text-white hover:bg-white/5"
           }`}
         >
-          <Activity className="w-4 h-4" />
-          Ölçümler
+          <Activity className="w-4 h-4 shrink-0" />
+          <span>Ölçümler</span>
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "notes"}
           onClick={() => setActiveTab("notes")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
+          className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition min-h-[44px] ${
             activeTab === "notes"
               ? "bg-[#851C35] text-white shadow-sm"
               : "text-white/60 hover:text-white hover:bg-white/5"
           }`}
         >
-          <FileText className="w-4 h-4" />
-          Gelişim Notları
+          <FileText className="w-4 h-4 shrink-0" />
+          <span>Gelişim Notları</span>
         </button>
       </div>
 
       {/* Tab Content: Measurements Read-Only View */}
       {activeTab === "measurements" && (
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6">
           {/* Controls Bar: Filter, New Button & Info */}
-          <div className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-            <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-lg border border-white/5">
+          <div className="bg-[#121212] border border-white/10 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-white/5 p-1 rounded-lg border border-white/5 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => handleFilterChange("active")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                   deletedFilter === "active"
                     ? "bg-[#851C35] text-white shadow-sm"
                     : "text-white/60 hover:text-white hover:bg-white/5"
@@ -583,7 +594,7 @@ export function TrainerMemberProgressPage() {
               <button
                 type="button"
                 onClick={() => handleFilterChange("deleted")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                   deletedFilter === "deleted"
                     ? "bg-[#851C35] text-white shadow-sm"
                     : "text-white/60 hover:text-white hover:bg-white/5"
@@ -594,7 +605,7 @@ export function TrainerMemberProgressPage() {
               <button
                 type="button"
                 onClick={() => handleFilterChange("all")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium transition text-center whitespace-nowrap min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                   deletedFilter === "all"
                     ? "bg-[#851C35] text-white shadow-sm"
                     : "text-white/60 hover:text-white hover:bg-white/5"
@@ -604,17 +615,17 @@ export function TrainerMemberProgressPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-              <div className="text-xs text-white/50">
-                Toplam <span className="text-white font-medium">{total}</span> ölçüm kaydı
+            <div className="flex items-center gap-3 sm:gap-4 justify-between sm:justify-end">
+              <div className="text-xs text-white/50 truncate">
+                Toplam <span className="text-white font-medium">{total}</span> ölçüm
               </div>
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0"
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-1.5 bg-[#851C35] hover:bg-[#6b162b] text-white text-xs font-semibold rounded-lg shadow-sm transition shrink-0 min-h-[44px] sm:min-h-0"
               >
                 <Plus className="w-4 h-4" />
-                Yeni Ölçüm
+                <span>Yeni Ölçüm</span>
               </button>
             </div>
           </div>
@@ -640,9 +651,9 @@ export function TrainerMemberProgressPage() {
           )}
 
           {/* List + Detail Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
             {/* Left 2 Cols: Measurements List */}
-            <div className="lg:col-span-2 flex flex-col">
+            <div className={`lg:col-span-2 flex flex-col ${selectedMeasurementId ? "order-2 lg:order-1" : "order-1 lg:order-1"}`}>
               <div className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden flex flex-col min-h-[420px]">
                 {measurementsLoading ? (
                   <div className="flex-1 flex flex-col items-center justify-center p-12 text-white/50">
@@ -692,11 +703,12 @@ export function TrainerMemberProgressPage() {
                                   type="button"
                                   disabled={isMutatingRef.current || restoringId !== null}
                                   onClick={(e) => handleRestore(e, m.id)}
-                                  className="flex items-center gap-1.5 px-2 py-0.5 bg-[#851C35]/20 hover:bg-[#851C35]/40 text-white rounded border border-[#851C35]/40 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="min-h-[38px] sm:min-h-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:py-0.5 bg-[#851C35]/20 hover:bg-[#851C35]/40 text-white rounded border border-[#851C35]/40 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Ölçümü Geri Yükle"
+                                  aria-label="Ölçümü Geri Yükle"
                                 >
                                   <RotateCcw className="w-3 h-3 text-[#851C35]" />
-                                  {restoringId === m.id ? "Geri Yükleniyor..." : "Geri Yükle"}
+                                  <span>{restoringId === m.id ? "Geri Yükleniyor..." : "Geri Yükle"}</span>
                                 </button>
                               </div>
                             )}
@@ -763,8 +775,9 @@ export function TrainerMemberProgressPage() {
                         type="button"
                         disabled={page <= 1}
                         onClick={() => handlePageChange(page - 1)}
-                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
+                        className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition flex items-center justify-center"
                         title="Önceki Sayfa"
+                        aria-label="Önceki Sayfa"
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
@@ -772,8 +785,9 @@ export function TrainerMemberProgressPage() {
                         type="button"
                         disabled={page >= lastPage}
                         onClick={() => handlePageChange(page + 1)}
-                        className="p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition"
+                        className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded border border-white/5 disabled:opacity-40 disabled:hover:bg-white/5 disabled:cursor-not-allowed transition flex items-center justify-center"
                         title="Sonraki Sayfa"
+                        aria-label="Sonraki Sayfa"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -784,18 +798,18 @@ export function TrainerMemberProgressPage() {
             </div>
 
             {/* Right 1 Col: Measurement Detail Card */}
-            <div className="lg:col-span-1">
-              <div className="bg-[#121212] border border-white/10 rounded-xl p-5 min-h-[420px] sticky top-6">
+            <div className={`lg:col-span-1 ${selectedMeasurementId ? "order-1 lg:order-2" : "order-2 lg:order-2"}`}>
+              <div className="bg-[#121212] border border-white/10 rounded-xl p-4 sm:p-5 min-h-[220px] lg:min-h-[420px] lg:sticky lg:top-6">
                 {!selectedMeasurementId ? (
-                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-6 space-y-2">
+                  <div className="h-full min-h-[200px] lg:min-h-[380px] flex flex-col items-center justify-center text-white/40 text-xs text-center p-4 sm:p-6 space-y-2">
                     <Activity className="w-8 h-8 opacity-25 text-[#851C35]" />
                     <p className="font-medium text-white/60">Ölçüm Detayı</p>
                     <p className="leading-relaxed">
-                      Detaylı verileri ve antrenör notunu görüntülemek için sol taraftaki listeden bir ölçüme tıklayın.
+                      Detaylı verileri ve antrenör notunu görüntülemek için listeden bir ölçüme tıklayın.
                     </p>
                   </div>
                 ) : detailLoading ? (
-                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center p-8 text-white/50">
+                  <div className="h-full min-h-[200px] lg:min-h-[380px] flex flex-col items-center justify-center p-6 sm:p-8 text-white/50">
                     <div className="w-7 h-7 border-2 border-[#851C35]/30 border-t-[#851C35] rounded-full animate-spin mb-3" />
                     <span className="text-xs">Ölçüm detayı alınıyor...</span>
                   </div>
@@ -806,7 +820,8 @@ export function TrainerMemberProgressPage() {
                       <button
                         type="button"
                         onClick={handleCloseDetail}
-                        className="p-1 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                        className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
+                        aria-label="Detayı Kapat"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -816,48 +831,49 @@ export function TrainerMemberProgressPage() {
                     </div>
                   </div>
                 ) : detail ? (
-                  <div className="space-y-5">
+                  <div className="space-y-4 sm:space-y-5">
                     {/* Detail Card Header */}
                     <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs text-white/50 font-medium">Ölçüm Detayı</div>
-                        <h4 className="text-base font-bold text-white mt-0.5">
+                        <h4 className="text-base font-bold text-white mt-0.5 truncate">
                           {formatDateTime(detail.measured_at)}
                         </h4>
-                        <div className="text-[11px] text-white/40 font-mono mt-0.5">
+                        <div className="text-[11px] text-white/40 font-mono mt-0.5 truncate">
                           {detail.uuid}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0">
                         {detail.deleted_at === null && (
                           <>
                             <button
                               type="button"
                               disabled={isMutatingRef.current || archivingId !== null}
                               onClick={() => handleOpenEdit(detail)}
-                              className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded border border-white/10 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="min-h-[44px] flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded-lg border border-white/10 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Ölçümü Düzenle"
                             >
                               <Pencil className="w-3.5 h-3.5" />
-                              Düzenle
+                              <span>Düzenle</span>
                             </button>
                             <button
                               type="button"
                               disabled={isMutatingRef.current || archivingId !== null}
                               onClick={() => handleArchive(detail.id)}
-                              className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded border border-red-500/20 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="min-h-[44px] flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg border border-red-500/20 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Ölçümü Arşivle"
                             >
                               <Archive className="w-3.5 h-3.5" />
-                              {archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}
+                              <span>{archivingId === detail.id ? "Arşivleniyor..." : "Arşivle"}</span>
                             </button>
                           </>
                         )}
                         <button
                           type="button"
                           onClick={handleCloseDetail}
-                          className="p-1.5 text-white/50 hover:text-white rounded hover:bg-white/5 transition"
+                          className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition"
                           title="Kapat"
+                          aria-label="Detayı Kapat"
                         >
                           <X className="w-4 h-4" />
                         </button>

@@ -346,18 +346,18 @@ export function TrainerMeasurementFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-[#121212] border border-white/10 rounded-2xl w-full max-w-2xl flex flex-col max-h-[90vh] shadow-2xl overflow-hidden">
+      <div className="bg-[#121212] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-2xl flex flex-col max-h-[92vh] sm:max-h-[90vh] shadow-2xl overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 bg-[#18181b]/50">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-white">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10 bg-[#18181b]/50">
+          <div className="min-w-0 flex-1 pr-2">
+            <h2 className="text-base sm:text-xl font-bold text-white truncate">
               {initialData ? "Ölçümü Düzenle" : "Yeni Ölçüm Kaydı"}
             </h2>
-            <p className="text-xs text-white/50 mt-0.5">
+            <p className="text-xs text-white/50 mt-0.5 truncate">
               {initialData
                 ? "Mevcut fiziksel ölçüm ve vücut kompozisyonu verilerini güncelleyin."
                 : "Üyenin güncel fiziksel ölçüm ve kompozisyon değerlerini girin."}
@@ -367,22 +367,23 @@ export function TrainerMeasurementFormModal({
             type="button"
             onClick={handleClose}
             disabled={saving}
-            className="text-white/50 hover:text-white transition disabled:opacity-40 p-1.5 rounded-lg hover:bg-white/5"
+            className="text-white/50 hover:text-white transition disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg hover:bg-white/5 shrink-0"
             title="Kapat"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-5 sm:space-y-6">
           {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs sm:text-sm leading-relaxed">
+            <div className="p-3 sm:p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs sm:text-sm leading-relaxed">
               {error}
             </div>
           )}
 
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {/* Measured At */}
             <div>
               <label className="block text-xs font-semibold text-white/80 mb-1.5">
@@ -394,12 +395,12 @@ export function TrainerMeasurementFormModal({
                 value={measuredAt}
                 onChange={handleChange(setMeasuredAt)}
                 disabled={saving}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
               />
             </div>
 
             {/* Metrics 2-column Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-xs font-semibold text-white/80 mb-1.5">
                   Kilo (kg)
@@ -410,7 +411,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setWeight)}
                   disabled={saving}
                   placeholder="örn. 75.5"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -424,7 +425,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setBodyFat)}
                   disabled={saving}
                   placeholder="örn. 14.2"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -438,7 +439,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setChest)}
                   disabled={saving}
                   placeholder="örn. 102.0"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -452,7 +453,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setWaist)}
                   disabled={saving}
                   placeholder="örn. 82.5"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -466,7 +467,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setHip)}
                   disabled={saving}
                   placeholder="örn. 98.0"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -480,7 +481,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setArm)}
                   disabled={saving}
                   placeholder="örn. 36.5"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
 
@@ -494,7 +495,7 @@ export function TrainerMeasurementFormModal({
                   onChange={handleChange(setThigh)}
                   disabled={saving}
                   placeholder="örn. 58.0"
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-base sm:text-sm min-h-[44px] focus:outline-none focus:border-[#851C35] transition disabled:opacity-50"
                 />
               </div>
             </div>
@@ -515,19 +516,19 @@ export function TrainerMeasurementFormModal({
                 disabled={saving}
                 rows={3}
                 placeholder="Ölçümle ilgili gözlemler, değerlendirmeler veya antrenör notu..."
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg p-3 text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50 custom-scrollbar resize-none"
+                className="w-full bg-white/5 border border-white/10 text-white rounded-lg p-3 text-base sm:text-sm focus:outline-none focus:border-[#851C35] transition disabled:opacity-50 custom-scrollbar resize-none"
               />
             </div>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 sm:p-5 border-t border-white/10 flex items-center justify-end gap-3 bg-[#18181b]/50">
+        <div className="p-3 sm:p-5 border-t border-white/10 flex items-center justify-end gap-2 sm:gap-3 bg-[#18181b]/50">
           <button
             type="button"
             onClick={handleClose}
             disabled={saving}
-            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-lg transition disabled:opacity-40 text-xs sm:text-sm font-medium"
+            className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-lg transition disabled:opacity-40 text-xs sm:text-sm font-medium flex items-center justify-center"
           >
             İptal
           </button>
@@ -535,10 +536,10 @@ export function TrainerMeasurementFormModal({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-[#851C35] hover:bg-[#6b162b] text-white rounded-lg transition disabled:opacity-40 text-xs sm:text-sm font-semibold shadow-lg shadow-[#851C35]/20"
+            className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-2 px-5 py-2 bg-[#851C35] hover:bg-[#6b162b] text-white rounded-lg transition disabled:opacity-40 text-xs sm:text-sm font-semibold shadow-lg shadow-[#851C35]/20"
           >
             <Save className="w-4 h-4" />
-            {saving ? "Kaydediliyor..." : "Kaydet"}
+            <span>{saving ? "Kaydediliyor..." : "Kaydet"}</span>
           </button>
         </div>
       </div>
