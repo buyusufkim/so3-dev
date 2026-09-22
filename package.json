@@ -24,6 +24,7 @@
     "verify:trainer-dashboard-frontend": "node scripts/verify-trainer-dashboard-frontend.mjs",
     "verify:reception-membership-renewal": "node scripts/verify-reception-membership-renewal.mjs",
     "verify:renewal-watch-read-model": "node scripts/verify-renewal-watch-read-model.mjs",
+    "verify:reception-renewal-watch-ui": "node scripts/verify-reception-renewal-watch-ui.mjs",
     "verify:reception-frontend": "node scripts/verify-reception-frontend.mjs",
     "verify:trainer-mobile-workspace-shell": "node scripts/verify-trainer-mobile-workspace-shell.mjs",
     "verify:trainer-dashboard-mobile": "node scripts/verify-trainer-dashboard-mobile.mjs",

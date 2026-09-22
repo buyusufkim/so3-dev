@@ -198,5 +198,16 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * 14-day default configurable watch window
 * no notification persistence/delivery in F.20A
 
+## F.20B Reception Renewal Watch UI
+* ReceptionRenewalWatchPanel is a GET-only, side-effect free operational dashboard component
+* shared ReceptionRenewalTarget decouples renewal modal from ReceptionMemberSearchItem
+* existing POST /api/reception/members/:memberId/renew and handleOpenRenewalModal flow reused identically
+* summary counters driven by page-independent backend summary object (no client-side count re-calculation)
+* backend authority preserved for ordering, expiry state, and business dates (Europe/Istanbul)
+* dates formatted safely via string parser without timezone drift risks
+* global mutation mutex (mutationBusy / activeMutation) respected across watch panel and dashboard
+* panel auto-refreshed upon renewal completion and contract validation failure via bounded refreshKey
+* zero notification domain or persistence concepts in this phase
+
 
 

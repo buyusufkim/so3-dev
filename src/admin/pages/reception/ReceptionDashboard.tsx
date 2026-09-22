@@ -5,10 +5,12 @@ import {
   ReceptionSearchResponse, 
   ReceptionOccupancyItem, 
   ReceptionMemberSearchItem,
+  ReceptionRenewalTarget,
   ReceptionCheckInResponse,
   ReceptionCheckOutResponse,
   ReceptionRenewalResponse
 } from "./types";
+import { ReceptionRenewalWatchPanel } from "./ReceptionRenewalWatchPanel";
 import { Search, RotateCcw, AlertTriangle, Users, X } from "lucide-react";
 
 // Runtime Validators
@@ -222,7 +224,8 @@ export function ReceptionDashboard() {
   const [activeMutation, setActiveMutation] = useState<{ memberId: number; kind: 'check-in' | 'check-out' | 'renew' } | null>(null);
   const [mutationFeedback, setMutationFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const [renewalModalMember, setRenewalModalMember] = useState<ReceptionMemberSearchItem | null>(null);
+  const [renewalWatchRefreshKey, setRenewalWatchRefreshKey] = useState<number>(0);
+  const [renewalModalMember, setRenewalModalMember] = useState<ReceptionRenewalTarget | null>(null);
   const [renewalStartDate, setRenewalStartDate] = useState("");
   const [renewalEndDate, setRenewalEndDate] = useState("");
   const [renewalFormError, setRenewalFormError] = useState<string | null>(null);
@@ -614,7 +617,7 @@ export function ReceptionDashboard() {
     }
   }, [fetchOccupancy]);
 
-  const handleOpenRenewalModal = useCallback((member: ReceptionMemberSearchItem) => {
+  const handleOpenRenewalModal = useCallback((member: ReceptionRenewalTarget) => {
     setRenewalModalMember(member);
     setRenewalStartDate("");
     setRenewalEndDate("");
@@ -735,6 +738,7 @@ export function ReceptionDashboard() {
         type: 'error',
         message: "İşlem sonucu doğrulanamadı. Üye bilgileri yenileniyor."
       });
+      setRenewalWatchRefreshKey(k => k + 1);
       try {
         await reconcileSearch();
       } catch {
@@ -753,6 +757,7 @@ export function ReceptionDashboard() {
     }
 
     setMutationFeedback({ type: 'success', message: "Üyelik tarihleri yenilendi." });
+    setRenewalWatchRefreshKey(k => k + 1);
     try {
       await reconcileSearch();
     } catch {
@@ -817,6 +822,14 @@ export function ReceptionDashboard() {
           </button>
         </div>
       )}
+
+      {/* Renewal Watch Section */}
+      <ReceptionRenewalWatchPanel
+        refreshKey={renewalWatchRefreshKey}
+        mutationBusy={activeMutation !== null}
+        renewingMemberId={activeMutation?.kind === 'renew' ? activeMutation.memberId : null}
+        onRenew={handleOpenRenewalModal}
+      />
 
       {/* Main Content Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

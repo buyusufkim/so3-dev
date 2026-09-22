@@ -74,3 +74,53 @@ export interface ReceptionRenewalResponse {
   };
 }
 
+export interface ReceptionRenewalTarget {
+  id: number;
+  uuid: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  membership_start_date: string | null;
+  membership_end_date: string | null;
+}
+
+export type ReceptionRenewalState =
+  | 'expired'
+  | 'today'
+  | 'upcoming';
+
+export interface ReceptionRenewalWatchItem {
+  id: number;
+  uuid: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  membership_start_date: string | null;
+  membership_end_date: string;
+  renewal_state: ReceptionRenewalState;
+  days_until_expiry: number;
+}
+
+export interface ReceptionRenewalWatchSummary {
+  expired: number;
+  today: number;
+  upcoming: number;
+  total: number;
+}
+
+export interface ReceptionRenewalWatchPagination {
+  total: number;
+  page: number;
+  per_page: number;
+  last_page: number;
+}
+
+export interface ReceptionRenewalWatchResponse {
+  as_of_date: string;
+  window_days: number;
+  bucket: 'all' | ReceptionRenewalState;
+  summary: ReceptionRenewalWatchSummary;
+  items: ReceptionRenewalWatchItem[];
+  pagination: ReceptionRenewalWatchPagination;
+}
+
