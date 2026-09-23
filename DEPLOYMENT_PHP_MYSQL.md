@@ -132,3 +132,39 @@ You can optionally configure a cron job to automatically delete old failed login
 **Note on Migrations**: MySQL/MariaDB DDL statements (like `CREATE TABLE`, `ALTER TABLE`) will implicitly commit transactions. Rollbacks generally only protect DML statements (`INSERT`, `UPDATE`, `DELETE`) within the same migration.
 
 If no SSH is available, manually generate an Argon2id or bcrypt hash via a local PHP script and insert it via phpMyAdmin. Never create an unauthenticated script to create admins.
+
+## 8. Admin-Realm Staging Runtime Verification
+
+After deploying to a staging environment migrated through the latest migration (e.g. migration `039`), run the authenticated runtime smoke harness to verify that admin, reception, and trainer authorization boundaries, notification routing, occupancy, renewal-watch, and operations analytics read-models execute correctly against a live PHP/MySQL deployment.
+
+### Staging-First Principles
+- **Run against isolated staging first**: Never run automated verification against live production without explicit intent.
+- **Dedicated staging accounts**: Create dedicated test accounts on staging for each role (`admin` or `super_admin`, `reception`, `trainer`). Do not use production credentials.
+- **Up-to-date schema**: Ensure staging database has run all incremental migrations through `php bin/migrate.php`.
+- **Zero business data mutation**: The harness performs read-only checks on business entities and does not execute mutations, appointments, or notifications creation.
+
+### Required Environment Variables
+
+Set the following environment variables with staging test credentials:
+- `SO3_VERIFY_BASE_URL`: The staging URL (e.g. `https://staging.so3pt.com.tr`). Must use HTTPS. Must not contain path, query, fragment, or credentials.
+- `SO3_VERIFY_ALLOW_HTTP`: Set to `true` only if testing against `http://localhost`.
+- `SO3_VERIFY_ADMIN_USERNAME`: Username for dedicated staging admin/super_admin user.
+- `SO3_VERIFY_ADMIN_PASSWORD`: Password for staging admin user.
+- `SO3_VERIFY_ADMIN_EXPECTED_ROLE`: Expected role for admin fixture (`admin` or `super_admin`).
+- `SO3_VERIFY_RECEPTION_USERNAME`: Username for dedicated staging reception user.
+- `SO3_VERIFY_RECEPTION_PASSWORD`: Password for staging reception user.
+- `SO3_VERIFY_TRAINER_USERNAME`: Username for dedicated staging trainer user.
+- `SO3_VERIFY_TRAINER_PASSWORD`: Password for staging trainer user.
+
+### Production Host Override Guard
+The verifier automatically blocks execution against production hosts (`so3pt.com.tr`, `www.so3pt.com.tr`) with exit code 2. The variable `SO3_VERIFY_ADMIN_CORE_ALLOW_PRODUCTION=true` exists solely as an explicit manual override and should normally remain unset.
+
+### Execution
+```bash
+# Run static harness safety check first
+npm run verify:runtime-admin-core-harness
+
+# Run staging runtime smoke test
+npm run verify:runtime-admin-core
+```
+

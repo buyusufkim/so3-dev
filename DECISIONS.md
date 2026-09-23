@@ -283,6 +283,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * F.21 Lead/Sales CRM remains intentionally skipped
 * no application/business behavior changed
 
+## F.23B Staging Admin-Realm Runtime Smoke Harness
+* runtime verifier validates deployed PHP/MySQL behavior, not source strings
+* admin/reception/trainer sessions are isolated
+* credentials are environment-only and never logged
+* production host is blocked by default
+* runtime smoke is read-only for business entities
+* login/logout auth side effects are accepted
+* notification namespace regression is explicitly tested with reception/trainer
+* admin analytics and role boundaries are tested against real runtime
+* business mutations remain out of scope
+
+
 
 
 
