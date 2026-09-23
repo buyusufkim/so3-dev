@@ -32,8 +32,19 @@ if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
     CsrfMiddleware::handle();
 }
 
+// Bounded predicate for canonical notification routes
+$isAdminNotificationRoute =
+    $requestUri === '/api/admin/notifications'
+    || preg_match(
+        '#^/api/admin/notifications/[1-9]\d*/(?:read|dismiss)$#',
+        $requestUri
+    ) === 1;
+
 // Admin namespace role firewall
-if (strpos($requestUri, '/api/admin/') === 0) {
+if (
+    strpos($requestUri, '/api/admin/') === 0
+    && !$isAdminNotificationRoute
+) {
     AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 }
 

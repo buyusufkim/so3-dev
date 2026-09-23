@@ -181,6 +181,61 @@ assert(testPayloadValidation('{"foo":"bar"}').code === 'VALIDATION_ERROR', "Self
 assert(testPayloadValidation("[]").code === 'VALIDATION_ERROR', "Self-test: Rejects array with VALIDATION_ERROR / 422");
 assert(testPayloadValidation("").code === 'VALIDATION_ERROR', "Self-test: Rejects empty body with VALIDATION_ERROR / 422");
 
+// Negative test 7: Admin notification firewall predicate simulation
+function testAdminNotificationPredicate(uri) {
+  const isNotificationRoute =
+    uri === '/api/admin/notifications' ||
+    /^(\/api\/admin\/notifications\/[1-9]\d*\/(?:read|dismiss))$/.test(uri);
+  return isNotificationRoute;
+}
+
+// Canonical exemptions
+assert(testAdminNotificationPredicate('/api/admin/notifications') === true, "Self-test: /api/admin/notifications is exempt from broad firewall");
+assert(testAdminNotificationPredicate('/api/admin/notifications/1/read') === true, "Self-test: /api/admin/notifications/1/read is exempt from broad firewall");
+assert(testAdminNotificationPredicate('/api/admin/notifications/999/dismiss') === true, "Self-test: /api/admin/notifications/999/dismiss is exempt from broad firewall");
+
+// Invalid paths must NOT be exempt
+assert(testAdminNotificationPredicate('/api/admin/notifications/foo') === false, "Self-test: /api/admin/notifications/foo is NOT exempt");
+assert(testAdminNotificationPredicate('/api/admin/notifications/0/read') === false, "Self-test: /api/admin/notifications/0/read is NOT exempt (non-positive ID)");
+assert(testAdminNotificationPredicate('/api/admin/notifications/01/read') === false, "Self-test: /api/admin/notifications/01/read is NOT exempt (leading zero)");
+assert(testAdminNotificationPredicate('/api/admin/notifications/1/delete') === false, "Self-test: /api/admin/notifications/1/delete is NOT exempt (forbidden verb)");
+assert(testAdminNotificationPredicate('/api/admin/notifications/1/restore') === false, "Self-test: /api/admin/notifications/1/restore is NOT exempt (forbidden verb)");
+assert(testAdminNotificationPredicate('/api/admin/notifications-evil') === false, "Self-test: /api/admin/notifications-evil is NOT exempt");
+
+// Negative test 8: Role access simulation through firewall and route auth
+function testSimulatedRoleAccess(role, uri) {
+  const isNotificationRoute = testAdminNotificationPredicate(uri);
+  const isUnderAdminNamespace = uri.startsWith('/api/admin/');
+
+  // Step 1: Pre-dispatch admin namespace firewall
+  if (isUnderAdminNamespace && !isNotificationRoute) {
+    const globalAdminRoles = ['super_admin', 'admin', 'editor'];
+    if (!globalAdminRoles.includes(role)) {
+      return 403; // Forbidden by global firewall
+    }
+  }
+
+  // Step 2: Route-level auth
+  if (isNotificationRoute) {
+    const validAdminRoles = ['super_admin', 'admin', 'editor', 'trainer', 'reception'];
+    if (!validAdminRoles.includes(role)) {
+      return 401; // Not an authenticated admin user
+    }
+    return 200; // Passes generic admin-realm AuthMiddleware::handle()
+  }
+
+  return 200;
+}
+
+assert(testSimulatedRoleAccess('reception', '/api/admin/notifications') === 200, "Role simulation: reception accesses /api/admin/notifications");
+assert(testSimulatedRoleAccess('trainer', '/api/admin/notifications') === 200, "Role simulation: trainer accesses /api/admin/notifications");
+assert(testSimulatedRoleAccess('editor', '/api/admin/notifications') === 200, "Role simulation: editor accesses /api/admin/notifications");
+assert(testSimulatedRoleAccess('admin', '/api/admin/notifications') === 200, "Role simulation: admin accesses /api/admin/notifications");
+assert(testSimulatedRoleAccess('super_admin', '/api/admin/notifications') === 200, "Role simulation: super_admin accesses /api/admin/notifications");
+assert(testSimulatedRoleAccess('unauthenticated', '/api/admin/notifications') === 401, "Role simulation: unauthenticated user gets 401");
+assert(testSimulatedRoleAccess('reception', '/api/admin/dashboard') === 403, "Role simulation: reception blocked from /api/admin/dashboard by broad firewall (403)");
+assert(testSimulatedRoleAccess('trainer', '/api/admin/media') === 403, "Role simulation: trainer blocked from /api/admin/media by broad firewall (403)");
+
 console.log("\n=== 2. Package.json Script Registration ===");
 
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -269,6 +324,61 @@ console.log("\n=== 5. Routing Invariants in api/index.php ===");
 const apiIndexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(apiIndexPath), "api/index.php exists");
 const apiIndexSource = fs.readFileSync(apiIndexPath, 'utf8');
+
+// 5.0 Pre-dispatch Admin Namespace Firewall & Bounded Notification Exemption
+const globalFirewallMatch = apiIndexSource.match(/if\s*\(\s*strpos\s*\(\s*\$requestUri\s*,\s*['"]\/api\/admin\/['"]\s*\)\s*===\s*0([\s\S]*?)\)\s*\{([\s\S]*?)\}/);
+assert(globalFirewallMatch !== null, "Global /api/admin/* pre-dispatch firewall exists in api/index.php");
+
+if (globalFirewallMatch) {
+  const condition = globalFirewallMatch[1];
+  const body = globalFirewallMatch[2];
+
+  // Global firewall role allowlist must NOT be broadened to trainer or reception
+  assert(
+    body.includes("AuthMiddleware::hasRole"),
+    "Global admin namespace firewall enforces AuthMiddleware::hasRole"
+  );
+  assert(
+    !/hasRole\s*\(\s*\[[^\]]*'trainer'/i.test(body),
+    "Global admin firewall is NOT broadened to 'trainer'"
+  );
+  assert(
+    !/hasRole\s*\(\s*\[[^\]]*'reception'/i.test(body),
+    "Global admin firewall is NOT broadened to 'reception'"
+  );
+  assert(
+    /hasRole\s*\(\s*\[\s*'super_admin'\s*,\s*'admin'\s*,\s*'editor'\s*\]\s*\)/.test(body),
+    "Global admin firewall strictly retains ['super_admin', 'admin', 'editor']"
+  );
+
+  // Firewall must condition on notification route exemption
+  assert(
+    condition.includes("!$isAdminNotificationRoute") || condition.includes("! $isAdminNotificationRoute"),
+    "Global admin firewall conditions on !$isAdminNotificationRoute"
+  );
+
+  // Predicate declaration must exist before the firewall
+  const firewallPos = apiIndexSource.indexOf(globalFirewallMatch[0]);
+  const predicatePos = apiIndexSource.indexOf("$isAdminNotificationRoute =");
+  assert(
+    predicatePos !== -1 && predicatePos < firewallPos,
+    "$isAdminNotificationRoute predicate is defined BEFORE the global firewall"
+  );
+
+  // Predicate must be bounded, not an unrestricted prefix bypass
+  assert(
+    !/strpos\s*\(\s*\$requestUri\s*,\s*['"]\/api\/admin\/notifications['"]\s*\)\s*===\s*0/.test(apiIndexSource),
+    "Unrestricted broad prefix bypass (strpos === 0) is NOT used for notifications"
+  );
+  assert(
+    apiIndexSource.includes("$requestUri === '/api/admin/notifications'"),
+    "Predicate explicitly matches exact '/api/admin/notifications'"
+  );
+  assert(
+    apiIndexSource.includes("/api/admin/notifications/[1-9]\\d*/(?:read|dismiss)"),
+    "Predicate strictly bounds positive ID with read|dismiss: [1-9]\\d*/(?:read|dismiss)"
+  );
+}
 
 // Route 1: GET /api/admin/notifications
 const listRouteBlock = extractBraceBlock(apiIndexSource, "preg_match('#^/api/admin/notifications$#', $requestUri)");
