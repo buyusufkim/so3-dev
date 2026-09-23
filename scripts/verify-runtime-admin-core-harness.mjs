@@ -1,10 +1,12 @@
 /**
  * Static Verification Harness for Staging Admin-Realm Runtime Smoke Verifier
- * (Faz 7B.4G-F.23B)
+ * (Faz 7B.4G-F.23B.1 — Runtime Transport & Cookie Hardening)
  *
  * Verifies that scripts/verify-runtime-admin-core.mjs is safe, sound, non-destructive,
- * strictly enforces credential secrecy, blocks production by default, and avoids
- * any business mutations or brute-force testing.
+ * strictly enforces credential secrecy, blocks production by default, validates
+ * hardened HTTPS cookie attributes (Path=/, HttpOnly, Secure, SameSite=Strict),
+ * enforces security headers on both /api/health and /api/auth/csrf, and validates
+ * central non-redirect JSON API transport on all tested /api/* endpoints.
  */
 
 import fs from 'fs';
@@ -29,7 +31,6 @@ console.log("=== 1. Self-Tests & Negative Invariant Tests ===");
 
 // Negative test 1: Mutation Blacklist Detector
 function detectForbiddenMutations(source) {
-  // Strip comments to only analyze executable code
   const codeWithoutComments = source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*/g, '');
@@ -125,6 +126,98 @@ assert(
   "Self-test: Accepts valid environment credential invocation"
 );
 
+// Transport invariant simulation helper
+function isJsonApiResponse(res) {
+  if (!res) return false;
+  const isRedirect = res.status >= 300 && res.status < 400;
+  const isJsonType = typeof res.contentType === 'string' && res.contentType.toLowerCase().includes('application/json');
+  return !isRedirect && isJsonType && res.jsonParsed === true;
+}
+
+// Transport contract self-tests
+const resHtml403 = { status: 403, contentType: 'text/html', jsonParsed: false };
+assert(
+  isJsonApiResponse(resHtml403) === false,
+  "Negative Self-Test: HTML 403 fails transport invariant despite status 403"
+);
+
+const resRedirect = { status: 302, contentType: 'application/json', jsonParsed: true };
+assert(
+  isJsonApiResponse(resRedirect) === false,
+  "Negative Self-Test: Redirect 302 fails transport invariant"
+);
+
+const resInvalidJson = { status: 200, contentType: 'application/json', jsonParsed: false };
+assert(
+  isJsonApiResponse(resInvalidJson) === false,
+  "Negative Self-Test: Invalid JSON syntax fails transport invariant"
+);
+
+const resValidJson403 = { status: 403, contentType: 'application/json; charset=utf-8', jsonParsed: true };
+assert(
+  isJsonApiResponse(resValidJson403) === true,
+  "Positive Self-Test: Non-redirect application/json with valid parsed JSON passes transport invariant"
+);
+
+// Cookie attribute validator simulation helper
+function validateAdminSessionCookieAttributes(setCookieHeader) {
+  if (!setCookieHeader || typeof setCookieHeader !== 'string') {
+    return {
+      hasCookie: false,
+      hasPath: false,
+      hasHttpOnly: false,
+      hasSecure: false,
+      hasSameSiteStrict: false,
+      valid: false
+    };
+  }
+
+  const parts = setCookieHeader.split(';').map(p => p.trim());
+  let hasPath = false;
+  let hasHttpOnly = false;
+  let hasSecure = false;
+  let hasSameSiteStrict = false;
+
+  for (let i = 1; i < parts.length; i++) {
+    const lower = parts[i].toLowerCase();
+    if (lower === 'path=/') {
+      hasPath = true;
+    } else if (lower === 'httponly') {
+      hasHttpOnly = true;
+    } else if (lower === 'secure') {
+      hasSecure = true;
+    } else if (lower === 'samesite=strict') {
+      hasSameSiteStrict = true;
+    }
+  }
+
+  return {
+    hasCookie: true,
+    hasPath,
+    hasHttpOnly,
+    hasSecure,
+    hasSameSiteStrict,
+    valid: hasPath && hasHttpOnly && hasSecure && hasSameSiteStrict
+  };
+}
+
+// Cookie attribute self-tests
+const validCookie = 'so3_admin_session=dummyVal123; Path=/; Secure; HttpOnly; SameSite=Strict';
+const cookieRes1 = validateAdminSessionCookieAttributes(validCookie);
+assert(cookieRes1.valid === true, "Self-Test: Valid HTTPS cookie (Path=/, HttpOnly, Secure, SameSite=Strict) passes");
+
+const missingSecureCookie = 'so3_admin_session=dummyVal123; Path=/; HttpOnly; SameSite=Strict';
+const cookieRes2 = validateAdminSessionCookieAttributes(missingSecureCookie);
+assert(cookieRes2.hasSecure === false && cookieRes2.valid === false, "Self-Test: Missing Secure attribute fails cookie validation");
+
+const wrongSameSiteCookie = 'so3_admin_session=dummyVal123; Path=/; Secure; HttpOnly; SameSite=Lax';
+const cookieRes3 = validateAdminSessionCookieAttributes(wrongSameSiteCookie);
+assert(cookieRes3.hasSameSiteStrict === false && cookieRes3.valid === false, "Self-Test: Wrong SameSite=Lax attribute fails cookie validation");
+
+const wrongPathCookie = 'so3_admin_session=dummyVal123; Path=/admin; Secure; HttpOnly; SameSite=Strict';
+const cookieRes4 = validateAdminSessionCookieAttributes(wrongPathCookie);
+assert(cookieRes4.hasPath === false && cookieRes4.valid === false, "Self-Test: Wrong Path=/admin attribute fails cookie validation");
+
 console.log("\n=== 2. Package.json Script Registration ===");
 
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -184,11 +277,42 @@ assert(runtimeSource.includes("redirect: 'manual'"), "Enforces manual redirects 
 assert(runtimeSource.includes("AbortSignal.timeout"), "Enforces bounded request timeouts");
 assert(runtimeSource.includes("SO3_VERIFY_ALLOW_HTTP"), "Reuses SO3_VERIFY_ALLOW_HTTP for localhost");
 
-// Cookie Jar & Session Regeneration
+// Hardened Cookie Attributes & Specific Extraction (Faz F.23B.1)
 assert(runtimeSource.includes("class CookieJar"), "Defines in-memory CookieJar class");
-assert(runtimeSource.includes("absorbFromHeaders"), "CookieJar absorbs updated Set-Cookie headers");
 assert(runtimeSource.includes("so3_admin_session"), "Targets canonical so3_admin_session cookie");
-assert(runtimeSource.includes("getCookieHeader"), "CookieJar formats Cookie header for outgoing requests");
+assert(/function\s+findSetCookieFor/.test(runtimeSource), "Defines specific findSetCookieFor helper");
+assert(/function\s+validateAdminSessionCookieAttributes/.test(runtimeSource), "Defines validateAdminSessionCookieAttributes helper");
+assert(
+  /path=\//i.test(runtimeSource) && /httponly/i.test(runtimeSource) && /secure/i.test(runtimeSource) && /samesite=strict/i.test(runtimeSource),
+  "Cookie attribute validator checks Path=/, HttpOnly, Secure, and SameSite=Strict"
+);
+assert(
+  /hasSecure/i.test(runtimeSource) && /hasSameSiteStrict/i.test(runtimeSource),
+  "Cookie validation asserts hasSecure and hasSameSiteStrict"
+);
+
+// Central Security Headers Validation (/api/health and /api/auth/csrf)
+assert(/function\s+validateApiSecurityHeaders/.test(runtimeSource), "Defines central validateApiSecurityHeaders helper");
+assert(
+  /validateApiSecurityHeaders\([^)]*healthRes\.headers/i.test(runtimeSource) || /validateApiSecurityHeaders\([^)]*\/api\/health/i.test(runtimeSource),
+  "Applies security headers validation to GET /api/health"
+);
+assert(
+  /validateApiSecurityHeaders\([^)]*csrfRes\.headers/i.test(runtimeSource) || /validateApiSecurityHeaders\([^)]*\/api\/auth\/csrf/i.test(runtimeSource),
+  "Applies security headers validation to GET /api/auth/csrf (Parity)"
+);
+
+// Central Non-Redirect JSON API Transport Contract
+assert(/function\s+isJsonApiResponse/.test(runtimeSource), "Defines isJsonApiResponse transport helper");
+assert(/jsonParsed/.test(runtimeSource), "Tracks jsonParsed boolean flag separately from json value");
+assert(
+  /res\.status\s*>=\s*300\s*&&\s*res\.status\s*<\s*400/.test(runtimeSource),
+  "Rejects 300..399 HTTP redirects as transport violations"
+);
+assert(
+  /urlPath\.startsWith\(['"]\/api\/['"]\)/.test(runtimeSource),
+  "Central request() validates transport contract for all tested /api/* endpoints"
+);
 
 // CSRF & Login Flow
 assert(runtimeSource.includes("/api/auth/csrf"), "Fetches /api/auth/csrf before login");
@@ -197,65 +321,64 @@ assert(runtimeSource.includes("/api/auth/login"), "Calls POST /api/auth/login");
 assert(runtimeSource.includes("/api/auth/me"), "Verifies authenticated identity via /api/auth/me");
 assert(runtimeSource.includes("/api/auth/logout"), "Calls POST /api/auth/logout with fresh CSRF token");
 
-// Security Headers & Anonymous Boundaries
-assert(runtimeSource.includes("x-content-type-options"), "Validates X-Content-Type-Options: nosniff");
-assert(runtimeSource.includes("x-frame-options"), "Validates X-Frame-Options: DENY");
-assert(runtimeSource.includes("referrer-policy"), "Validates Referrer-Policy: no-referrer");
-assert(runtimeSource.includes("cache-control"), "Validates Cache-Control no-store/no-cache");
-assert(runtimeSource.includes("Anonymous GET /api/auth/me"), "Enforces anonymous /api/auth/me -> 401");
-assert(runtimeSource.includes("Anonymous GET /api/admin/notifications"), "Enforces anonymous /api/admin/notifications -> 401");
-assert(runtimeSource.includes("Anonymous GET /api/admin/analytics/operations"), "Enforces anonymous /api/admin/analytics/operations -> 401");
+// Anonymous Boundaries (Strict 401 JSON)
+assert(runtimeSource.includes("Anonymous GET /api/auth/me"), "Enforces anonymous /api/auth/me -> 401 JSON");
+assert(runtimeSource.includes("Anonymous GET /api/admin/notifications"), "Enforces anonymous /api/admin/notifications -> 401 JSON");
+assert(runtimeSource.includes("Anonymous GET /api/admin/analytics/operations"), "Enforces anonymous /api/admin/analytics/operations -> 401 JSON");
+assert(runtimeSource.includes("Anonymous GET /api/reception/renewal-watch"), "Enforces anonymous /api/reception/renewal-watch -> 401 JSON");
+assert(runtimeSource.includes("Anonymous GET /api/reception/occupancy"), "Enforces anonymous /api/reception/occupancy -> 401 JSON");
+assert(runtimeSource.includes("Anonymous GET /api/trainer/dashboard"), "Enforces anonymous /api/trainer/dashboard -> 401 JSON");
 
 // Reception F.20C.2 Proof & Admin Broad Firewall Preservation
 assert(
-  runtimeSource.includes("Reception GET /api/admin/notifications"),
+  runtimeSource.includes("Reception GET /api/admin/notifications (F.20C.2 exemption proof)"),
   "Tests Reception GET /api/admin/notifications -> 200 (F.20C.2 proof)"
 );
 assert(
-  runtimeSource.includes("Reception GET /api/admin/dashboard"),
-  "Tests Reception GET /api/admin/dashboard -> 403 (broad admin firewall preservation)"
+  runtimeSource.includes("Reception GET /api/admin/dashboard (denial)"),
+  "Tests Reception GET /api/admin/dashboard -> 403 JSON (broad admin firewall preservation)"
 );
 assert(
-  runtimeSource.includes("Reception GET /api/admin/analytics/operations"),
-  "Tests Reception GET /api/admin/analytics/operations -> 403 (broad admin firewall preservation)"
+  runtimeSource.includes("Reception GET /api/admin/analytics/operations (denial)"),
+  "Tests Reception GET /api/admin/analytics/operations -> 403 JSON (broad admin firewall preservation)"
 );
 
 // Trainer Matrix
 assert(
-  runtimeSource.includes("Trainer GET /api/admin/notifications"),
-  "Tests Trainer GET /api/admin/notifications -> 200 (F.20C generic inbox)"
+  runtimeSource.includes("Trainer GET /api/admin/notifications (generic admin-realm)"),
+  "Tests Trainer GET /api/admin/notifications -> 200 JSON (F.20C generic inbox)"
 );
 assert(
   runtimeSource.includes("Trainer GET /api/trainer/dashboard"),
-  "Tests Trainer GET /api/trainer/dashboard -> 200"
+  "Tests Trainer GET /api/trainer/dashboard -> 200 JSON"
 );
 assert(
-  runtimeSource.includes("Trainer GET /api/admin/dashboard"),
-  "Tests Trainer GET /api/admin/dashboard -> 403"
+  runtimeSource.includes("Trainer GET /api/admin/dashboard (denial)"),
+  "Tests Trainer GET /api/admin/dashboard -> 403 JSON"
 );
 
 // Admin Operations Analytics Read Model
 assert(
   runtimeSource.includes("Admin GET /api/admin/analytics/operations?range=7d"),
-  "Tests Admin GET /api/admin/analytics/operations?range=7d -> 200"
+  "Tests Admin GET /api/admin/analytics/operations?range=7d -> 200 JSON"
 );
 
 // Bounded Notification Firewall Checks
 assert(
   runtimeSource.includes("/api/admin/notifications/foo"),
-  "Tests invalid notification path /foo -> 403"
+  "Tests invalid notification path /foo -> 403 JSON"
 );
 assert(
   runtimeSource.includes("/api/admin/notifications-evil"),
-  "Tests invalid prefix /notifications-evil -> 403"
+  "Tests invalid prefix /notifications-evil -> 403 JSON"
 );
 assert(
   runtimeSource.includes("/api/admin/notifications/01/read"),
-  "Tests invalid ID format /01/read -> 403"
+  "Tests invalid ID format /01/read -> 403 JSON"
 );
 assert(
   runtimeSource.includes("/api/admin/notifications/1/read"),
-  "Tests canonical path with wrong method GET /1/read -> 404"
+  "Tests canonical path with wrong method GET /1/read -> 404 JSON"
 );
 
 // Safety: Forbidden Mutations Blacklist Check

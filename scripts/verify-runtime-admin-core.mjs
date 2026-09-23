@@ -1,5 +1,5 @@
 /**
- * Staging Admin-Realm Runtime Smoke Harness (Faz 7B.4G-F.23B)
+ * Staging Admin-Realm Runtime Smoke Harness (Faz 7B.4G-F.23B.1)
  *
  * Verifies real HTTP staging deployment authorization boundaries:
  * - Anonymous auth boundaries
@@ -7,6 +7,9 @@
  * - Reception matrix (including F.20C.2 notification firewall exemption)
  * - Trainer matrix (including F.20C generic inbox & trainer dashboard)
  * - Bounded notification path firewall enforcement
+ * - Dual security headers validation (/api/health and /api/auth/csrf)
+ * - Hardened session cookie attributes (so3_admin_session: Path=/, HttpOnly, Secure, SameSite=Strict)
+ * - Central non-redirect JSON API transport validation for all tested /api/* responses
  * - Read-only smoke: zero business data mutations
  * - Never prints or logs secrets, passwords, cookies, or member PII
  */
@@ -153,6 +156,109 @@ class CookieJar {
   }
 }
 
+// Specific Set-Cookie Extractor for Target Cookie
+function findSetCookieFor(rawSetCookies, cookieName) {
+  if (!Array.isArray(rawSetCookies)) return null;
+  for (const sc of rawSetCookies) {
+    if (typeof sc !== 'string') continue;
+    const parts = sc.split(';');
+    if (parts.length === 0) continue;
+    const firstPart = parts[0].trim();
+    const eqIdx = firstPart.indexOf('=');
+    if (eqIdx !== -1) {
+      const name = firstPart.substring(0, eqIdx).trim();
+      if (name === cookieName) {
+        return sc;
+      }
+    }
+  }
+  return null;
+}
+
+// Bounded Cookie Attribute Validator (Zero secret output)
+function validateAdminSessionCookieAttributes(setCookieHeader) {
+  if (!setCookieHeader || typeof setCookieHeader !== 'string') {
+    return {
+      hasCookie: false,
+      hasPath: false,
+      hasHttpOnly: false,
+      hasSecure: false,
+      hasSameSiteStrict: false,
+      valid: false
+    };
+  }
+
+  const parts = setCookieHeader.split(';').map(p => p.trim());
+  let hasPath = false;
+  let hasHttpOnly = false;
+  let hasSecure = false;
+  let hasSameSiteStrict = false;
+
+  for (let i = 1; i < parts.length; i++) {
+    const lower = parts[i].toLowerCase();
+    if (lower === 'path=/') {
+      hasPath = true;
+    } else if (lower === 'httponly') {
+      hasHttpOnly = true;
+    } else if (lower === 'secure') {
+      hasSecure = true;
+    } else if (lower === 'samesite=strict') {
+      hasSameSiteStrict = true;
+    }
+  }
+
+  return {
+    hasCookie: true,
+    hasPath,
+    hasHttpOnly,
+    hasSecure,
+    hasSameSiteStrict,
+    valid: hasPath && hasHttpOnly && hasSecure && hasSameSiteStrict
+  };
+}
+
+// Central Security Header Validator
+function validateApiSecurityHeaders(headers, endpointLabel) {
+  const nosniff = headers.get('x-content-type-options') === 'nosniff';
+  const xframe = headers.get('x-frame-options') === 'DENY';
+  const referrer = headers.get('referrer-policy') === 'no-referrer';
+  const cacheControl = (headers.get('cache-control') || '').toLowerCase();
+  const cacheSafe = cacheControl.includes('no-store') || cacheControl.includes('no-cache');
+
+  recordResult(
+    `${endpointLabel} Security Header X-Content-Type-Options: nosniff`,
+    "nosniff",
+    headers.get('x-content-type-options') || 'none',
+    nosniff
+  );
+  recordResult(
+    `${endpointLabel} Security Header X-Frame-Options: DENY`,
+    "DENY",
+    headers.get('x-frame-options') || 'none',
+    xframe
+  );
+  recordResult(
+    `${endpointLabel} Security Header Referrer-Policy: no-referrer`,
+    "no-referrer",
+    headers.get('referrer-policy') || 'none',
+    referrer
+  );
+  recordResult(
+    `${endpointLabel} Security Header Cache-Control: no-store / no-cache`,
+    "no-store/no-cache",
+    headers.get('cache-control') || 'none',
+    cacheSafe
+  );
+}
+
+// Transport Contract Check: non-redirect application/json with valid parsed JSON
+function isJsonApiResponse(res) {
+  if (!res) return false;
+  const isRedirect = res.status >= 300 && res.status < 400;
+  const isJsonType = typeof res.contentType === 'string' && res.contentType.toLowerCase().includes('application/json');
+  return !isRedirect && isJsonType && res.jsonParsed === true;
+}
+
 async function request(urlPath, options = {}, jar = null) {
   const url = baseUrlStr + urlPath;
   const headers = new Headers(options.headers || {});
@@ -164,8 +270,9 @@ async function request(urlPath, options = {}, jar = null) {
     }
   }
 
+  const method = options.method || 'GET';
   const fetchOptions = {
-    method: options.method || 'GET',
+    method,
     headers,
     redirect: 'manual',
     signal: AbortSignal.timeout(8000),
@@ -180,28 +287,73 @@ async function request(urlPath, options = {}, jar = null) {
 
     const text = await res.text();
     let json = null;
+    let jsonParsed = false;
     const contentType = res.headers.get('content-type') || '';
     if (contentType.toLowerCase().includes('application/json')) {
       try {
         json = JSON.parse(text);
+        jsonParsed = true;
       } catch (e) {
         json = null;
+        jsonParsed = false;
       }
     }
 
-    return {
+    const responseObj = {
       status: res.status,
       headers: res.headers,
       body: text,
       json,
+      jsonParsed,
       contentType
     };
+
+    // Central API Transport Validation for every tested /api/* response
+    if (urlPath.startsWith('/api/')) {
+      const isRedirect = res.status >= 300 && res.status < 400;
+      const isJsonType = contentType.toLowerCase().includes('application/json');
+
+      if (isRedirect) {
+        recordResult(
+          `API transport ${method} ${urlPath}`,
+          "non-redirect application/json",
+          `${res.status} redirect`,
+          false
+        );
+      } else if (!isJsonType) {
+        const safeType = contentType ? contentType.split(';')[0].trim() : 'empty';
+        recordResult(
+          `API transport ${method} ${urlPath}`,
+          "non-redirect application/json",
+          `${res.status} ${safeType}`,
+          false
+        );
+      } else if (!jsonParsed) {
+        recordResult(
+          `API transport ${method} ${urlPath}`,
+          "valid parseable JSON",
+          `${res.status} invalid JSON syntax`,
+          false
+        );
+      }
+    }
+
+    return responseObj;
   } catch (err) {
+    if (urlPath.startsWith('/api/')) {
+      recordResult(
+        `API transport ${method} ${urlPath}`,
+        "network success",
+        `network failure: ${err.message}`,
+        false
+      );
+    }
     return {
       status: 0,
       headers: new Headers(),
       body: '',
       json: null,
+      jsonParsed: false,
       contentType: '',
       error: err.message
     };
@@ -213,8 +365,8 @@ async function loginRole(roleName, username, password, expectedRole) {
 
   // 1. GET /api/auth/csrf
   const csrfRes = await request('/api/auth/csrf', { method: 'GET' }, jar);
-  if (csrfRes.status !== 200 || !csrfRes.json || !csrfRes.json.data || typeof csrfRes.json.data.token !== 'string') {
-    recordResult(`${roleName} CSRF fetch`, 200, csrfRes.status, false, 'Failed to obtain valid CSRF token');
+  if (csrfRes.status !== 200 || !isJsonApiResponse(csrfRes) || !csrfRes.json || !csrfRes.json.data || typeof csrfRes.json.data.token !== 'string') {
+    recordResult(`${roleName} CSRF fetch`, "200 JSON with token", `${csrfRes.status}`, false, 'Failed to obtain valid CSRF token');
     return null;
   }
   const csrfToken = csrfRes.json.data.token;
@@ -230,6 +382,7 @@ async function loginRole(roleName, username, password, expectedRole) {
   }, jar);
 
   const loginSuccess = loginRes.status === 200 &&
+    isJsonApiResponse(loginRes) &&
     loginRes.json &&
     loginRes.json.data &&
     Number.isInteger(loginRes.json.data.id) &&
@@ -251,7 +404,7 @@ async function loginRole(roleName, username, password, expectedRole) {
 
   // 3. GET /api/auth/me to verify regenerated session
   const meRes = await request('/api/auth/me', { method: 'GET' }, jar);
-  const meSuccess = meRes.status === 200 && meRes.json?.data?.role === expectedRole;
+  const meSuccess = meRes.status === 200 && isJsonApiResponse(meRes) && meRes.json?.data?.role === expectedRole;
   recordResult(
     `${roleName} authenticated /api/auth/me session confirmation`,
     `200 with role ${expectedRole}`,
@@ -279,18 +432,18 @@ async function logoutRole(roleName, jar) {
 
   recordResult(
     `${roleName} logout status`,
-    200,
-    logoutRes.status,
-    logoutRes.status === 200
+    "200 JSON",
+    `${logoutRes.status}`,
+    logoutRes.status === 200 && isJsonApiResponse(logoutRes)
   );
 
   // Verification: post-logout /api/auth/me must return 401
   const meRes = await request('/api/auth/me', { method: 'GET' }, jar);
   recordResult(
     `${roleName} post-logout /api/auth/me rejection`,
-    401,
-    meRes.status,
-    meRes.status === 401
+    "401 JSON",
+    `${meRes.status}`,
+    meRes.status === 401 && isJsonApiResponse(meRes)
   );
 }
 
@@ -305,97 +458,82 @@ async function runSmoke() {
   const healthRes = await request('/api/health');
   recordResult(
     "Anonymous GET /api/health",
-    200,
-    healthRes.status,
-    healthRes.status === 200 && healthRes.json?.data?.ok === true
+    "200 JSON",
+    `${healthRes.status}`,
+    healthRes.status === 200 && isJsonApiResponse(healthRes) && healthRes.json?.data?.ok === true
   );
 
-  // Security headers check on /api/health and /api/auth/csrf
-  const nosniff = healthRes.headers.get('x-content-type-options') === 'nosniff';
-  const xframe = healthRes.headers.get('x-frame-options') === 'DENY';
-  const referrer = healthRes.headers.get('referrer-policy') === 'no-referrer';
-  const cacheControl = (healthRes.headers.get('cache-control') || '').toLowerCase();
-  const cacheSafe = cacheControl.includes('no-store') || cacheControl.includes('no-cache');
-
-  recordResult(
-    "API Security Header X-Content-Type-Options: nosniff",
-    "nosniff",
-    healthRes.headers.get('x-content-type-options') || 'none',
-    nosniff
-  );
-  recordResult(
-    "API Security Header X-Frame-Options: DENY",
-    "DENY",
-    healthRes.headers.get('x-frame-options') || 'none',
-    xframe
-  );
-  recordResult(
-    "API Security Header Referrer-Policy: no-referrer",
-    "no-referrer",
-    healthRes.headers.get('referrer-policy') || 'none',
-    referrer
-  );
-  recordResult(
-    "API Security Header Cache-Control: no-store / no-cache",
-    "no-store/no-cache",
-    healthRes.headers.get('cache-control') || 'none',
-    cacheSafe
-  );
+  // Security headers check on /api/health
+  validateApiSecurityHeaders(healthRes.headers, "GET /api/health");
 
   const anonJar = new CookieJar();
   const csrfRes = await request('/api/auth/csrf', { method: 'GET' }, anonJar);
   recordResult(
     "Anonymous GET /api/auth/csrf",
-    200,
-    csrfRes.status,
-    csrfRes.status === 200 && Boolean(csrfRes.json?.data?.token)
+    "200 JSON",
+    `${csrfRes.status}`,
+    csrfRes.status === 200 && isJsonApiResponse(csrfRes) && Boolean(csrfRes.json?.data?.token)
   );
 
-  // Cookie attribute check on HTTPS
+  // Security headers check on /api/auth/csrf (Parity enforcement)
+  validateApiSecurityHeaders(csrfRes.headers, "GET /api/auth/csrf");
+
+  // Specific session cookie attribute check on HTTPS
   if (parsedUrl.protocol === 'https:') {
-    const rawCookies = anonJar.rawSetCookies.join(' ');
-    const hasAdminSession = /so3_admin_session=/i.test(rawCookies);
-    const hasHttpOnly = /httponly/i.test(rawCookies);
-    const hasPath = /path=\//i.test(rawCookies);
+    const adminSessionHeader = findSetCookieFor(anonJar.rawSetCookies, 'so3_admin_session');
+    const cookieAttr = validateAdminSessionCookieAttributes(adminSessionHeader);
+
     recordResult(
-      "Session cookie named so3_admin_session",
+      "Session cookie named so3_admin_session exists",
       true,
-      hasAdminSession,
-      hasAdminSession
-    );
-    recordResult(
-      "Session cookie HttpOnly attribute",
-      true,
-      hasHttpOnly,
-      hasHttpOnly
+      cookieAttr.hasCookie,
+      cookieAttr.hasCookie
     );
     recordResult(
       "Session cookie Path=/ attribute",
       true,
-      hasPath,
-      hasPath
+      cookieAttr.hasPath,
+      cookieAttr.hasPath
+    );
+    recordResult(
+      "Session cookie HttpOnly attribute",
+      true,
+      cookieAttr.hasHttpOnly,
+      cookieAttr.hasHttpOnly
+    );
+    recordResult(
+      "Session cookie Secure attribute",
+      true,
+      cookieAttr.hasSecure,
+      cookieAttr.hasSecure
+    );
+    recordResult(
+      "Session cookie SameSite=Strict attribute",
+      true,
+      cookieAttr.hasSameSiteStrict,
+      cookieAttr.hasSameSiteStrict
     );
   }
 
-  console.log("\n=== 2. Anonymous Authorization Boundaries (Strict 401) ===");
+  console.log("\n=== 2. Anonymous Authorization Boundaries (Strict 401 JSON) ===");
 
   const anonMe = await request('/api/auth/me');
-  recordResult("Anonymous GET /api/auth/me", 401, anonMe.status, anonMe.status === 401);
+  recordResult("Anonymous GET /api/auth/me", "401 JSON", `${anonMe.status}`, anonMe.status === 401 && isJsonApiResponse(anonMe));
 
   const anonNotif = await request('/api/admin/notifications');
-  recordResult("Anonymous GET /api/admin/notifications", 401, anonNotif.status, anonNotif.status === 401);
+  recordResult("Anonymous GET /api/admin/notifications", "401 JSON", `${anonNotif.status}`, anonNotif.status === 401 && isJsonApiResponse(anonNotif));
 
   const anonAnalytics = await request('/api/admin/analytics/operations?range=7d');
-  recordResult("Anonymous GET /api/admin/analytics/operations", 401, anonAnalytics.status, anonAnalytics.status === 401);
+  recordResult("Anonymous GET /api/admin/analytics/operations", "401 JSON", `${anonAnalytics.status}`, anonAnalytics.status === 401 && isJsonApiResponse(anonAnalytics));
 
   const anonRenewWatch = await request('/api/reception/renewal-watch');
-  recordResult("Anonymous GET /api/reception/renewal-watch", 401, anonRenewWatch.status, anonRenewWatch.status === 401);
+  recordResult("Anonymous GET /api/reception/renewal-watch", "401 JSON", `${anonRenewWatch.status}`, anonRenewWatch.status === 401 && isJsonApiResponse(anonRenewWatch));
 
   const anonOccupancy = await request('/api/reception/occupancy');
-  recordResult("Anonymous GET /api/reception/occupancy", 401, anonOccupancy.status, anonOccupancy.status === 401);
+  recordResult("Anonymous GET /api/reception/occupancy", "401 JSON", `${anonOccupancy.status}`, anonOccupancy.status === 401 && isJsonApiResponse(anonOccupancy));
 
   const anonTrainerDash = await request('/api/trainer/dashboard');
-  recordResult("Anonymous GET /api/trainer/dashboard", 401, anonTrainerDash.status, anonTrainerDash.status === 401);
+  recordResult("Anonymous GET /api/trainer/dashboard", "401 JSON", `${anonTrainerDash.status}`, anonTrainerDash.status === 401 && isJsonApiResponse(anonTrainerDash));
 
   console.log("\n=== 3. Admin / Super Admin Authorization Matrix ===");
 
@@ -406,6 +544,7 @@ async function runSmoke() {
     // 1. Notification Inbox
     const notifRes = await request('/api/admin/notifications?view=active&page=1&per_page=20', { method: 'GET' }, jar);
     const notifValid = notifRes.status === 200 &&
+      isJsonApiResponse(notifRes) &&
       notifRes.json &&
       notifRes.json.data &&
       Number.isInteger(notifRes.json.data.unread_count) &&
@@ -418,6 +557,7 @@ async function runSmoke() {
     // 2. Operations Analytics Read Model
     const analyticsRes = await request('/api/admin/analytics/operations?range=7d', { method: 'GET' }, jar);
     const analyticsValid = analyticsRes.status === 200 &&
+      isJsonApiResponse(analyticsRes) &&
       analyticsRes.json?.data?.range === '7d' &&
       analyticsRes.json?.data?.timezone === 'Europe/Istanbul' &&
       Array.isArray(analyticsRes.json?.data?.daily) &&
@@ -428,15 +568,15 @@ async function runSmoke() {
 
     // 3. Reception Occupancy
     const occRes = await request('/api/reception/occupancy', { method: 'GET' }, jar);
-    recordResult("Admin GET /api/reception/occupancy", 200, occRes.status, occRes.status === 200);
+    recordResult("Admin GET /api/reception/occupancy", 200, occRes.status, occRes.status === 200 && isJsonApiResponse(occRes));
 
     // 4. Reception Renewal Watch
     const rwRes = await request('/api/reception/renewal-watch?bucket=all&window_days=14&page=1&per_page=20', { method: 'GET' }, jar);
-    recordResult("Admin GET /api/reception/renewal-watch", 200, rwRes.status, rwRes.status === 200);
+    recordResult("Admin GET /api/reception/renewal-watch", 200, rwRes.status, rwRes.status === 200 && isJsonApiResponse(rwRes));
 
     // 5. Trainer Dashboard Denial (Trainer only)
     const tdRes = await request('/api/trainer/dashboard', { method: 'GET' }, jar);
-    recordResult("Admin GET /api/trainer/dashboard (denial)", 403, tdRes.status, tdRes.status === 403);
+    recordResult("Admin GET /api/trainer/dashboard (denial)", "403 JSON", `${tdRes.status}`, tdRes.status === 403 && isJsonApiResponse(tdRes));
 
     await logoutRole('Admin', jar);
   }
@@ -450,6 +590,7 @@ async function runSmoke() {
     // 1. Reception Notification Inbox (Critical F.20C.2 Proof!)
     const notifRes = await request('/api/admin/notifications?view=active&page=1&per_page=20', { method: 'GET' }, jar);
     const notifValid = notifRes.status === 200 &&
+      isJsonApiResponse(notifRes) &&
       notifRes.json &&
       notifRes.json.data &&
       Number.isInteger(notifRes.json.data.unread_count) &&
@@ -465,36 +606,36 @@ async function runSmoke() {
 
     // 2. Reception Occupancy
     const occRes = await request('/api/reception/occupancy', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/reception/occupancy", 200, occRes.status, occRes.status === 200);
+    recordResult("Reception GET /api/reception/occupancy", 200, occRes.status, occRes.status === 200 && isJsonApiResponse(occRes));
 
     // 3. Reception Renewal Watch
     const rwRes = await request('/api/reception/renewal-watch?bucket=all&window_days=14&page=1&per_page=20', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/reception/renewal-watch", 200, rwRes.status, rwRes.status === 200);
+    recordResult("Reception GET /api/reception/renewal-watch", 200, rwRes.status, rwRes.status === 200 && isJsonApiResponse(rwRes));
 
     // 4. Admin Dashboard Denial (Broad firewall preserved)
     const admDashRes = await request('/api/admin/dashboard', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/dashboard (denial)", 403, admDashRes.status, admDashRes.status === 403);
+    recordResult("Reception GET /api/admin/dashboard (denial)", "403 JSON", `${admDashRes.status}`, admDashRes.status === 403 && isJsonApiResponse(admDashRes));
 
     // 5. Operations Analytics Denial
     const admAnalyticsRes = await request('/api/admin/analytics/operations?range=7d', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/analytics/operations (denial)", 403, admAnalyticsRes.status, admAnalyticsRes.status === 403);
+    recordResult("Reception GET /api/admin/analytics/operations (denial)", "403 JSON", `${admAnalyticsRes.status}`, admAnalyticsRes.status === 403 && isJsonApiResponse(admAnalyticsRes));
 
     // 6. Trainer Dashboard Denial
     const tdRes = await request('/api/trainer/dashboard', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/trainer/dashboard (denial)", 403, tdRes.status, tdRes.status === 403);
+    recordResult("Reception GET /api/trainer/dashboard (denial)", "403 JSON", `${tdRes.status}`, tdRes.status === 403 && isJsonApiResponse(tdRes));
 
     // Bounded Notification Firewall Checks
     const fooRes = await request('/api/admin/notifications/foo', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/notifications/foo (firewall denied)", 403, fooRes.status, fooRes.status === 403);
+    recordResult("Reception GET /api/admin/notifications/foo (firewall denied)", "403 JSON", `${fooRes.status}`, fooRes.status === 403 && isJsonApiResponse(fooRes));
 
     const evilRes = await request('/api/admin/notifications-evil', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/notifications-evil (firewall denied)", 403, evilRes.status, evilRes.status === 403);
+    recordResult("Reception GET /api/admin/notifications-evil (firewall denied)", "403 JSON", `${evilRes.status}`, evilRes.status === 403 && isJsonApiResponse(evilRes));
 
     const zeroIdRes = await request('/api/admin/notifications/01/read', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/notifications/01/read (firewall denied)", 403, zeroIdRes.status, zeroIdRes.status === 403);
+    recordResult("Reception GET /api/admin/notifications/01/read (firewall denied)", "403 JSON", `${zeroIdRes.status}`, zeroIdRes.status === 403 && isJsonApiResponse(zeroIdRes));
 
     const wrongMethodRes = await request('/api/admin/notifications/1/read', { method: 'GET' }, jar);
-    recordResult("Reception GET /api/admin/notifications/1/read (exempted but method 404)", 404, wrongMethodRes.status, wrongMethodRes.status === 404);
+    recordResult("Reception GET /api/admin/notifications/1/read (exempted but method 404)", "404 JSON", `${wrongMethodRes.status}`, wrongMethodRes.status === 404 && isJsonApiResponse(wrongMethodRes));
 
     await logoutRole('Reception', jar);
   }
@@ -507,27 +648,27 @@ async function runSmoke() {
 
     // 1. Generic Notification Inbox
     const notifRes = await request('/api/admin/notifications?view=active&page=1&per_page=20', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/admin/notifications (generic admin-realm)", 200, notifRes.status, notifRes.status === 200);
+    recordResult("Trainer GET /api/admin/notifications (generic admin-realm)", 200, notifRes.status, notifRes.status === 200 && isJsonApiResponse(notifRes));
 
     // 2. Trainer Dashboard
     const tdRes = await request('/api/trainer/dashboard', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/trainer/dashboard", 200, tdRes.status, tdRes.status === 200);
+    recordResult("Trainer GET /api/trainer/dashboard", 200, tdRes.status, tdRes.status === 200 && isJsonApiResponse(tdRes));
 
     // 3. Admin Dashboard Denial
     const admDashRes = await request('/api/admin/dashboard', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/admin/dashboard (denial)", 403, admDashRes.status, admDashRes.status === 403);
+    recordResult("Trainer GET /api/admin/dashboard (denial)", "403 JSON", `${admDashRes.status}`, admDashRes.status === 403 && isJsonApiResponse(admDashRes));
 
     // 4. Operations Analytics Denial
     const admAnalyticsRes = await request('/api/admin/analytics/operations?range=7d', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/admin/analytics/operations (denial)", 403, admAnalyticsRes.status, admAnalyticsRes.status === 403);
+    recordResult("Trainer GET /api/admin/analytics/operations (denial)", "403 JSON", `${admAnalyticsRes.status}`, admAnalyticsRes.status === 403 && isJsonApiResponse(admAnalyticsRes));
 
     // 5. Reception Occupancy Denial
     const occRes = await request('/api/reception/occupancy', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/reception/occupancy (denial)", 403, occRes.status, occRes.status === 403);
+    recordResult("Trainer GET /api/reception/occupancy (denial)", "403 JSON", `${occRes.status}`, occRes.status === 403 && isJsonApiResponse(occRes));
 
     // 6. Reception Renewal Watch Denial
     const rwRes = await request('/api/reception/renewal-watch', { method: 'GET' }, jar);
-    recordResult("Trainer GET /api/reception/renewal-watch (denial)", 403, rwRes.status, rwRes.status === 403);
+    recordResult("Trainer GET /api/reception/renewal-watch (denial)", "403 JSON", `${rwRes.status}`, rwRes.status === 403 && isJsonApiResponse(rwRes));
 
     await logoutRole('Trainer', jar);
   }
