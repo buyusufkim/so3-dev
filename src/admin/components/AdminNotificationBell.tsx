@@ -69,7 +69,7 @@ function validateNotificationItem(data: unknown): AdminNotificationItem | null {
   if (item.action_path !== null) {
     if (typeof item.action_path !== 'string') return null;
     const path = item.action_path.trim();
-    if (!path.startsWith('/admin')) return null;
+    if (path !== '/admin' && !path.startsWith('/admin/')) return null;
     if (path.includes('://') || path.startsWith('//') || path.toLowerCase().startsWith('javascript:')) return null;
   }
 
@@ -158,6 +158,15 @@ export function AdminNotificationBell() {
   const [materializerWarning, setMaterializerWarning] = useState<string | null>(null);
   const [activeMutationId, setActiveMutationId] = useState<number | 'all' | null>(null);
 
+  const selectionRef = useRef<{
+    view: NotificationView;
+    page: number;
+  }>({
+    view: 'active',
+    page: 1,
+  });
+  const materializerInFlightRef = useRef<boolean>(false);
+  const mountedRef = useRef<boolean>(true);
   const requestGenRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -171,8 +180,10 @@ export function AdminNotificationBell() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setLoading(true);
-    setError(null);
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const data = await apiClient.get(
@@ -180,7 +191,7 @@ export function AdminNotificationBell() {
         { signal: controller.signal }
       );
 
-      if (currentGen !== requestGenRef.current) return;
+      if (!mountedRef.current || currentGen !== requestGenRef.current) return;
 
       const validated = validateNotificationListResponse(data, targetView, targetPage);
       if (!validated) {
@@ -188,6 +199,11 @@ export function AdminNotificationBell() {
         setItems([]);
         return;
       }
+
+      selectionRef.current = {
+        view: validated.view,
+        page: validated.pagination.page,
+      };
 
       setUnreadCount(validated.unread_count);
       setView(validated.view);
@@ -197,35 +213,59 @@ export function AdminNotificationBell() {
 
       // Bounded correction if current page is empty and beyond last_page
       if (validated.items.length === 0 && targetPage > validated.pagination.last_page && validated.pagination.last_page >= 1) {
+        selectionRef.current = {
+          view: targetView,
+          page: validated.pagination.last_page,
+        };
         fetchInbox(targetView, validated.pagination.last_page);
       }
     } catch (err: unknown) {
-      if (currentGen !== requestGenRef.current) return;
+      if (!mountedRef.current || currentGen !== requestGenRef.current) return;
       if (err instanceof Error && err.name === 'AbortError') return;
       setError('Bildirimler yüklenemedi.');
       setItems([]);
     } finally {
-      if (currentGen === requestGenRef.current) {
+      if (mountedRef.current && currentGen === requestGenRef.current) {
         setLoading(false);
       }
     }
   }, []);
 
-  const materializeAndFetch = useCallback(async (targetView: NotificationView, targetPage: number) => {
-    setMaterializerWarning(null);
+  const materializeAndFetch = useCallback(async () => {
+    if (materializerInFlightRef.current) {
+      if (mountedRef.current) {
+        const latest = selectionRef.current;
+        await fetchInbox(latest.view, latest.page);
+      }
+      return;
+    }
+
+    materializerInFlightRef.current = true;
+    if (mountedRef.current) {
+      setMaterializerWarning(null);
+    }
+
     try {
       await apiClient.post('/api/reception/renewal-notifications/materialize', {});
     } catch (err: unknown) {
-      setMaterializerWarning('Yeni yenileme bildirimleri kontrol edilemedi.');
+      if (mountedRef.current) {
+        setMaterializerWarning('Yeni yenileme bildirimleri kontrol edilemedi.');
+      }
     } finally {
-      await fetchInbox(targetView, targetPage);
+      materializerInFlightRef.current = false;
+      if (mountedRef.current) {
+        const latest = selectionRef.current;
+        await fetchInbox(latest.view, latest.page);
+      }
     }
   }, [fetchInbox]);
 
   // Initial mount: materialize renewal notifications then fetch inbox
   useEffect(() => {
-    materializeAndFetch('active', 1);
+    mountedRef.current = true;
+    materializeAndFetch();
     return () => {
+      mountedRef.current = false;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -267,26 +307,37 @@ export function AdminNotificationBell() {
   };
 
   const handleTabChange = (newView: NotificationView) => {
-    if (newView === view && page === 1) return;
+    if (newView === selectionRef.current.view && selectionRef.current.page === 1) return;
+    selectionRef.current = {
+      view: newView,
+      page: 1,
+    };
     setView(newView);
     setPage(1);
     fetchInbox(newView, 1);
   };
 
   const handlePageChange = (newPage: number) => {
-    if (newPage === page || newPage < 1) return;
+    if (newPage === selectionRef.current.page || newPage < 1) return;
     if (pagination && newPage > pagination.last_page) return;
+    const currentView = selectionRef.current.view;
+    selectionRef.current = {
+      view: currentView,
+      page: newPage,
+    };
     setPage(newPage);
-    fetchInbox(view, newPage);
+    fetchInbox(currentView, newPage);
   };
 
   const handleManualRefresh = async () => {
-    if (activeMutationId !== null) return;
+    if (activeMutationId !== null || materializerInFlightRef.current) return;
     setActiveMutationId('all');
     try {
-      await materializeAndFetch(view, page);
+      await materializeAndFetch();
     } finally {
-      setActiveMutationId(null);
+      if (mountedRef.current) {
+        setActiveMutationId(null);
+      }
     }
   };
 
@@ -299,8 +350,11 @@ export function AdminNotificationBell() {
     } catch (err: unknown) {
       // Reconcile anyway
     } finally {
-      await fetchInbox(view, page);
-      setActiveMutationId(null);
+      if (mountedRef.current) {
+        const latest = selectionRef.current;
+        await fetchInbox(latest.view, latest.page);
+        setActiveMutationId(null);
+      }
     }
   };
 
@@ -313,8 +367,11 @@ export function AdminNotificationBell() {
     } catch (err: unknown) {
       // Reconcile anyway
     } finally {
-      await fetchInbox(view, page);
-      setActiveMutationId(null);
+      if (mountedRef.current) {
+        const latest = selectionRef.current;
+        await fetchInbox(latest.view, latest.page);
+        setActiveMutationId(null);
+      }
     }
   };
 
@@ -336,14 +393,25 @@ export function AdminNotificationBell() {
       if (valid) {
         navigate(item.action_path);
         setIsOpen(false);
-        fetchInbox(view, page);
+        if (mountedRef.current) {
+          const latest = selectionRef.current;
+          fetchInbox(latest.view, latest.page);
+        }
       } else {
-        await fetchInbox(view, page);
+        if (mountedRef.current) {
+          const latest = selectionRef.current;
+          await fetchInbox(latest.view, latest.page);
+        }
       }
     } catch (err: unknown) {
-      await fetchInbox(view, page);
+      if (mountedRef.current) {
+        const latest = selectionRef.current;
+        await fetchInbox(latest.view, latest.page);
+      }
     } finally {
-      setActiveMutationId(null);
+      if (mountedRef.current) {
+        setActiveMutationId(null);
+      }
     }
   };
 
@@ -504,7 +572,10 @@ export function AdminNotificationBell() {
                 <div className="text-xs text-rose-400">{error}</div>
                 <button
                   type="button"
-                  onClick={() => fetchInbox(view, page)}
+                  onClick={() => {
+                    const latest = selectionRef.current;
+                    fetchInbox(latest.view, latest.page);
+                  }}
                   className="px-4 py-2 min-h-[40px] text-xs font-medium bg-white/10 hover:bg-white/15 text-white rounded transition-colors"
                 >
                   Tekrar Dene

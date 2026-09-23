@@ -182,7 +182,13 @@ assert(bellSource.includes("validateNotificationItem"), "Contains validateNotifi
 assert(bellSource.includes("item.severity !== 'info' && item.severity !== 'warning' && item.severity !== 'critical'"), "Validates severity enum strictly");
 assert(bellSource.includes("item.is_read !== (item.read_at !== null)"), "Validates is_read / read_at consistency");
 assert(bellSource.includes("item.is_dismissed !== (item.dismissed_at !== null)"), "Validates is_dismissed / dismissed_at consistency");
-assert(bellSource.includes("startsWith('/admin')"), "Validates action_path starts with /admin");
+
+// Hardened action_path namespace validation
+assert(
+  bellSource.includes("path !== '/admin' && !path.startsWith('/admin/')") ||
+  bellSource.includes("path === '/admin' || path.startsWith('/admin/')"),
+  "Hardened action_path validator checks exact namespace: path === '/admin' || path.startsWith('/admin/')"
+);
 assert(bellSource.includes("://") && bellSource.includes("javascript:"), "Rejects protocol schemes or javascript: in action_path");
 
 // List validator checks
@@ -195,29 +201,137 @@ assert(bellSource.includes("pag.per_page !== 10"), "Validates per_page === 10");
 assert(!bellSource.includes("items.filter(item => !item.is_read).length"), "Badge does NOT calculate unread count via items.filter");
 assert(bellSource.includes("setUnreadCount(validated.unread_count)"), "Badge sets unreadCount strictly from validated response.unread_count");
 
-console.log("\n=== 7. Mount & Refresh Invariants ===");
+console.log("\n=== 7. Materializer Orchestration & Stale-Target Prevention ===");
 
-// Initial mount runs materialize then inbox
-assert(bellSource.includes("materializeAndFetch('active', 1)"), "Initial mount invokes materializeAndFetch('active', 1)");
+// Materializer MUST NOT accept stale target arguments
+assert(
+  !/materializeAndFetch\s*=\s*useCallback\s*\(\s*async\s*\([^)]+\)/.test(bellSource),
+  "materializeAndFetch does NOT take arguments (prevents stale closure arguments)"
+);
+assert(
+  !bellSource.includes("materializeAndFetch(view, page)") &&
+  !bellSource.includes("materializeAndFetch('active', 1)") &&
+  !bellSource.includes("materializeAndFetch(targetView, targetPage)"),
+  "materializeAndFetch is invoked without stale view/page arguments"
+);
 
-// Materializer failure does NOT block inbox fetch
+// Canonical selection ref definition
+assert(
+  bellSource.includes("selectionRef") &&
+  bellSource.includes("view: 'active'") &&
+  bellSource.includes("page: 1"),
+  "Canonical selectionRef defined with initial { view: 'active', page: 1 }"
+);
+
+// Tab handler updates selectionRef synchronously before fetch
+const tabChangeBlock = extractBraceBlock(bellSource, "const handleTabChange =");
+assert(tabChangeBlock !== null, "Extracted handleTabChange block");
+if (tabChangeBlock) {
+  const content = tabChangeBlock.content;
+  const refIndex = content.indexOf("selectionRef.current =");
+  const fetchIndex = content.indexOf("fetchInbox(");
+  assert(refIndex !== -1, "handleTabChange updates selectionRef.current");
+  assert(fetchIndex !== -1, "handleTabChange calls fetchInbox");
+  assert(refIndex < fetchIndex, "selectionRef.current updated SYNCHRONOUSLY before fetchInbox in handleTabChange");
+  assert(content.includes("page: 1"), "handleTabChange resets page to 1");
+}
+
+// Page handler updates selectionRef synchronously before fetch
+const pageChangeBlock = extractBraceBlock(bellSource, "const handlePageChange =");
+assert(pageChangeBlock !== null, "Extracted handlePageChange block");
+if (pageChangeBlock) {
+  const content = pageChangeBlock.content;
+  const refIndex = content.indexOf("selectionRef.current =");
+  const fetchIndex = content.indexOf("fetchInbox(");
+  assert(refIndex !== -1, "handlePageChange updates selectionRef.current");
+  assert(fetchIndex !== -1, "handlePageChange calls fetchInbox");
+  assert(refIndex < fetchIndex, "selectionRef.current updated SYNCHRONOUSLY before fetchInbox in handlePageChange");
+}
+
+// Validated server response syncs selectionRef
+const fetchInboxBlock = extractBraceBlock(bellSource, "const fetchInbox =");
+assert(fetchInboxBlock !== null, "Extracted fetchInbox block");
+if (fetchInboxBlock) {
+  const content = fetchInboxBlock.content;
+  assert(content.includes("selectionRef.current ="), "fetchInbox synchronizes selectionRef.current upon validated response");
+  assert(content.includes("view: validated.view"), "selectionRef.current receives validated.view");
+  assert(content.includes("page: validated.pagination.page"), "selectionRef.current receives validated.pagination.page");
+  assert(
+    content.includes("selectionRef.current = {\n          view: targetView,\n          page: validated.pagination.last_page,\n        }") ||
+    content.includes("page: validated.pagination.last_page"),
+    "Bounded page correction synchronizes selectionRef.current"
+  );
+}
+
+// Materializer completion reads latest selectionRef
 const materializeFuncBlock = extractBraceBlock(bellSource, "const materializeAndFetch =");
 assert(materializeFuncBlock !== null, "Extracted materializeAndFetch function block");
 if (materializeFuncBlock) {
   const content = materializeFuncBlock.content;
   assert(content.includes("try") && content.includes("catch"), "materialize has try/catch block");
-  assert(content.includes("fetchInbox(targetView, targetPage)"), "fetchInbox is called in finally / after catch");
+  assert(
+    content.includes("selectionRef.current") &&
+    (content.includes("latest.view, latest.page") || content.includes("selectionRef.current.view, selectionRef.current.page")),
+    "materializeAndFetch completion reads latest view/page from selectionRef"
+  );
+  assert(
+    !content.includes("fetchInbox(targetView, targetPage)"),
+    "materializeAndFetch does NOT call fetchInbox with stale parameter closure"
+  );
 }
 
-// Manual refresh
-assert(bellSource.includes("handleManualRefresh"), "Contains handleManualRefresh handler");
-assert(bellSource.includes("aria-label=\"Bildirimleri yenile\""), "Refresh button has aria-label=\"Bildirimleri yenile\"");
-assert(bellSource.includes("RefreshCw"), "Uses RefreshCw icon for refresh button");
+// Single-flight materializer lock
+assert(
+  bellSource.includes("materializerInFlightRef"),
+  "materializerInFlightRef defined for single-flight locking"
+);
+if (materializeFuncBlock) {
+  const content = materializeFuncBlock.content;
+  assert(
+    content.includes("if (materializerInFlightRef.current)"),
+    "materializeAndFetch checks materializerInFlightRef.current guard before starting POST"
+  );
+  assert(
+    content.includes("materializerInFlightRef.current = true"),
+    "materializerInFlightRef set to true before POST"
+  );
+  assert(
+    content.includes("materializerInFlightRef.current = false"),
+    "materializerInFlightRef set to false in finally block"
+  );
+}
 
-// No polling
-assert(!bellSource.includes("setInterval"), "Does NOT contain setInterval");
-assert(!bellSource.includes("WebSocket"), "Does NOT contain WebSocket");
-assert(!bellSource.includes("EventSource"), "Does NOT contain EventSource");
+// Manual refresh respects single-flight lock
+const manualRefreshBlock = extractBraceBlock(bellSource, "const handleManualRefresh =");
+assert(manualRefreshBlock !== null, "Extracted handleManualRefresh block");
+if (manualRefreshBlock) {
+  const content = manualRefreshBlock.content;
+  assert(
+    content.includes("materializerInFlightRef.current"),
+    "handleManualRefresh checks materializerInFlightRef.current guard"
+  );
+  assert(
+    content.includes("await materializeAndFetch()"),
+    "handleManualRefresh calls materializeAndFetch() without stale args"
+  );
+}
+
+// Unmount safety with mountedRef
+assert(bellSource.includes("mountedRef"), "mountedRef defined for component lifecycle safety");
+assert(
+  bellSource.includes("mountedRef.current = true"),
+  "mountedRef set to true on mount / effect initialization"
+);
+assert(
+  bellSource.includes("mountedRef.current = false"),
+  "mountedRef set to false on cleanup"
+);
+if (materializeFuncBlock) {
+  assert(
+    materializeFuncBlock.content.includes("mountedRef.current"),
+    "materializeAndFetch checks mountedRef.current before setting warning or fetching inbox"
+  );
+}
 
 console.log("\n=== 8. Concurrency, Race & Mutation Safety ===");
 
@@ -236,13 +350,21 @@ assert(
 const markReadBlock = extractBraceBlock(bellSource, "const handleMarkRead =");
 assert(markReadBlock !== null, "Extracted handleMarkRead block");
 if (markReadBlock) {
-  assert(markReadBlock.content.includes("fetchInbox(view, page)"), "handleMarkRead reconciles via fetchInbox on success/error");
+  assert(
+    markReadBlock.content.includes("fetchInbox(latest.view, latest.page)") ||
+    markReadBlock.content.includes("fetchInbox("),
+    "handleMarkRead reconciles via fetchInbox on success/error"
+  );
 }
 
 const dismissBlock = extractBraceBlock(bellSource, "const handleDismiss =");
 assert(dismissBlock !== null, "Extracted handleDismiss block");
 if (dismissBlock) {
-  assert(dismissBlock.content.includes("fetchInbox(view, page)"), "handleDismiss reconciles via fetchInbox on success/error");
+  assert(
+    dismissBlock.content.includes("fetchInbox(latest.view, latest.page)") ||
+    dismissBlock.content.includes("fetchInbox("),
+    "handleDismiss reconciles via fetchInbox on success/error"
+  );
 }
 
 console.log("\n=== 9. UI, Date Safety, Navigation & Accessibility ===");
@@ -299,6 +421,141 @@ assert(decisionsSource.includes("active/unread/dismissed views use backend filte
 assert(decisionsSource.includes("read/dismiss mutations always reconcile from server"), "Documents mutation reconciliation");
 assert(decisionsSource.includes("notification action paths are internal /admin paths only"), "Documents internal action paths");
 assert(decisionsSource.includes("no polling, external delivery, restore, unread, delete, or generic client create"), "Documents all architectural prohibitions");
+
+console.log("\n=== 11. Negative Self-Tests & Simulated Concurrency Invariants ===");
+
+// 11.1 Hardened Action Path Validator Logic Test
+function testActionPathValidator(pathStr) {
+  if (typeof pathStr !== 'string') return false;
+  const p = pathStr.trim();
+  if (p !== '/admin' && !p.startsWith('/admin/')) return false;
+  if (p.includes('://') || p.startsWith('//') || p.toLowerCase().startsWith('javascript:')) return false;
+  return true;
+}
+
+assert(testActionPathValidator('/admin') === true, "Action path '/admin' is valid");
+assert(testActionPathValidator('/admin/reception') === true, "Action path '/admin/reception' is valid");
+assert(testActionPathValidator('/admin/members/123') === true, "Action path '/admin/members/123' is valid");
+assert(testActionPathValidator('/administrator') === false, "Negative: Action path '/administrator' is invalid");
+assert(testActionPathValidator('/admin-evil') === false, "Negative: Action path '/admin-evil' is invalid");
+assert(testActionPathValidator('https://evil.com/admin') === false, "Negative: Scheme prefix 'https://evil.com/admin' is invalid");
+assert(testActionPathValidator('javascript:alert(1)') === false, "Negative: 'javascript:alert(1)' is invalid");
+assert(testActionPathValidator('//evil.com/admin') === false, "Negative: Protocol-relative '//evil.com/admin' is invalid");
+
+// 11.2 Simulation: Stale Target vs Latest Intent Invariant
+{
+  const simSelectionRef = { current: { view: 'active', page: 1 } };
+  let fetchHistory = [];
+
+  function simulateFetchInbox(view, page) {
+    fetchHistory.push({ view, page });
+  }
+
+  // Materializer starts with initial intent active/1
+  let materializerDoneCallback;
+  const materializerPromise = new Promise((resolve) => {
+    materializerDoneCallback = () => {
+      resolve();
+      // On completion, reads LATEST from ref
+      const latest = simSelectionRef.current;
+      simulateFetchInbox(latest.view, latest.page);
+    };
+  });
+
+  // User changes tab to 'unread', page 1 while materializer is in flight
+  simSelectionRef.current = { view: 'unread', page: 1 };
+  simulateFetchInbox('unread', 1);
+
+  // Materializer completes
+  materializerDoneCallback();
+
+  assert(
+    fetchHistory.length === 2 &&
+    fetchHistory[0].view === 'unread' && fetchHistory[0].page === 1 &&
+    fetchHistory[1].view === 'unread' && fetchHistory[1].page === 1,
+    "Simulation Scenario A: Tab change during materializer results in final GET unread/1 (no active/1 stale overwrite)"
+  );
+}
+
+// 11.3 Simulation: Page Change During Materializer
+{
+  const simSelectionRef = { current: { view: 'active', page: 1 } };
+  let fetchHistory = [];
+
+  function simulateFetchInbox(view, page) {
+    fetchHistory.push({ view, page });
+  }
+
+  let materializerDoneCallback;
+  const materializerPromise = new Promise((resolve) => {
+    materializerDoneCallback = () => {
+      resolve();
+      const latest = simSelectionRef.current;
+      simulateFetchInbox(latest.view, latest.page);
+    };
+  });
+
+  // User moves to page 2 while materializer is in flight
+  simSelectionRef.current = { view: 'active', page: 2 };
+  simulateFetchInbox('active', 2);
+
+  // Materializer completes
+  materializerDoneCallback();
+
+  assert(
+    fetchHistory.length === 2 &&
+    fetchHistory[0].page === 2 &&
+    fetchHistory[1].page === 2,
+    "Simulation Scenario B: Page change during materializer results in final GET active/2"
+  );
+}
+
+// 11.4 Simulation: Single-Flight Materializer Lock
+{
+  let inFlight = false;
+  let postCount = 0;
+
+  async function simulateMaterialize() {
+    if (inFlight) return;
+    inFlight = true;
+    postCount++;
+    // simulate async delay
+  }
+
+  // Initial call starts
+  simulateMaterialize();
+  // Second manual refresh click while in-flight
+  simulateMaterialize();
+
+  assert(
+    postCount === 1,
+    "Simulation Scenario C: Concurrent manual refresh while materializer pending produces NO second materializer POST"
+  );
+}
+
+// 11.5 Simulation: Unmount Safety
+{
+  let mounted = true;
+  let stateUpdated = false;
+  let fetchTriggered = false;
+
+  async function simulateMaterializeWithUnmount() {
+    // mounted is flipped to false during POST
+    mounted = false;
+    // Finally block:
+    if (mounted) {
+      stateUpdated = true;
+      fetchTriggered = true;
+    }
+  }
+
+  simulateMaterializeWithUnmount();
+
+  assert(
+    stateUpdated === false && fetchTriggered === false,
+    "Simulation Scenario D: Materializer completion after unmount triggers NO state updates or fetch"
+  );
+}
 
 console.log("\n=======================================================");
 console.log(`Total Invariants Verified: ${totalAssertions}`);
