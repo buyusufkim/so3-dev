@@ -1,5 +1,5 @@
 /**
- * Staging Admin-Realm Runtime Smoke Harness (Faz 7B.4G-F.23B.1)
+ * Staging Admin-Realm Runtime Smoke Harness (Faz 7B.4G-F.23B.2)
  *
  * Verifies real HTTP staging deployment authorization boundaries:
  * - Anonymous auth boundaries
@@ -8,10 +8,13 @@
  * - Trainer matrix (including F.20C generic inbox & trainer dashboard)
  * - Bounded notification path firewall enforcement
  * - Dual security headers validation (/api/health and /api/auth/csrf)
- * - Hardened session cookie attributes (so3_admin_session: Path=/, HttpOnly, Secure, SameSite=Strict)
+ * - Initial session cookie attributes (Path=/, HttpOnly, Secure, SameSite=Strict)
+ * - Post-login regenerated session cookie verification (Session::regenerate())
+ * - Request-specific Set-Cookie isolation and reverse-traversal latest cookie selection
+ * - Safe internal verification of session ID rotation (zero secret exposure)
  * - Central non-redirect JSON API transport validation for all tested /api/* responses
  * - Read-only smoke: zero business data mutations
- * - Never prints or logs secrets, passwords, cookies, or member PII
+ * - Never prints or logs secrets, passwords, cookies, session IDs, or member PII
  */
 
 const ENV = process.env;
@@ -156,10 +159,11 @@ class CookieJar {
   }
 }
 
-// Specific Set-Cookie Extractor for Target Cookie
-function findSetCookieFor(rawSetCookies, cookieName) {
+// Latest Matching Set-Cookie Extractor (Reverse Traversal Authority)
+function findLatestSetCookieFor(rawSetCookies, cookieName) {
   if (!Array.isArray(rawSetCookies)) return null;
-  for (const sc of rawSetCookies) {
+  for (let i = rawSetCookies.length - 1; i >= 0; i--) {
+    const sc = rawSetCookies[i];
     if (typeof sc !== 'string') continue;
     const parts = sc.split(';');
     if (parts.length === 0) continue;
@@ -173,6 +177,28 @@ function findSetCookieFor(rawSetCookies, cookieName) {
     }
   }
   return null;
+}
+
+// Internal Cookie Value Extractor (For non-logged rotation check)
+function extractCookieValue(setCookieHeader, cookieName) {
+  if (!setCookieHeader || typeof setCookieHeader !== 'string') return null;
+  const parts = setCookieHeader.split(';');
+  if (parts.length === 0) return null;
+  const firstPart = parts[0].trim();
+  const eqIdx = firstPart.indexOf('=');
+  if (eqIdx !== -1) {
+    const name = firstPart.substring(0, eqIdx).trim();
+    if (name === cookieName) {
+      return firstPart.substring(eqIdx + 1).trim();
+    }
+  }
+  return null;
+}
+
+// Pure Session ID Rotation Comparator
+function isCookieValueRotated(preLoginValue, postLoginValue) {
+  if (!preLoginValue || !postLoginValue) return false;
+  return preLoginValue !== postLoginValue;
 }
 
 // Bounded Cookie Attribute Validator (Zero secret output)
@@ -285,6 +311,14 @@ async function request(urlPath, options = {}, jar = null) {
       jar.absorbFromHeaders(res.headers);
     }
 
+    let setCookieHeaders = [];
+    if (typeof res.headers.getSetCookie === 'function') {
+      setCookieHeaders = res.headers.getSetCookie();
+    } else {
+      const sc = res.headers.get('set-cookie');
+      if (sc) setCookieHeaders = [sc];
+    }
+
     const text = await res.text();
     let json = null;
     let jsonParsed = false;
@@ -305,7 +339,8 @@ async function request(urlPath, options = {}, jar = null) {
       body: text,
       json,
       jsonParsed,
-      contentType
+      contentType,
+      setCookies: setCookieHeaders
     };
 
     // Central API Transport Validation for every tested /api/* response
@@ -355,6 +390,7 @@ async function request(urlPath, options = {}, jar = null) {
       json: null,
       jsonParsed: false,
       contentType: '',
+      setCookies: [],
       error: err.message
     };
   }
@@ -370,6 +406,11 @@ async function loginRole(roleName, username, password, expectedRole) {
     return null;
   }
   const csrfToken = csrfRes.json.data.token;
+
+  // Capture pre-login session cookie value internally for rotation check (never logged)
+  const preLoginHeader = findLatestSetCookieFor(csrfRes.setCookies, 'so3_admin_session') ||
+                         findLatestSetCookieFor(jar.rawSetCookies, 'so3_admin_session');
+  const preLoginValue = extractCookieValue(preLoginHeader, 'so3_admin_session');
 
   // 2. POST /api/auth/login
   const loginRes = await request('/api/auth/login', {
@@ -400,6 +441,58 @@ async function loginRole(roleName, username, password, expectedRole) {
 
   if (!loginSuccess) {
     return null;
+  }
+
+  // Request-specific regenerated session cookie verification (POST /api/auth/login)
+  const regeneratedHeader = findLatestSetCookieFor(loginRes.setCookies, 'so3_admin_session');
+  const regeneratedExists = Boolean(regeneratedHeader);
+
+  recordResult(
+    `${roleName} regenerated session cookie exists`,
+    true,
+    regeneratedExists,
+    regeneratedExists
+  );
+
+  // Rotation validation if pre-login value was captured
+  if (regeneratedHeader && preLoginValue) {
+    const postLoginValue = extractCookieValue(regeneratedHeader, 'so3_admin_session');
+    const rotated = isCookieValueRotated(preLoginValue, postLoginValue);
+    recordResult(
+      `${roleName} session ID rotated upon login`,
+      true,
+      rotated,
+      rotated
+    );
+  }
+
+  // Validate hardened cookie attributes on HTTPS post-login
+  if (parsedUrl.protocol === 'https:') {
+    const regeneratedAttr = validateAdminSessionCookieAttributes(regeneratedHeader);
+    recordResult(
+      `${roleName} regenerated session cookie Path=/ attribute`,
+      true,
+      regeneratedAttr.hasPath,
+      regeneratedAttr.hasPath
+    );
+    recordResult(
+      `${roleName} regenerated session cookie HttpOnly attribute`,
+      true,
+      regeneratedAttr.hasHttpOnly,
+      regeneratedAttr.hasHttpOnly
+    );
+    recordResult(
+      `${roleName} regenerated session cookie Secure attribute`,
+      true,
+      regeneratedAttr.hasSecure,
+      regeneratedAttr.hasSecure
+    );
+    recordResult(
+      `${roleName} regenerated session cookie SameSite=Strict attribute`,
+      true,
+      regeneratedAttr.hasSameSiteStrict,
+      regeneratedAttr.hasSameSiteStrict
+    );
   }
 
   // 3. GET /api/auth/me to verify regenerated session
@@ -480,7 +573,8 @@ async function runSmoke() {
 
   // Specific session cookie attribute check on HTTPS
   if (parsedUrl.protocol === 'https:') {
-    const adminSessionHeader = findSetCookieFor(anonJar.rawSetCookies, 'so3_admin_session');
+    const adminSessionHeader = findLatestSetCookieFor(csrfRes.setCookies, 'so3_admin_session') ||
+                               findLatestSetCookieFor(anonJar.rawSetCookies, 'so3_admin_session');
     const cookieAttr = validateAdminSessionCookieAttributes(adminSessionHeader);
 
     recordResult(

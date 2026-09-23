@@ -1,11 +1,13 @@
 /**
  * Static Verification Harness for Staging Admin-Realm Runtime Smoke Verifier
- * (Faz 7B.4G-F.23B.1 — Runtime Transport & Cookie Hardening)
+ * (Faz 7B.4G-F.23B.2 — Regenerated Session Cookie Verification)
  *
  * Verifies that scripts/verify-runtime-admin-core.mjs is safe, sound, non-destructive,
  * strictly enforces credential secrecy, blocks production by default, validates
- * hardened HTTPS cookie attributes (Path=/, HttpOnly, Secure, SameSite=Strict),
- * enforces security headers on both /api/health and /api/auth/csrf, and validates
+ * hardened HTTPS cookie attributes (Path=/, HttpOnly, Secure, SameSite=Strict) both
+ * on initial anonymous fetch AND post-login Session::regenerate() response,
+ * enforces request-specific Set-Cookie extraction with reverse-traversal latest authority,
+ * performs zero-secret internal session ID rotation comparison, and validates
  * central non-redirect JSON API transport on all tested /api/* endpoints.
  */
 
@@ -82,8 +84,8 @@ function detectSecretLogging(source) {
     .replace(/\/\/.*/g, '');
 
   const secretLogPatterns = [
-    /console\.(log|error|warn|info)\s*\([^)]*(ADMIN_PASS|RECEPTION_PASS|TRAINER_PASS|password|csrfToken|freshCsrf|cookieHdr)/,
-    /console\.(log|error|warn|info)\s*\([^)]*rawCookies/
+    /console\.(log|error|warn|info)\s*\([^)]*(ADMIN_PASS|RECEPTION_PASS|TRAINER_PASS|password|csrfToken|freshCsrf|cookieHdr|rawCookies|preLoginValue|postLoginValue|preLoginHeader|regeneratedHeader|setCookies)/,
+    /recordResult\([^,]+,[^,]+,\s*(?:preLoginValue|postLoginValue|preLoginHeader|regeneratedHeader|loginRes\.setCookies|csrfRes\.setCookies)/
   ];
 
   for (const pattern of secretLogPatterns) {
@@ -101,6 +103,26 @@ assert(
 assert(
   detectSecretLogging("console.log('CSRF Token:', csrfToken)").logsSecret === true,
   "Self-test: Detects CSRF token logging"
+);
+assert(
+  detectSecretLogging("console.log('Pre-login cookie:', preLoginValue)").logsSecret === true,
+  "Self-test: Detects preLoginValue logging"
+);
+assert(
+  detectSecretLogging("console.log('Post-login cookie:', postLoginValue)").logsSecret === true,
+  "Self-test: Detects postLoginValue logging"
+);
+assert(
+  detectSecretLogging("console.log('Response Set-Cookies:', setCookies)").logsSecret === true,
+  "Self-test: Detects setCookies logging"
+);
+assert(
+  detectSecretLogging("recordResult('Regenerated cookie', true, regeneratedHeader, true)").logsSecret === true,
+  "Self-test: Detects regeneratedHeader passed as actual result"
+);
+assert(
+  detectSecretLogging("recordResult('Admin session ID rotated', true, rotated, rotated)").logsSecret === false,
+  "Self-test: Boolean rotation flag logging is permitted"
 );
 assert(
   detectSecretLogging("console.log('Status:', loginRes.status)").logsSecret === false,
@@ -218,6 +240,80 @@ const wrongPathCookie = 'so3_admin_session=dummyVal123; Path=/admin; Secure; Htt
 const cookieRes4 = validateAdminSessionCookieAttributes(wrongPathCookie);
 assert(cookieRes4.hasPath === false && cookieRes4.valid === false, "Self-Test: Wrong Path=/admin attribute fails cookie validation");
 
+// Latest/Request-Specific Cookie Extractor Simulation
+function simFindLatestSetCookieFor(rawSetCookies, cookieName) {
+  if (!Array.isArray(rawSetCookies)) return null;
+  for (let i = rawSetCookies.length - 1; i >= 0; i--) {
+    const sc = rawSetCookies[i];
+    if (typeof sc !== 'string') continue;
+    const parts = sc.split(';');
+    if (parts.length === 0) continue;
+    const firstPart = parts[0].trim();
+    const eqIdx = firstPart.indexOf('=');
+    if (eqIdx !== -1) {
+      const name = firstPart.substring(0, eqIdx).trim();
+      if (name === cookieName) {
+        return sc;
+      }
+    }
+  }
+  return null;
+}
+
+function simFindFirstSetCookieFor(rawSetCookies, cookieName) {
+  if (!Array.isArray(rawSetCookies)) return null;
+  for (let i = 0; i < rawSetCookies.length; i++) {
+    const sc = rawSetCookies[i];
+    if (typeof sc !== 'string') continue;
+    const parts = sc.split(';');
+    if (parts.length === 0) continue;
+    const firstPart = parts[0].trim();
+    const eqIdx = firstPart.indexOf('=');
+    if (eqIdx !== -1) {
+      const name = firstPart.substring(0, eqIdx).trim();
+      if (name === cookieName) {
+        return sc;
+      }
+    }
+  }
+  return null;
+}
+
+const dummyCookies = [
+  'so3_admin_session=oldPreLoginToken; Path=/; Secure',
+  'unrelated_token=xyz; Path=/',
+  'so3_admin_session=newRegeneratedToken; Path=/; Secure; HttpOnly; SameSite=Strict'
+];
+
+assert(
+  simFindLatestSetCookieFor(dummyCookies, 'so3_admin_session') === dummyCookies[2],
+  "Self-Test: simFindLatestSetCookieFor selects latest matching Set-Cookie (#3 over #1)"
+);
+
+assert(
+  simFindFirstSetCookieFor(dummyCookies, 'so3_admin_session') === dummyCookies[0],
+  "Self-Test: First-match forward lookup erroneously picks obsolete pre-login cookie"
+);
+
+// Session ID Rotation Pure Helper Simulation
+function simIsCookieValueRotated(preLoginValue, postLoginValue) {
+  if (!preLoginValue || !postLoginValue) return false;
+  return preLoginValue !== postLoginValue;
+}
+
+assert(
+  simIsCookieValueRotated('sess_old_token_123', 'sess_new_token_456') === true,
+  "Self-Test: simIsCookieValueRotated returns true for rotated session IDs (old !== new)"
+);
+assert(
+  simIsCookieValueRotated('sess_same_token_123', 'sess_same_token_123') === false,
+  "Self-Test: simIsCookieValueRotated returns false for identical session IDs (old === old)"
+);
+assert(
+  simIsCookieValueRotated(null, 'sess_new_token_456') === false,
+  "Self-Test: simIsCookieValueRotated returns false when preLoginValue is missing"
+);
+
 console.log("\n=== 2. Package.json Script Registration ===");
 
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -277,18 +373,54 @@ assert(runtimeSource.includes("redirect: 'manual'"), "Enforces manual redirects 
 assert(runtimeSource.includes("AbortSignal.timeout"), "Enforces bounded request timeouts");
 assert(runtimeSource.includes("SO3_VERIFY_ALLOW_HTTP"), "Reuses SO3_VERIFY_ALLOW_HTTP for localhost");
 
-// Hardened Cookie Attributes & Specific Extraction (Faz F.23B.1)
+// Cookie Jar & Set-Cookie Tracking
 assert(runtimeSource.includes("class CookieJar"), "Defines in-memory CookieJar class");
 assert(runtimeSource.includes("so3_admin_session"), "Targets canonical so3_admin_session cookie");
-assert(/function\s+findSetCookieFor/.test(runtimeSource), "Defines specific findSetCookieFor helper");
-assert(/function\s+validateAdminSessionCookieAttributes/.test(runtimeSource), "Defines validateAdminSessionCookieAttributes helper");
+assert(/setCookies:\s*setCookieHeaders/.test(runtimeSource), "request() helper exposes request-specific setCookies");
+
+// Latest Matching Set-Cookie Authority (Faz F.23B.2)
+assert(/function\s+findLatestSetCookieFor/.test(runtimeSource), "Defines findLatestSetCookieFor helper");
 assert(
-  /path=\//i.test(runtimeSource) && /httponly/i.test(runtimeSource) && /secure/i.test(runtimeSource) && /samesite=strict/i.test(runtimeSource),
-  "Cookie attribute validator checks Path=/, HttpOnly, Secure, and SameSite=Strict"
+  /rawSetCookies\.length\s*-\s*1/.test(runtimeSource) && /i\s*>=\s*0/.test(runtimeSource) && /i--/.test(runtimeSource),
+  "findLatestSetCookieFor implements reverse traversal (latest matching Set-Cookie wins)"
 );
 assert(
-  /hasSecure/i.test(runtimeSource) && /hasSameSiteStrict/i.test(runtimeSource),
-  "Cookie validation asserts hasSecure and hasSameSiteStrict"
+  !/function\s+findSetCookieFor\b/.test(runtimeSource),
+  "Old forward-looping findSetCookieFor helper replaced by findLatestSetCookieFor"
+);
+
+// Post-Login Regenerated Cookie Verification in loginRole()
+assert(
+  /findLatestSetCookieFor\(\s*loginRes\.setCookies\s*,\s*['"]so3_admin_session['"]\)/.test(runtimeSource),
+  "loginRole verifies regenerated session cookie directly from login response setCookies"
+);
+assert(
+  /recordResult\(\s*`\$\{roleName\} regenerated session cookie exists`/.test(runtimeSource),
+  "loginRole asserts regenerated session cookie exists after POST /api/auth/login"
+);
+assert(
+  /recordResult\(\s*`\$\{roleName\} regenerated session cookie Path=\/ attribute`/.test(runtimeSource),
+  "loginRole asserts regenerated cookie Path=/ attribute"
+);
+assert(
+  /recordResult\(\s*`\$\{roleName\} regenerated session cookie HttpOnly attribute`/.test(runtimeSource),
+  "loginRole asserts regenerated cookie HttpOnly attribute"
+);
+assert(
+  /recordResult\(\s*`\$\{roleName\} regenerated session cookie Secure attribute`/.test(runtimeSource),
+  "loginRole asserts regenerated cookie Secure attribute"
+);
+assert(
+  /recordResult\(\s*`\$\{roleName\} regenerated session cookie SameSite=Strict attribute`/.test(runtimeSource),
+  "loginRole asserts regenerated cookie SameSite=Strict attribute"
+);
+
+// Pure Session ID Rotation Verification
+assert(/function\s+extractCookieValue/.test(runtimeSource), "Defines extractCookieValue helper for private rotation check");
+assert(/function\s+isCookieValueRotated/.test(runtimeSource), "Defines isCookieValueRotated comparator");
+assert(
+  /recordResult\(\s*`\$\{roleName\} session ID rotated upon login`/.test(runtimeSource),
+  "loginRole asserts session ID rotated upon login (safe boolean result)"
 );
 
 // Central Security Headers Validation (/api/health and /api/auth/csrf)
@@ -320,6 +452,12 @@ assert(runtimeSource.includes("X-CSRF-Token"), "Sets X-CSRF-Token header on muta
 assert(runtimeSource.includes("/api/auth/login"), "Calls POST /api/auth/login");
 assert(runtimeSource.includes("/api/auth/me"), "Verifies authenticated identity via /api/auth/me");
 assert(runtimeSource.includes("/api/auth/logout"), "Calls POST /api/auth/logout with fresh CSRF token");
+
+// Initial Session Cookie Preserved in Section 1
+assert(
+  runtimeSource.includes("Session cookie named so3_admin_session exists"),
+  "Initial anonymous session cookie existence check preserved"
+);
 
 // Anonymous Boundaries (Strict 401 JSON)
 assert(runtimeSource.includes("Anonymous GET /api/auth/me"), "Enforces anonymous /api/auth/me -> 401 JSON");
