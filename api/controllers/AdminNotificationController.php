@@ -159,31 +159,36 @@ class AdminNotificationController
     }
 
     /**
-     * PATCH /api/admin/notifications/:id/read
-     * Mark notification as read (idempotent, recipient-scoped).
+     * Validate that mutation request provides JSON Content-Type and an empty JSON object {}.
+     * Rejects query parameters, invalid media types, oversized payloads, non-JSON or non-empty bodies.
      */
-    public function markRead($id)
+    private function validateEmptyJsonPayload(): void
     {
-        $adminId = (int)($_SESSION['admin_id'] ?? 0);
-        if ($adminId <= 0) {
-            Response::error('Oturum geçersiz.', 'UNAUTHORIZED', 401);
-            return;
-        }
-
-        $id = (int)$id;
-        if ($id <= 0) {
-            Response::error('Geçersiz bildirim ID.', 'VALIDATION_ERROR', 422);
-            return;
-        }
-
         if (!empty($_GET)) {
             Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $contentType = isset($_SERVER['CONTENT_TYPE']) ? trim($_SERVER['CONTENT_TYPE']) : '';
+        if (strpos(strtolower($contentType), 'application/json') !== 0) {
+            Response::error('Yalnızca JSON kabul edilmektedir.', 'UNSUPPORTED_MEDIA_TYPE', 415);
+            return;
+        }
+
+        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+        if ($contentLength > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
             return;
         }
 
         $rawBody = trim(file_get_contents('php://input'));
         if ($rawBody === '') {
             Response::error('İstek gövdesi (body) boş bir JSON nesnesi {} olmalıdır.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        if (strlen($rawBody) > 16384) {
+            Response::error('İstek boyutu çok büyük.', 'PAYLOAD_TOO_LARGE', 413);
             return;
         }
 
@@ -202,6 +207,27 @@ class AdminNotificationController
             Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
             return;
         }
+    }
+
+    /**
+     * PATCH /api/admin/notifications/:id/read
+     * Mark notification as read (idempotent, recipient-scoped).
+     */
+    public function markRead($id)
+    {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        if ($adminId <= 0) {
+            Response::error('Oturum geçersiz.', 'UNAUTHORIZED', 401);
+            return;
+        }
+
+        $id = (int)$id;
+        if ($id <= 0) {
+            Response::error('Geçersiz bildirim ID.', 'VALIDATION_ERROR', 422);
+            return;
+        }
+
+        $this->validateEmptyJsonPayload();
 
         try {
             $db = Database::getInstance()->getConnection();
@@ -265,32 +291,7 @@ class AdminNotificationController
             return;
         }
 
-        if (!empty($_GET)) {
-            Response::error('Query parameter kabul edilmez.', 'VALIDATION_ERROR', 422);
-            return;
-        }
-
-        $rawBody = trim(file_get_contents('php://input'));
-        if ($rawBody === '') {
-            Response::error('İstek gövdesi (body) boş bir JSON nesnesi {} olmalıdır.', 'VALIDATION_ERROR', 422);
-            return;
-        }
-
-        $decoded = json_decode($rawBody);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Response::error('Geçersiz JSON formatı.', 'INVALID_JSON', 400);
-            return;
-        }
-
-        if (!($decoded instanceof \stdClass)) {
-            Response::error('İstek gövdesi (body) boş bir JSON nesnesi {} olmalıdır.', 'VALIDATION_ERROR', 422);
-            return;
-        }
-
-        if (count(get_object_vars($decoded)) !== 0) {
-            Response::error('İstek gövdesi (body) boş olmalıdır.', 'VALIDATION_ERROR', 422);
-            return;
-        }
+        $this->validateEmptyJsonPayload();
 
         try {
             $db = Database::getInstance()->getConnection();

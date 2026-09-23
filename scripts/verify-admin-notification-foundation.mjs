@@ -124,6 +124,63 @@ assert(
   "Self-test: Allows generic AuthMiddleware::handle"
 );
 
+// Negative test 5: Content-Type header validation
+function testContentTypeValidation(contentType) {
+  if (!contentType || typeof contentType !== 'string') return false;
+  return contentType.trim().toLowerCase().startsWith('application/json');
+}
+assert(
+  testContentTypeValidation("application/json") === true,
+  "Self-test: Accepts canonical Content-Type: application/json"
+);
+assert(
+  testContentTypeValidation("application/json; charset=utf-8") === true,
+  "Self-test: Accepts Content-Type: application/json; charset=utf-8"
+);
+assert(
+  testContentTypeValidation("text/plain") === false,
+  "Self-test: Rejects Content-Type: text/plain"
+);
+assert(
+  testContentTypeValidation("application/x-www-form-urlencoded") === false,
+  "Self-test: Rejects Content-Type: application/x-www-form-urlencoded"
+);
+assert(
+  testContentTypeValidation("multipart/form-data") === false,
+  "Self-test: Rejects Content-Type: multipart/form-data"
+);
+assert(
+  testContentTypeValidation("") === false,
+  "Self-test: Rejects missing/empty Content-Type"
+);
+assert(
+  testContentTypeValidation(null) === false,
+  "Self-test: Rejects null Content-Type"
+);
+
+// Negative test 6: Empty JSON object payload validation
+function testPayloadValidation(rawBody) {
+  if (rawBody === '') return { valid: false, code: 'VALIDATION_ERROR', status: 422 };
+  let decoded;
+  try {
+    decoded = JSON.parse(rawBody);
+  } catch (e) {
+    return { valid: false, code: 'INVALID_JSON', status: 400 };
+  }
+  if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+    return { valid: false, code: 'VALIDATION_ERROR', status: 422 };
+  }
+  if (Object.keys(decoded).length !== 0) {
+    return { valid: false, code: 'VALIDATION_ERROR', status: 422 };
+  }
+  return { valid: true };
+}
+assert(testPayloadValidation("{}").valid === true, "Self-test: Accepts empty JSON object {}");
+assert(testPayloadValidation("{").code === 'INVALID_JSON', "Self-test: Rejects malformed JSON with INVALID_JSON / 400");
+assert(testPayloadValidation('{"foo":"bar"}').code === 'VALIDATION_ERROR', "Self-test: Rejects non-empty JSON object with VALIDATION_ERROR / 422");
+assert(testPayloadValidation("[]").code === 'VALIDATION_ERROR', "Self-test: Rejects array with VALIDATION_ERROR / 422");
+assert(testPayloadValidation("").code === 'VALIDATION_ERROR', "Self-test: Rejects empty body with VALIDATION_ERROR / 422");
+
 console.log("\n=== 2. Package.json Script Registration ===");
 
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -301,16 +358,39 @@ if (indexBlock) {
   assert(content.includes("LIMIT :limit OFFSET :offset"), "index() implements LIMIT/OFFSET pagination");
 }
 
+// Helper: validateEmptyJsonPayload()
+const helperBlock = extractBraceBlock(controllerSource, "private function validateEmptyJsonPayload()");
+assert(helperBlock !== null, "Extracted validateEmptyJsonPayload() helper method block");
+if (helperBlock) {
+  const content = helperBlock.content;
+  // Content-Type enforcement
+  assert(content.includes("CONTENT_TYPE"), "Helper checks CONTENT_TYPE header");
+  assert(content.includes("application/json"), "Helper requires application/json media type");
+  assert(content.includes("'UNSUPPORTED_MEDIA_TYPE', 415"), "Helper returns 415 UNSUPPORTED_MEDIA_TYPE on invalid media type");
+  
+  // Query parameter rejection
+  assert(content.includes("!empty($_GET)"), "Helper rejects query parameters with 422");
+  
+  // Body parsing and validation
+  assert(content.includes("file_get_contents('php://input')"), "Helper reads raw body");
+  assert(content.includes("json_last_error() !== JSON_ERROR_NONE"), "Helper validates JSON format");
+  assert(content.includes("'INVALID_JSON', 400"), "Helper returns 400 INVALID_JSON on malformed JSON");
+  assert(content.includes("!($decoded instanceof \\stdClass)"), "Helper rejects non-object (e.g. array) payloads");
+  assert(content.includes("count(get_object_vars($decoded)) !== 0"), "Helper enforces empty JSON object {}");
+  assert(content.includes("'VALIDATION_ERROR', 422"), "Helper returns 422 VALIDATION_ERROR on non-empty body or non-object");
+  assert(content.includes("16384") && content.includes("'PAYLOAD_TOO_LARGE', 413"), "Helper guards payload size with 413 PAYLOAD_TOO_LARGE");
+}
+
 // Method: markRead($id)
 const markReadBlock = extractBraceBlock(controllerSource, "public function markRead($id)");
 assert(markReadBlock !== null, "Extracted markRead($id) method block");
 if (markReadBlock) {
   const content = markReadBlock.content;
-  // Empty JSON body validation
-  assert(content.includes("!empty($_GET)"), "markRead() rejects query parameters");
-  assert(content.includes("file_get_contents('php://input')"), "markRead() reads raw body");
-  assert(content.includes("json_last_error() !== JSON_ERROR_NONE"), "markRead() validates JSON formatting (400 on error)");
-  assert(content.includes("count(get_object_vars($decoded)) !== 0"), "markRead() enforces empty JSON object {}");
+  // Enforce JSON Content-Type and empty body via helper or inline
+  const enforcesJsonPayload = content.includes("validateEmptyJsonPayload()") ||
+    (content.includes("CONTENT_TYPE") && content.includes("application/json") && content.includes("415"));
+  assert(enforcesJsonPayload, "markRead() enforces JSON Content-Type and empty payload validation");
+  assert(content.includes("$this->validateEmptyJsonPayload()"), "markRead() invokes shared validateEmptyJsonPayload() helper");
 
   // Ownership & Recipient isolation
   assert(content.includes("WHERE id = :id AND recipient_admin_id = :admin_id"), "markRead() checks existence with recipient isolation");
@@ -327,9 +407,11 @@ const dismissBlock = extractBraceBlock(controllerSource, "public function dismis
 assert(dismissBlock !== null, "Extracted dismiss($id) method block");
 if (dismissBlock) {
   const content = dismissBlock.content;
-  // Empty JSON body validation
-  assert(content.includes("!empty($_GET)"), "dismiss() rejects query parameters");
-  assert(content.includes("count(get_object_vars($decoded)) !== 0"), "dismiss() enforces empty JSON object {}");
+  // Enforce JSON Content-Type and empty body via helper or inline
+  const enforcesJsonPayload = content.includes("validateEmptyJsonPayload()") ||
+    (content.includes("CONTENT_TYPE") && content.includes("application/json") && content.includes("415"));
+  assert(enforcesJsonPayload, "dismiss() enforces JSON Content-Type and empty payload validation");
+  assert(content.includes("$this->validateEmptyJsonPayload()"), "dismiss() invokes shared validateEmptyJsonPayload() helper");
 
   // Ownership & Recipient isolation
   assert(content.includes("WHERE id = :id AND recipient_admin_id = :admin_id"), "dismiss() checks existence with recipient isolation");
