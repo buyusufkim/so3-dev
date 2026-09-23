@@ -222,5 +222,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * member realm remains separate (zero member auth/portal notification exposure)
 * read/dismiss are not written to security audit log
 
+## F.20D Renewal Notification Materializer
+* renewal notifications are trusted server-generated events
+* materialization uses explicit POST boundary, never GET side effects
+* eligible members mirror F.20A active/non-deleted/end-date rules
+* fixed 14-day window
+* eligible recipients are active super_admin/admin/reception accounts
+* upcoming/today/expired are separate lifecycle event types
+* source key includes member + expiry date + lifecycle stage
+* unique recipient + source key is concurrency/idempotency authority
+* duplicate materialization never resets read/dismiss state
+* no generic client notification creation route
+* no frontend trigger, cron, or external delivery in F.20D
+
+
 
 

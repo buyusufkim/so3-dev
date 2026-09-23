@@ -673,6 +673,15 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/reception/renewal-notifications/materialize$#', $requestUri)) {
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'reception']);
+        if ($method === 'POST') {
+            require_once __DIR__ . '/controllers/RenewalNotificationMaterializerController.php';
+            (new \Controllers\RenewalNotificationMaterializerController())->materialize();
+            $matched = true;
+        }
+    }
+
     // Dynamic matching for trainer member measurements endpoints
     if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::hasRole(['trainer']);
