@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { AdminUser, getRoleStartRoute, hasRoleAccess, isAdminUser } from "../auth/roles";
 import { TrainerMobileNavigation } from "../components/TrainerMobileNavigation";
+import { AdminNotificationBell } from "../components/AdminNotificationBell";
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -83,6 +84,7 @@ export function AdminLayout() {
   const isReception = admin?.role === 'reception';
   const showCMS = isSuperOrAdmin || isEditor;
   const isTrainerMobile = isTrainer;
+  const showNotificationBell = isSuperOrAdmin || isReception;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex font-sans min-w-0 w-full">
@@ -180,6 +182,11 @@ export function AdminLayout() {
         )}
         <header className={`h-16 border-b border-white/10 px-8 items-center justify-between ${isTrainerMobile ? 'hidden lg:flex' : 'flex'}`}>
           <h1 className="text-lg font-semibold">SO3 Control</h1>
+          <div className="flex items-center gap-3">
+            {showNotificationBell && (
+              <AdminNotificationBell />
+            )}
+          </div>
         </header>
         <div className={isTrainerMobile ? 'px-4 py-6 lg:p-8' : 'p-8'}>
           <Outlet />

@@ -235,6 +235,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no generic client notification creation route
 * no frontend trigger, cron, or external delivery in F.20D
 
+## F.20E Admin Notification Bell & Inbox UI
+* notification UI currently renders for super_admin/admin/reception, matching the renewal producer audience
+* F.20C backend inbox remains generic admin-realm infrastructure for future roles
+* renewal materialization runs on notification UI mount and explicit manual refresh
+* materializer failure never blocks existing inbox access
+* unread badge uses backend unread_count only
+* active/unread/dismissed views use backend filtering/pagination
+* read/dismiss mutations always reconcile from server after success or ambiguous contract result
+* notification action paths are internal /admin paths only
+* no polling, external delivery, restore, unread, delete, or generic client create
+
+
 
 
 

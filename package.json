@@ -27,6 +27,7 @@
     "verify:reception-renewal-watch-ui": "node scripts/verify-reception-renewal-watch-ui.mjs",
     "verify:admin-notification-foundation": "node scripts/verify-admin-notification-foundation.mjs",
     "verify:renewal-notification-materializer": "node scripts/verify-renewal-notification-materializer.mjs",
+    "verify:admin-notification-ui": "node scripts/verify-admin-notification-ui.mjs",
     "verify:reception-frontend": "node scripts/verify-reception-frontend.mjs",
     "verify:trainer-mobile-workspace-shell": "node scripts/verify-trainer-mobile-workspace-shell.mjs",
     "verify:trainer-dashboard-mobile": "node scripts/verify-trainer-dashboard-mobile.mjs",
