@@ -260,6 +260,20 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no session-package utilization analytics in F.22A
 * no automation in F.22A
 
+## F.22B Operations Analytics Dashboard UI
+* analytics is embedded into existing super_admin/admin /admin dashboard
+* existing daily Operations Summary remains canonical and unchanged
+* F.22A response is strict-runtime-validated before rendering
+* range selection always refetches backend; no client slicing
+* 30d is initial range
+* analytics fetch errors are isolated from the rest of Dashboard
+* daily trend uses lightweight local SVG with no chart dependency
+* backend chronology is preserved
+* no derived business rates
+* no financial or session-package analytics
+* no polling or automation
+
+
 
 
 

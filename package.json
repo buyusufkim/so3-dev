@@ -29,6 +29,7 @@
     "verify:renewal-notification-materializer": "node scripts/verify-renewal-notification-materializer.mjs",
     "verify:admin-notification-ui": "node scripts/verify-admin-notification-ui.mjs",
     "verify:operations-analytics-read-model": "node scripts/verify-operations-analytics-read-model.mjs",
+    "verify:operations-analytics-ui": "node scripts/verify-operations-analytics-ui.mjs",
     "verify:reception-frontend": "node scripts/verify-reception-frontend.mjs",
     "verify:trainer-mobile-workspace-shell": "node scripts/verify-trainer-mobile-workspace-shell.mjs",
     "verify:trainer-dashboard-mobile": "node scripts/verify-trainer-dashboard-mobile.mjs",
