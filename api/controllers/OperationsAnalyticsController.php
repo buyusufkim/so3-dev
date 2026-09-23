@@ -20,14 +20,22 @@ class OperationsAnalyticsController
             }
         }
 
-        $range = isset($_GET['range']) ? trim((string)$_GET['range']) : '30d';
-        if ($range === '') {
-            $range = '30d';
-        }
-
-        if (!in_array($range, ['7d', '30d', '90d'], true)) {
-            Response::error('Geçersiz aralık. İzin verilen değerler: 7d, 30d, 90d', 'VALIDATION_ERROR', 422);
-            return;
+        $range = '30d';
+        if (isset($_GET['range'])) {
+            if (!is_string($_GET['range'])) {
+                Response::error('Geçersiz aralık parametresi.', 'VALIDATION_ERROR', 422);
+                return;
+            }
+            $rangeVal = trim($_GET['range']);
+            if ($rangeVal === '') {
+                Response::error('Aralık parametresi boş olamaz.', 'VALIDATION_ERROR', 422);
+                return;
+            }
+            if (!in_array($rangeVal, ['7d', '30d', '90d'], true)) {
+                Response::error('Geçersiz aralık. İzin verilen değerler: 7d, 30d, 90d', 'VALIDATION_ERROR', 422);
+                return;
+            }
+            $range = $rangeVal;
         }
 
         $daysMap = [
@@ -51,6 +59,13 @@ class OperationsAnalyticsController
             $endDateTimeExclusiveStr = $tomorrow->format('Y-m-d 00:00:00');
 
             $db = Database::getInstance()->getConnection();
+
+            // Align MySQL session time_zone to UTC+03:00 to match PHP Europe/Istanbul calendar authority
+            // for TIMESTAMP columns (membership_renewals.created_at) while leaving DATETIME columns unaffected.
+            $tzResult = $db->exec("SET time_zone = '+03:00'");
+            if ($tzResult === false) {
+                throw new \Exception('Failed to set DB session time_zone');
+            }
 
             // 1. Current Snapshot: Active Members (status = 'active' AND deleted_at IS NULL)
             $activeStmt = $db->query("SELECT COUNT(*) FROM members WHERE status = 'active' AND deleted_at IS NULL");
