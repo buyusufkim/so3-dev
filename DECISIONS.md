@@ -209,5 +209,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * panel auto-refreshed upon renewal completion and contract validation failure via bounded refreshKey
 * zero notification domain or persistence concepts in this phase
 
+## F.20C In-App Notification Persistence & Inbox API Foundation
+* admin_notifications is per-recipient admin-realm persistence
+* recipient identity always comes from admin session ($_SESSION['admin_id'])
+* unique recipient_admin_id + source_key provides future producer idempotency
+* GET inbox exposes current user's rows only (strict SQL-level recipient isolation)
+* read and dismiss are one-way idempotent state changes
+* dismiss implies read (read_at is populated on dismiss if previously null)
+* no restore / mark-unread / bulk actions in F.20C
+* no client notification creation endpoint (no POST /api/admin/notifications)
+* no notification producer or delivery channel in F.20C
+* member realm remains separate (zero member auth/portal notification exposure)
+* read/dismiss are not written to security audit log
+
 
 

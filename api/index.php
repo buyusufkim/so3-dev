@@ -1039,6 +1039,34 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         $matched = true;
     }
 
+    // Admin Notifications API
+    if (preg_match('#^/api/admin/notifications$#', $requestUri)) {
+        AuthMiddleware::handle();
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/AdminNotificationController.php';
+            (new \Controllers\AdminNotificationController())->index();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/notifications/([1-9]\d*)/read$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AdminNotificationController.php';
+            (new \Controllers\AdminNotificationController())->markRead((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/notifications/([1-9]\d*)/dismiss$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/AdminNotificationController.php';
+            (new \Controllers\AdminNotificationController())->dismiss((int)$matches[1]);
+            $matched = true;
+        }
+    }
+
     // Member Account Admin API
     if (preg_match('#^/api/admin/members/([1-9]\d*)/account$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
