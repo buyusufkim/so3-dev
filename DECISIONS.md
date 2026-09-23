@@ -246,6 +246,21 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * notification action paths are internal /admin paths only
 * no polling, external delivery, restore, unread, delete, or generic client create
 
+## F.22A Operations Analytics Read Model
+* F.21 Lead/Sales CRM intentionally skipped as unnecessary for current product scope
+* F.22 builds on existing operational data rather than introducing a separate analytics datastore
+* existing /api/admin/dashboard/operations remains unchanged
+* analytics is super_admin/admin only
+* business calendar uses Europe/Istanbul
+* ranges are fixed 7d/30d/90d in F.22A
+* daily series is zero-filled and chronological
+* member visits, membership renewals and appointment starts are canonical metric sources
+* no personal member data in analytics responses
+* no financial analytics because no canonical payment/invoice domain exists
+* no session-package utilization analytics in F.22A
+* no automation in F.22A
+
+
 
 
 

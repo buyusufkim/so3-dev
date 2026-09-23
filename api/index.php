@@ -48,6 +48,12 @@ $routes = [
             AuthMiddleware::handle();
             (new AdminController())->operationalDashboard();
         },
+        '/api/admin/analytics/operations' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin']);
+            require_once __DIR__ . '/controllers/OperationsAnalyticsController.php';
+            (new \Controllers\OperationsAnalyticsController())->operations();
+        },
         '/api/admin/dashboard' => function() {
             AuthMiddleware::handle();
             (new AdminController())->dashboard();
