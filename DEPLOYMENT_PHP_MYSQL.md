@@ -13,10 +13,12 @@
    - **Application Runtime User**: Granted **Least Privilege**: Only `SELECT`, `INSERT`, `UPDATE`, `DELETE`. This is the user configured in `config.local.php`.
 
 ## 2. Database Installation & Migrations
+`database/migrations/` is authoritative for incremental updates. `database/fresh-install.sql` must remain schema/history-parity aligned with all current migrations for empty installs. `fresh-install.sql` does not replace incremental migrations.
+
 ### Path A: Fresh/Empty Database
 If you are deploying to a completely empty database for the first time:
 1. Import `database/fresh-install.sql` using phpMyAdmin or the MySQL CLI.
-   *Note: This file canonically represents migrations 001–037.*
+   *Note: This file canonically represents migrations 001–039.*
    *WARNING: Never import `fresh-install.sql` into a live database containing existing data.*
 2. Configure runtime credentials in `config.local.php`.
 3. Create the first admin **only** through the `php bin/create-admin.php` CLI tool.
@@ -28,8 +30,9 @@ If you are deploying an update to an existing live database:
    php bin/migrate.php
    ```
 
+   *Existing live deployments upgrading from pre-039 must use `php bin/migrate.php`; migration 039 creates `admin_notifications`.*
    *(Historical Note: Migration 027 is a specialized canonical demo media seed migration. It registers demo media under `media/so3` and creates six demo events. Existing customized media and same-slug events are preserved.)*
-2. **Never** import `fresh-install.sql` over an existing database.
+2. **Never** import `fresh-install.sql` over an existing database. `fresh-install.sql` is only for a completely empty database; never import into an existing/live database.
 
 ## 3. Configuration
 1. Use `SO3_CONFIG_PATH` environment variable if available to point to a config file outside the document root.

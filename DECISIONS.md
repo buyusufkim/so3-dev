@@ -273,6 +273,17 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no financial or session-package analytics
 * no polling or automation
 
+## F.23A Fresh Install & Deployment Parity Closure
+* migration directory remains incremental schema authority
+* fresh-install is canonical empty-database representation and must remain migration-history complete
+* fresh-install was advanced through migration 039
+* admin_notifications is included in fresh installs
+* deployment docs track current fresh-install migration coverage
+* roadmap reflects implemented operational modules rather than stale future-module labels
+* F.21 Lead/Sales CRM remains intentionally skipped
+* no application/business behavior changed
+
+
 
 
 

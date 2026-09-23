@@ -35,14 +35,18 @@ Projenin sürdürülebilir, güvenli ve premium standartlarda geliştirilmesi i�
 - Production PHP 8.2, MySQL/MariaDB ve Apache/cPanel dağıtımı gerçekleştirildi.
 - Canlı runtime ve Search Console doğrulamaları tamamlandı.
 - Otomatik Runtime Verifier (`npm run verify:runtime-seo`) oluşturuldu ve doğrulandı.
+- **Üye Portalı (Member Portal):** Auth, dashboard, ölçüm ve antrenman ilerleme takibi.
+- **Antrenör Mobil Çalışma Alanı (Trainer Mobile Workspace):** Üye yönetimi, egzersiz/program oluşturma ve gelişim notları iş akışları.
+- **Resepsiyon Operasyonu (Reception Operations):** Hızlı check-in, anlık salon doluluğu ve üyelik yenileme yönetimi.
+- **Randevu Sistemi (Appointment Lifecycle):** Randevu oluşturma, yeniden planlama, iptal ve terminalizasyon süreçleri.
+- **Seans Paketleri & Defter Entegrasyonu (Session Package Ledger):** Paket satın alma, seans düşümü ve tüketim mutabakatı.
+- **Üyelik Yenileme Takibi (Renewal Watch):** Yaklaşan, bugün dolan ve süresi geçen üyelik izleme modeli.
+- **Yönetici Bildirimleri (In-App Admin Notifications):** Sistem içi kalıcı bildirimler ve yenileme materializer mekanizması (harici e-posta, SMS veya push bildirimi mevcut değildir; cron/AI otomasyonu bulunmaz).
+- **Operasyon Analitiği (Operations Analytics):** 7, 30 ve 90 günlük dönemler için ziyaret, yenileme ve randevu trend analitiği.
+
+## Kapsam Dışı Bırakılanlar (Out of Scope / Skipped)
+- **F.21 Lead / Sales CRM:** Mevcut ürün kapsamı için gereksiz görüldüğünden bilinçli olarak atlanmıştır (Lead / Sales CRM intentionally skipped).
 
 ## İçerik Bekleyenler
 - Eğitmenler ve branşlar için prodüksiyon kalitesindeki gerçek fotoğraflar içerik olarak beklenmektedir.
-
-## Gelecek Modüller (Future Modules)
-- **Üye Sistemi:** Üye dashboard'u, program takibi, ölçümler.
-- **Antrenör Sistemi:** Antrenör dashboard'u, üye yönetimi, program atama.
-- **Resepsiyon Operasyonu:** Hızlı check-in, anlık salon durumu, üyelik yenileme.
-- **Randevu Sistemi:** Randevu ve seans takviminin devreye alınması.
-- **Bildirim Mekanizmaları:** E-posta, sistem içi bildirim ve push bildirimleri.
 
