@@ -431,6 +431,21 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    if (preg_match('#^/api/admin/trainers/([1-9]\d*)/availability$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin']);
+        $trainerId = (int)$matches[1];
+        require_once __DIR__ . '/controllers/TrainerAvailabilityController.php';
+        $controller = new \Controllers\TrainerAvailabilityController();
+        if ($method === 'GET') {
+            $controller->getAdminAvailability($trainerId);
+            $matched = true;
+        } elseif ($method === 'PUT') {
+            $controller->replaceAdminAvailability($trainerId);
+            $matched = true;
+        }
+    }
+
     if (preg_match('#^/api/admin/staff-accounts/([1-9]\d*)/status$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         if ($method === 'PATCH') {
@@ -577,6 +592,20 @@ if (isset($routes[$method][$requestUri])) {
         AuthMiddleware::hasRole(['trainer']);
         if ($method === 'GET') {
             (new \Controllers\TrainerDashboardController())->index();
+            $matched = true;
+        }
+    }
+
+    if ($requestUri === '/api/trainer/availability') {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['trainer']);
+        require_once __DIR__ . '/controllers/TrainerAvailabilityController.php';
+        $controller = new \Controllers\TrainerAvailabilityController();
+        if ($method === 'GET') {
+            $controller->getTrainerAvailability();
+            $matched = true;
+        } elseif ($method === 'PUT') {
+            $controller->replaceTrainerAvailability();
             $matched = true;
         }
     }

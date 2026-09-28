@@ -303,6 +303,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * existing admin, reception, and trainer appointment creation and session-package ledger behavior remains 100% unchanged
 * no member booking or availability endpoint is created in this phase; F.24A provides data model attribution foundation only
 
+## F.24B.1 Trainer Availability Domain Foundation & API
+* weekly availability uses ISO weekday recurring same-day windows
+* specific unavailability is represented by datetime blocks
+* availability configuration does not mutate existing appointments
+* admin/super_admin can manage any trainer
+* trainer can manage only own linked active profile
+* availability replace is transactional snapshot semantics
+* no slot duration is invented
+* no member-facing availability or booking is exposed yet
+* Europe/Istanbul remains business timezone
+
+
 
 
 

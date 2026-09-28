@@ -38,10 +38,10 @@ assert(firstMatch !== null, `First migration has numeric prefix: ${firstMigratio
 assert(latestMatch !== null, `Latest migration has numeric prefix: ${latestMigration}`);
 
 const firstNum = firstMatch ? firstMatch[1] : '001';
-const latestNum = latestMatch ? latestMatch[1] : '040';
+const latestNum = latestMatch ? latestMatch[1] : '041';
 
 console.log(`Dynamic migration range: ${firstNum} -> ${latestNum} (${latestMigration})`);
-assert(latestMigration === '040_add_member_appointment_actor_attribution.sql', "Current latest migration is 040_add_member_appointment_actor_attribution.sql");
+assert(latestMigration.startsWith(latestNum + '_'), `Latest migration matches derived dynamic prefix: ${latestNum}`);
 
 console.log("\n=== 2. Package.json Script Registration ===");
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -68,18 +68,20 @@ const freshInstallPath = path.resolve(process.cwd(), 'database/fresh-install.sql
 assert(fs.existsSync(freshInstallPath), "database/fresh-install.sql exists");
 const freshInstallContent = fs.readFileSync(freshInstallPath, 'utf8');
 
-// Match header dynamic range (e.g. Generated from migrations 001-039)
+// Match header dynamic range (e.g. Generated from migrations 001-041)
 const expectedHeaderRegex = new RegExp(`Generated from migrations\\s+${firstNum}[–-]${latestNum}`, 'i');
 assert(
   expectedHeaderRegex.test(freshInstallContent),
   `fresh-install.sql header matches dynamic range: Generated from migrations ${firstNum}-${latestNum}`
 );
 
-// Must not contain stale header versions
-const staleHeaderRegex = new RegExp(`Generated from migrations\\s+001[–-]03[0-9]\\b`, 'i');
+// Semantic verification: header range end === latestNum (prevents stale headers dynamically)
+const headerRangeMatch = freshInstallContent.match(/Generated from migrations\s+(\d+)[–-](\d+)/i);
+assert(headerRangeMatch !== null, "fresh-install.sql contains 'Generated from migrations' header");
+const headerEnd = headerRangeMatch ? headerRangeMatch[2] : null;
 assert(
-  !staleHeaderRegex.test(freshInstallContent),
-  "fresh-install.sql header does NOT claim stale migration range (001-037, 001-038, or 001-039)"
+  headerEnd === latestNum,
+  `fresh-install.sql header range end (${headerEnd}) exactly matches latest migration number (${latestNum})`
 );
 
 console.log("\n=== 5. Schema Migrations History Parity in Fresh Install ===");
@@ -126,7 +128,11 @@ assert(unknownEntries.length === 0, `No unknown migration files in fresh-install
 const missingEntries = migrationFiles.filter(f => !historySet.has(f));
 assert(missingEntries.length === 0, `Every migration file is present in fresh-install history (missing: ${missingEntries.join(', ')})`);
 
-// 5.5 Latest migration 039 and 040 specifically in history
+// 5.5 Latest migration specifically in history (derived dynamically)
+assert(
+  historyEntries.includes(latestMigration),
+  `${latestMigration} is explicitly recorded in schema_migrations history`
+);
 assert(
   historyEntries.includes('039_create_admin_notifications.sql'),
   "039_create_admin_notifications.sql is explicitly recorded in schema_migrations history"
@@ -245,17 +251,21 @@ const deployDocPath = path.resolve(process.cwd(), 'DEPLOYMENT_PHP_MYSQL.md');
 assert(fs.existsSync(deployDocPath), "DEPLOYMENT_PHP_MYSQL.md exists");
 const deployDocContent = fs.readFileSync(deployDocPath, 'utf8');
 
-// Dynamic range match (001–040)
+// Dynamic range match
 const deployRangeRegex = new RegExp(`001[–-]${latestNum}`);
 assert(
   deployRangeRegex.test(deployDocContent),
   `DEPLOYMENT_PHP_MYSQL.md references current migration range 001–${latestNum}`
 );
 
-// No stale range
-assert(!/001[–-]037/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–037");
-assert(!/001[–-]038/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–038");
-assert(!/001[–-]039/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–039");
+// Semantic check: DEPLOYMENT_PHP_MYSQL.md canonical range end === latestNum
+const deployRangeMatch = deployDocContent.match(/canonically represents migrations\s+(\d+)[–-](\d+)/i);
+assert(deployRangeMatch !== null, "DEPLOYMENT_PHP_MYSQL.md contains 'canonically represents migrations' header");
+const deployEnd = deployRangeMatch ? deployRangeMatch[2] : null;
+assert(
+  deployEnd === latestNum,
+  `DEPLOYMENT_PHP_MYSQL.md canonical range end (${deployEnd}) exactly matches latest migration number (${latestNum})`
+);
 
 // Canonical rules
 assert(
@@ -391,9 +401,19 @@ console.log("\n=== 10. Simulation Self-Tests for Drift & Parity Checks ===");
 // 10.5 Simulation: Stale range in documentation fails range check
 {
   const mockDoc = "This file canonically represents migrations 001–037.";
-  const latestNumber = '040';
+  const latestNumber = latestNum;
   const isDocValid = new RegExp(`001[–-]${latestNumber}`).test(mockDoc) && !/001[–-]037/.test(mockDoc);
   assert(!isDocValid, "Simulation 5: Stale migration range in documentation correctly detected as violation");
+}
+
+// 10.6 Simulation: Future-safety check: hypothetical 042 migration with current header fails automatically
+{
+  const hypotheticalLatestNum = '042';
+  const currentHeaderContent = `Generated from migrations ${firstNum}-${latestNum}`;
+  const m = currentHeaderContent.match(/Generated from migrations\s+(\d+)[–-](\d+)/i);
+  const hEnd = m ? m[2] : null;
+  const isAligned = hEnd === hypotheticalLatestNum;
+  assert(!isAligned, "Simulation 6: Hypothetical 042 migration with current header correctly detected as stale violation");
 }
 
 console.log("\n=======================================================");
