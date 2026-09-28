@@ -1182,6 +1182,12 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         $matched = true;
     }
 
+    if ($requestUri === '/api/member/appointment-booking-options' && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';
+        (new \Controllers\MemberAppointmentBookingController())->getBookingOptions();
+        $matched = true;
+    }
+
 if (!$matched) {
     Response::error('Not Found', 'NOT_FOUND', 404);
 }

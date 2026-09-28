@@ -323,6 +323,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * editor/reception cannot manage availability
 * no member-facing slot projection or booking is introduced
 
+## F.24C.1 Member Self-Service Booking Options Read Model
+* self-service uses assigned trainer only
+* v1 session duration = 60 minutes
+* v1 slot step = 60 minutes
+* minimum notice = 120 minutes
+* booking horizon = 14 calendar days including today
+* slot grid anchors to each weekly availability window start
+* no weekly availability means no bookable slots
+* unavailability and scheduled trainer/member appointments remove slots
+* package eligibility is evaluated on appointment date
+* member booking remains read-only in F.24C.1
+
 
 
 
