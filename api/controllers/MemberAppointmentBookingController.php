@@ -436,15 +436,19 @@ class MemberAppointmentBookingController
     {
         $this->guard();
 
-        // 1. Content-Type validation
+        // 1. Content-Type validation (strict application/json prefix)
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        if (strpos($contentType, 'application/json') === false) {
-            Response::error('Content-Type must be application/json.', 'INVALID_CONTENT_TYPE', 415);
+        if (strpos($contentType, 'application/json') !== 0) {
+            Response::error('Content-Type must be application/json.', 'UNSUPPORTED_MEDIA_TYPE', 415);
         }
 
-        // 2. Payload size validation (1MB limit)
+        // 2. Payload size validation (project-standard 16KB limit)
+        if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 16384) {
+            Response::error('Payload too large.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
         $raw = file_get_contents('php://input');
-        if (strlen($raw) > 1048576) {
+        if (strlen($raw) > 16384) {
             Response::error('Payload too large.', 'PAYLOAD_TOO_LARGE', 413);
         }
 
@@ -467,15 +471,15 @@ class MemberAppointmentBookingController
         }
         $packageId = (int)$data['member_session_package_id'];
 
-        // 6. Validate starts_at format (YYYY-MM-DD HH:mm:ss, Europe/Istanbul)
+        // 6. Validate starts_at format (YYYY-MM-DD HH:mm:ss, Europe/Istanbul, exact 00 seconds)
         if (!is_string($data['starts_at'])) {
             Response::error('starts_at must be a string.', 'VALIDATION_ERROR', 422);
         }
         $startsAtStr = trim($data['starts_at']);
         $tz = new DateTimeZone(self::TIMEZONE);
         $startsDt = DateTime::createFromFormat('Y-m-d H:i:s', $startsAtStr, $tz);
-        if (!$startsDt || $startsDt->format('Y-m-d H:i:s') !== $startsAtStr) {
-            Response::error('Invalid starts_at format. Expected YYYY-MM-DD HH:mm:ss.', 'VALIDATION_ERROR', 422);
+        if (!$startsDt || $startsDt->format('Y-m-d H:i:s') !== $startsAtStr || $startsDt->format('s') !== '00') {
+            Response::error('Invalid starts_at format. Expected YYYY-MM-DD HH:mm:ss with 00 seconds.', 'VALIDATION_ERROR', 422);
         }
 
         // 7. Server authority derives ends_at (exact 60 minutes)
@@ -487,26 +491,26 @@ class MemberAppointmentBookingController
             Response::error('Appointment must start and end on the same calendar day (Europe/Istanbul).', 'VALIDATION_ERROR', 422);
         }
 
-        // 8. Server-side booking policy pre-checks
+        // 8. Server-side booking policy pre-checks (cheap fail-fast before transaction)
         $businessNow = new DateTime('now', $tz);
         $todayStr = $businessNow->format('Y-m-d');
         $horizonEndStr = (clone $businessNow)->modify('+' . (self::BOOKING_HORIZON_DAYS - 1) . ' days')->format('Y-m-d');
 
         if ($dateStr < $todayStr || $dateStr > $horizonEndStr) {
-            Response::error('Appointment date is outside the 14-day booking horizon.', 'BOOKING_POLICY_VIOLATION', 409);
+            Response::error('Appointment date is outside the 14-day booking horizon.', 'BOOKING_SLOT_UNAVAILABLE', 409);
         }
 
         $minimumBookableAt = (clone $businessNow)->modify('+' . self::MINIMUM_NOTICE_MINUTES . ' minutes');
         if ($startsDt < $minimumBookableAt) {
-            Response::error('Appointment does not satisfy minimum notice period of 120 minutes.', 'MINIMUM_NOTICE_VIOLATION', 409);
+            Response::error('Appointment does not satisfy minimum notice period of 120 minutes.', 'BOOKING_SLOT_UNAVAILABLE', 409);
         }
 
         try {
             $this->db->beginTransaction();
 
-            // STEP 1: Lock member account FOR UPDATE
+            // STEP 1: Lock member account FOR UPDATE & revalidate session identity under lock
             $accStmt = $this->db->prepare("
-                SELECT id, status, must_change_password
+                SELECT id, member_id, status, auth_version, must_change_password
                 FROM member_accounts
                 WHERE id = ?
                 FOR UPDATE
@@ -514,12 +518,20 @@ class MemberAppointmentBookingController
             $accStmt->execute([$this->accountId]);
             $account = $accStmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$account || $account['status'] !== 'active') {
+            $sessionAuthVersion = (int)($_SESSION['member_auth_version'] ?? 0);
+
+            if (
+                !$account ||
+                (int)$account['member_id'] !== $this->memberId ||
+                $account['status'] !== 'active' ||
+                $sessionAuthVersion <= 0 ||
+                (int)$account['auth_version'] !== $sessionAuthVersion
+            ) {
                 $this->db->rollBack();
-                Response::error('Member account is not active.', 'UNAUTHORIZED', 401);
+                Response::error('Unauthorized access.', 'UNAUTHORIZED', 401);
             }
 
-            if ((int)$account['must_change_password'] === 1) {
+            if ((int)$account['must_change_password'] !== 0) {
                 $this->db->rollBack();
                 Response::error('Password change required before proceeding.', 'PASSWORD_CHANGE_REQUIRED', 403);
             }
@@ -568,7 +580,7 @@ class MemberAppointmentBookingController
                 Response::error('No trainer assigned to this member.', 'TRAINER_NOT_ASSIGNED', 409);
             }
 
-            // STEP 3: Lock assigned trainer profile FOR UPDATE
+            // STEP 3: Lock assigned trainer profile FOR UPDATE (trainer is the concurrency mutex)
             $trStmt = $this->db->prepare("
                 SELECT id, name, is_active, deleted_at
                 FROM trainers
@@ -588,7 +600,118 @@ class MemberAppointmentBookingController
                 Response::error('Assigned trainer is inactive.', 'TRAINER_INELIGIBLE', 409);
             }
 
-            // STEP 4: Lock session package FOR UPDATE
+            // STEP 4: Authoritative locked booking policy recomputation
+            $businessNowLocked = new DateTime('now', $tz);
+            $todayLocked = $businessNowLocked->format('Y-m-d');
+            $lastBookableDateLocked = (clone $businessNowLocked)->modify('+' . (self::BOOKING_HORIZON_DAYS - 1) . ' days')->format('Y-m-d');
+            $minimumBookableAtLocked = (clone $businessNowLocked)->modify('+' . self::MINIMUM_NOTICE_MINUTES . ' minutes');
+
+            if ($dateStr < $todayLocked || $dateStr > $lastBookableDateLocked) {
+                $this->db->rollBack();
+                Response::error('Appointment date is outside the 14-day booking horizon.', 'BOOKING_SLOT_UNAVAILABLE', 409);
+            }
+
+            if ($startsDt < $minimumBookableAtLocked) {
+                $this->db->rollBack();
+                Response::error('Appointment does not satisfy minimum notice period of 120 minutes.', 'BOOKING_SLOT_UNAVAILABLE', 409);
+            }
+
+            // STEP 5: Validate trainer weekly availability window & slot alignment
+            $dayOfWeek = (int)$startsDt->format('N');
+            $wStmt = $this->db->prepare("
+                SELECT start_time, end_time
+                FROM trainer_availability_windows
+                WHERE trainer_id = ? AND day_of_week = ?
+                ORDER BY start_time ASC
+            ");
+            $wStmt->execute([$trainerId, $dayOfWeek]);
+            $windows = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($windows)) {
+                $this->db->rollBack();
+                Response::error('Trainer has no working hours on this day.', 'BOOKING_SLOT_UNAVAILABLE', 409);
+            }
+
+            $slotMatched = false;
+            foreach ($windows as $win) {
+                $sParts = explode(':', $win['start_time']);
+                $startMinutes = (int)$sParts[0] * 60 + (int)$sParts[1];
+                $eParts = explode(':', $win['end_time']);
+                $endMinutes = (int)$eParts[0] * 60 + (int)$eParts[1];
+
+                for ($cur = $startMinutes; $cur + self::SLOT_DURATION_MINUTES <= $endMinutes; $cur += self::SLOT_STEP_MINUTES) {
+                    $slotStartH = intdiv($cur, 60);
+                    $slotStartM = $cur % 60;
+                    $slotEndTotal = $cur + self::SLOT_DURATION_MINUTES;
+                    $slotEndH = intdiv($slotEndTotal, 60);
+                    $slotEndM = $slotEndTotal % 60;
+
+                    if ($slotEndTotal > 1440) {
+                        continue;
+                    }
+
+                    $candidateStart = sprintf('%s %02d:%02d:00', $dateStr, $slotStartH, $slotStartM);
+                    $candidateEnd = sprintf('%s %02d:%02d:00', $dateStr, $slotEndH, $slotEndM);
+
+                    if ($candidateStart === $startsAtStr && $candidateEnd === $endsAtStr) {
+                        $slotMatched = true;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$slotMatched) {
+                $this->db->rollBack();
+                Response::error('Selected time is not a valid bookable working hours slot.', 'BOOKING_SLOT_UNAVAILABLE', 409);
+            }
+
+            // STEP 6: Validate trainer unavailability blocks
+            $unavailStmt = $this->db->prepare("
+                SELECT id
+                FROM trainer_unavailability_blocks
+                WHERE trainer_id = ?
+                  AND starts_at < ?
+                  AND ends_at > ?
+            ");
+            $unavailStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
+            if ($unavailStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Trainer is unavailable at the selected time.', 'BOOKING_SLOT_UNAVAILABLE', 409);
+            }
+
+            // STEP 7: Validate trainer conflict (scheduled appointments overlapping, FOR UPDATE)
+            $tConfStmt = $this->db->prepare("
+                SELECT id
+                FROM appointments
+                WHERE trainer_id = ?
+                  AND status = 'scheduled'
+                  AND starts_at < ?
+                  AND ends_at > ?
+                FOR UPDATE
+            ");
+            $tConfStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
+            if ($tConfStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Trainer is already booked for this time.', 'TRAINER_CONFLICT', 409);
+            }
+
+            // STEP 8: Validate member conflict (scheduled appointments overlapping, FOR UPDATE)
+            $mConfStmt = $this->db->prepare("
+                SELECT id
+                FROM appointments
+                WHERE member_id = ?
+                  AND status = 'scheduled'
+                  AND starts_at < ?
+                  AND ends_at > ?
+                FOR UPDATE
+            ");
+            $mConfStmt->execute([$this->memberId, $endsAtStr, $startsAtStr]);
+            if ($mConfStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Member already has an appointment scheduled at this time.', 'MEMBER_CONFLICT', 409);
+            }
+
+            // STEP 9: Lock session package FOR UPDATE (canonical lock order: after conflict locks)
             $pkgStmt = $this->db->prepare("
                 SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, status
                 FROM member_session_packages
@@ -600,7 +723,7 @@ class MemberAppointmentBookingController
 
             if (!$pkg || (int)$pkg['member_id'] !== $this->memberId) {
                 $this->db->rollBack();
-                Response::error('Session package not found or does not belong to the member.', 'SESSION_PACKAGE_NOT_FOUND', 404);
+                Response::error('Session package is ineligible.', 'SESSION_PACKAGE_INELIGIBLE', 409);
             }
 
             if ($pkg['status'] !== 'active') {
@@ -650,102 +773,7 @@ class MemberAppointmentBookingController
                 Response::error('Session package is exhausted.', 'SESSION_PACKAGE_EXHAUSTED', 409);
             }
 
-            // STEP 5: Validate trainer weekly availability window & slot alignment
-            $dayOfWeek = (int)$startsDt->format('N');
-            $wStmt = $this->db->prepare("
-                SELECT start_time, end_time
-                FROM trainer_availability_windows
-                WHERE trainer_id = ? AND day_of_week = ?
-                ORDER BY start_time ASC
-            ");
-            $wStmt->execute([$trainerId, $dayOfWeek]);
-            $windows = $wStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            if (empty($windows)) {
-                $this->db->rollBack();
-                Response::error('Trainer has no working hours on this day.', 'SLOT_NOT_AVAILABLE', 409);
-            }
-
-            $slotMatched = false;
-            foreach ($windows as $win) {
-                $sParts = explode(':', $win['start_time']);
-                $startMinutes = (int)$sParts[0] * 60 + (int)$sParts[1];
-                $eParts = explode(':', $win['end_time']);
-                $endMinutes = (int)$eParts[0] * 60 + (int)$eParts[1];
-
-                for ($cur = $startMinutes; $cur + self::SLOT_DURATION_MINUTES <= $endMinutes; $cur += self::SLOT_STEP_MINUTES) {
-                    $slotStartH = intdiv($cur, 60);
-                    $slotStartM = $cur % 60;
-                    $slotEndTotal = $cur + self::SLOT_DURATION_MINUTES;
-                    $slotEndH = intdiv($slotEndTotal, 60);
-                    $slotEndM = $slotEndTotal % 60;
-
-                    if ($slotEndTotal > 1440) {
-                        continue;
-                    }
-
-                    $candidateStart = sprintf('%s %02d:%02d:00', $dateStr, $slotStartH, $slotStartM);
-                    $candidateEnd = sprintf('%s %02d:%02d:00', $dateStr, $slotEndH, $slotEndM);
-
-                    if ($candidateStart === $startsAtStr && $candidateEnd === $endsAtStr) {
-                        $slotMatched = true;
-                        break 2;
-                    }
-                }
-            }
-
-            if (!$slotMatched) {
-                $this->db->rollBack();
-                Response::error('Selected time is not a valid bookable working hours slot.', 'SLOT_NOT_AVAILABLE', 409);
-            }
-
-            // STEP 6: Validate trainer unavailability blocks
-            $unavailStmt = $this->db->prepare("
-                SELECT id
-                FROM trainer_unavailability_blocks
-                WHERE trainer_id = ?
-                  AND starts_at < ?
-                  AND ends_at > ?
-            ");
-            $unavailStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
-            if ($unavailStmt->fetch()) {
-                $this->db->rollBack();
-                Response::error('Trainer is unavailable at the selected time.', 'SLOT_NOT_AVAILABLE', 409);
-            }
-
-            // STEP 7: Validate trainer conflict (scheduled appointments overlapping, FOR UPDATE)
-            $tConfStmt = $this->db->prepare("
-                SELECT id
-                FROM appointments
-                WHERE trainer_id = ?
-                  AND status = 'scheduled'
-                  AND starts_at < ?
-                  AND ends_at > ?
-                FOR UPDATE
-            ");
-            $tConfStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
-            if ($tConfStmt->fetch()) {
-                $this->db->rollBack();
-                Response::error('Trainer is already booked for this time.', 'TRAINER_CONFLICT', 409);
-            }
-
-            // STEP 8: Validate member conflict (scheduled appointments overlapping, FOR UPDATE)
-            $mConfStmt = $this->db->prepare("
-                SELECT id
-                FROM appointments
-                WHERE member_id = ?
-                  AND status = 'scheduled'
-                  AND starts_at < ?
-                  AND ends_at > ?
-                FOR UPDATE
-            ");
-            $mConfStmt->execute([$this->memberId, $endsAtStr, $startsAtStr]);
-            if ($mConfStmt->fetch()) {
-                $this->db->rollBack();
-                Response::error('Member already has an appointment scheduled at this time.', 'MEMBER_CONFLICT', 409);
-            }
-
-            // STEP 9: Atomic insert into appointments with member account creator attribution
+            // STEP 10: Atomic insert into appointments with member account creator attribution
             $apptUuid = $this->generateUuid();
             $insApptStmt = $this->db->prepare("
                 INSERT INTO appointments (
@@ -767,7 +795,7 @@ class MemberAppointmentBookingController
 
             $appointmentId = (int)$this->db->lastInsertId();
 
-            // STEP 10: Atomic insert into member_session_package_ledger (reserve -1) with member account creator attribution
+            // STEP 11: Atomic insert into member_session_package_ledger (reserve -1) with member account creator attribution
             $ledgerUuid = $this->generateUuid();
             $insLedgerStmt = $this->db->prepare("
                 INSERT INTO member_session_package_ledger (
