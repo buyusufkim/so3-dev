@@ -38,10 +38,10 @@ assert(firstMatch !== null, `First migration has numeric prefix: ${firstMigratio
 assert(latestMatch !== null, `Latest migration has numeric prefix: ${latestMigration}`);
 
 const firstNum = firstMatch ? firstMatch[1] : '001';
-const latestNum = latestMatch ? latestMatch[1] : '039';
+const latestNum = latestMatch ? latestMatch[1] : '040';
 
 console.log(`Dynamic migration range: ${firstNum} -> ${latestNum} (${latestMigration})`);
-assert(latestMigration === '039_create_admin_notifications.sql', "Current latest migration is 039_create_admin_notifications.sql");
+assert(latestMigration === '040_add_member_appointment_actor_attribution.sql', "Current latest migration is 040_add_member_appointment_actor_attribution.sql");
 
 console.log("\n=== 2. Package.json Script Registration ===");
 const pkgPath = path.resolve(process.cwd(), 'package.json');
@@ -76,10 +76,10 @@ assert(
 );
 
 // Must not contain stale header versions
-const staleHeaderRegex = new RegExp(`Generated from migrations\\s+001[–-]03[0-8]\\b`, 'i');
+const staleHeaderRegex = new RegExp(`Generated from migrations\\s+001[–-]03[0-9]\\b`, 'i');
 assert(
   !staleHeaderRegex.test(freshInstallContent),
-  "fresh-install.sql header does NOT claim stale migration range (001-037 or 001-038)"
+  "fresh-install.sql header does NOT claim stale migration range (001-037, 001-038, or 001-039)"
 );
 
 console.log("\n=== 5. Schema Migrations History Parity in Fresh Install ===");
@@ -126,10 +126,14 @@ assert(unknownEntries.length === 0, `No unknown migration files in fresh-install
 const missingEntries = migrationFiles.filter(f => !historySet.has(f));
 assert(missingEntries.length === 0, `Every migration file is present in fresh-install history (missing: ${missingEntries.join(', ')})`);
 
-// 5.5 Latest migration 039 specifically in history
+// 5.5 Latest migration 039 and 040 specifically in history
 assert(
   historyEntries.includes('039_create_admin_notifications.sql'),
   "039_create_admin_notifications.sql is explicitly recorded in schema_migrations history"
+);
+assert(
+  historyEntries.includes('040_add_member_appointment_actor_attribution.sql'),
+  "040_add_member_appointment_actor_attribution.sql is explicitly recorded in schema_migrations history"
 );
 
 console.log("\n=== 6. Migration 039 Schema Parity in Fresh Install ===");
@@ -216,12 +220,32 @@ for (const token of structuralTokens) {
   assert(freshInstallContent.includes(token), `Authoritative token '${token}' replicated in fresh-install.sql`);
 }
 
+console.log("\n=== 6B. Migration 040 Schema Parity in Fresh Install ===");
+
+const mig040Path = path.resolve(migrationsDir, '040_add_member_appointment_actor_attribution.sql');
+assert(fs.existsSync(mig040Path), "040_add_member_appointment_actor_attribution.sql exists in database/migrations");
+const mig040Content = fs.readFileSync(mig040Path, 'utf8');
+
+const structuralTokens040 = [
+  'created_by_member_account_id',
+  'fk_appointments_created_by_member_account',
+  'idx_appointments_created_by_member_account',
+  'chk_appointments_creator_attribution',
+  'fk_mspl_created_by_member_account',
+  'idx_mspl_created_by_member_account',
+  'chk_mspl_creator_attribution'
+];
+for (const token of structuralTokens040) {
+  assert(mig040Content.includes(token), `Migration 040 authoritative token '${token}' exists in migration file`);
+  assert(freshInstallContent.includes(token), `Authoritative token '${token}' replicated in fresh-install.sql`);
+}
+
 console.log("\n=== 7. Deployment Documentation Verification ===");
 const deployDocPath = path.resolve(process.cwd(), 'DEPLOYMENT_PHP_MYSQL.md');
 assert(fs.existsSync(deployDocPath), "DEPLOYMENT_PHP_MYSQL.md exists");
 const deployDocContent = fs.readFileSync(deployDocPath, 'utf8');
 
-// Dynamic range match (001–039)
+// Dynamic range match (001–040)
 const deployRangeRegex = new RegExp(`001[–-]${latestNum}`);
 assert(
   deployRangeRegex.test(deployDocContent),
@@ -231,6 +255,7 @@ assert(
 // No stale range
 assert(!/001[–-]037/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–037");
 assert(!/001[–-]038/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–038");
+assert(!/001[–-]039/.test(deployDocContent), "DEPLOYMENT_PHP_MYSQL.md does NOT claim stale range 001–039");
 
 // Canonical rules
 assert(
@@ -366,7 +391,7 @@ console.log("\n=== 10. Simulation Self-Tests for Drift & Parity Checks ===");
 // 10.5 Simulation: Stale range in documentation fails range check
 {
   const mockDoc = "This file canonically represents migrations 001–037.";
-  const latestNumber = '039';
+  const latestNumber = '040';
   const isDocValid = new RegExp(`001[–-]${latestNumber}`).test(mockDoc) && !/001[–-]037/.test(mockDoc);
   assert(!isDocValid, "Simulation 5: Stale migration range in documentation correctly detected as violation");
 }

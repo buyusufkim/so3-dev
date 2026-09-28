@@ -34,7 +34,7 @@ checkFile('database/migrations/038_create_member_portal_auth.sql', [
 ]);
 
 const freshInstall = checkFile('database/fresh-install.sql', [
-    'Generated from migrations 001-038',
+    'Generated from migrations 001-',
     '-- Migration: 038_create_member_portal_auth.sql',
     '(\'038_create_member_portal_auth.sql\', CURRENT_TIMESTAMP)'
 ]);

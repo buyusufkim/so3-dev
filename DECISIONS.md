@@ -294,6 +294,16 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * admin analytics and role boundaries are tested against real runtime
 * business mutations remain out of scope
 
+## F.24A Member Appointment Actor Attribution Foundation
+* appointments and member_session_package_ledger creator attribution enables auditable provenance for self-service appointments
+* member_accounts.id is the authoritative actor identity for future member portal self-service bookings
+* created_by (pointing to admins.id) becomes nullable to allow member-account creation without artificial or system admin identities
+* created_by_member_account_id is added with foreign key constraint referencing member_accounts(id) ON DELETE RESTRICT ON UPDATE RESTRICT
+* mutual exclusivity between admin and member account creator is strictly enforced via chk_appointments_creator_attribution and chk_mspl_creator_attribution check constraints
+* existing admin, reception, and trainer appointment creation and session-package ledger behavior remains 100% unchanged
+* no member booking or availability endpoint is created in this phase; F.24A provides data model attribution foundation only
+
+
 
 
 

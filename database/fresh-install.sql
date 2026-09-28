@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-039
+-- Generated from migrations 001-040
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -1064,6 +1064,48 @@ CREATE INDEX `idx_admin_notifications_recipient_read_created` ON `admin_notifica
 CREATE INDEX `idx_admin_notifications_recipient_type_created` ON `admin_notifications`(`recipient_admin_id`, `type`, `created_at`);
 
 
+-- Migration: 040_add_member_appointment_actor_attribution.sql
+ALTER TABLE `appointments`
+MODIFY COLUMN `created_by` INT NULL;
+
+ALTER TABLE `appointments`
+ADD COLUMN `created_by_member_account_id` INT NULL AFTER `created_by`;
+
+ALTER TABLE `appointments`
+ADD CONSTRAINT `fk_appointments_created_by_member_account`
+FOREIGN KEY (`created_by_member_account_id`) REFERENCES `member_accounts`(`id`)
+ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+CREATE INDEX `idx_appointments_created_by_member_account` ON `appointments`(`created_by_member_account_id`);
+
+ALTER TABLE `appointments`
+ADD CONSTRAINT `chk_appointments_creator_attribution`
+CHECK (
+    (`created_by` IS NOT NULL AND `created_by_member_account_id` IS NULL) OR
+    (`created_by` IS NULL AND `created_by_member_account_id` IS NOT NULL)
+);
+
+ALTER TABLE `member_session_package_ledger`
+MODIFY COLUMN `created_by` INT NULL;
+
+ALTER TABLE `member_session_package_ledger`
+ADD COLUMN `created_by_member_account_id` INT NULL AFTER `created_by`;
+
+ALTER TABLE `member_session_package_ledger`
+ADD CONSTRAINT `fk_mspl_created_by_member_account`
+FOREIGN KEY (`created_by_member_account_id`) REFERENCES `member_accounts`(`id`)
+ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+CREATE INDEX `idx_mspl_created_by_member_account` ON `member_session_package_ledger`(`created_by_member_account_id`);
+
+ALTER TABLE `member_session_package_ledger`
+ADD CONSTRAINT `chk_mspl_creator_attribution`
+CHECK (
+    (`created_by` IS NOT NULL AND `created_by_member_account_id` IS NULL) OR
+    (`created_by` IS NULL AND `created_by_member_account_id` IS NOT NULL)
+);
+
+
 -- Insert migration history to prevent migrate.php from rerunning these
 INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('001_create_schema_migrations.sql', CURRENT_TIMESTAMP),
@@ -1104,6 +1146,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('036_create_appointment_reschedules.sql', CURRENT_TIMESTAMP),
 ('037_create_session_packages.sql', CURRENT_TIMESTAMP),
 ('038_create_member_portal_auth.sql', CURRENT_TIMESTAMP),
-('039_create_admin_notifications.sql', CURRENT_TIMESTAMP);
+('039_create_admin_notifications.sql', CURRENT_TIMESTAMP),
+('040_add_member_appointment_actor_attribution.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
