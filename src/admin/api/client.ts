@@ -99,6 +99,15 @@ export const apiClient = {
     });
   },
 
+  put(endpoint: string, body: any, options = {}) {
+    const isFormData = body instanceof FormData;
+    return this.request(endpoint, {
+      ...options,
+      method: 'PUT',
+      body: isFormData ? body : JSON.stringify(body)
+    });
+  },
+
   patch(endpoint: string, body: any, options = {}) {
     const isFormData = body instanceof FormData;
     return this.request(endpoint, {

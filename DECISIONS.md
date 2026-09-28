@@ -314,6 +314,16 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no member-facing availability or booking is exposed yet
 * Europe/Istanbul remains business timezone
 
+## F.24B.2 Trainer Availability Management UI
+* admin/super_admin manage availability inside existing trainer editor
+* trainer manages own availability from dedicated mobile-first page
+* weekly windows and unavailability blocks remain raw configuration
+* browser timezone conversion is forbidden; Europe/Istanbul values are transported as wall-time strings
+* availability save is independent from trainer profile save
+* editor/reception cannot manage availability
+* no member-facing slot projection or booking is introduced
+
+
 
 
 

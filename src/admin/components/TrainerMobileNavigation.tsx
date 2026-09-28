@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, CalendarDays, Users, LogOut } from "lucide-react";
+import { Home, CalendarDays, Clock3, Users, LogOut } from "lucide-react";
 
 type TrainerMobileNavigationProps = {
   onLogout: () => void | Promise<void>;
@@ -11,6 +11,7 @@ export function TrainerMobileNavigation({ onLogout, displayName }: TrainerMobile
 
   const isMembersActive = location.pathname.startsWith('/admin/my-members');
   const isAppointmentsActive = location.pathname.startsWith('/admin/my-appointments');
+  const isAvailabilityActive = location.pathname.startsWith('/admin/my-availability');
   const isHomeActive = location.pathname === '/admin/trainer';
 
   return (
@@ -56,6 +57,16 @@ export function TrainerMobileNavigation({ onLogout, displayName }: TrainerMobile
           >
             <CalendarDays className={`w-5 h-5 ${isAppointmentsActive ? 'text-[#851C35]' : ''}`} />
             <span className="text-[10px] font-medium">Randevular</span>
+          </NavLink>
+
+          <NavLink
+            to="/admin/my-availability"
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
+              isAvailabilityActive ? 'text-white' : 'text-white/40 hover:text-white/80'
+            }`}
+          >
+            <Clock3 className={`w-5 h-5 ${isAvailabilityActive ? 'text-[#851C35]' : ''}`} />
+            <span className="text-[10px] font-medium">Müsaitlik</span>
           </NavLink>
 
           <NavLink

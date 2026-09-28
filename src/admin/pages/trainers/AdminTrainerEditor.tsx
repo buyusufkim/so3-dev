@@ -5,6 +5,7 @@ import { apiClient, ApiError } from "../../api/client";
 import { generateTurkishSlug } from "../../utils/slug";
 import { AdminTrainerDetail, TrainerBranch, AdminUser } from "./types";
 import { MediaPicker } from "../../components/MediaPicker";
+import { TrainerAvailabilityEditor } from "../../components/TrainerAvailabilityEditor";
 
 interface TrainerFormData {
   name: string;
@@ -473,6 +474,12 @@ export function AdminTrainerEditor() {
           </div>
         </div>
       </form>
+
+      {!isNew && id && Number.isInteger(parseInt(id, 10)) && parseInt(id, 10) > 0 && (admin?.role === 'super_admin' || admin?.role === 'admin') && (
+        <div className="mt-8 pt-8 border-t border-white/10">
+          <TrainerAvailabilityEditor mode="admin" trainerId={parseInt(id, 10)} />
+        </div>
+      )}
 
       {mediaPickerOpen && (
         <MediaPicker

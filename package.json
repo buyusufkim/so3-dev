@@ -62,7 +62,8 @@
     "verify:member-portal-measurements-read-model": "node scripts/verify-member-portal-measurements-read-model.mjs",
     "verify:member-progress-ui": "node scripts/verify-member-progress-ui.mjs",
     "verify:member-appointment-actor-attribution": "node scripts/verify-member-appointment-actor-attribution.mjs",
-    "verify:trainer-availability-foundation": "node scripts/verify-trainer-availability-foundation.mjs"
+    "verify:trainer-availability-foundation": "node scripts/verify-trainer-availability-foundation.mjs",
+    "verify:trainer-availability-ui": "node scripts/verify-trainer-availability-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

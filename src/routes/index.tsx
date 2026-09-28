@@ -38,6 +38,7 @@ const TrainerMemberProgressPage = lazy(() => import("../admin/pages/trainer-memb
 const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/TrainerDashboard").then(m => ({ default: m.TrainerDashboard })));
 const ReceptionDashboard = lazy(() => import("../admin/pages/reception/ReceptionDashboard").then(m => ({ default: m.ReceptionDashboard })));
 const AppointmentListPage = lazy(() => import("../admin/pages/appointments/AppointmentListPage").then(m => ({ default: m.AppointmentListPage })));
+const TrainerAvailabilityPage = lazy(() => import("../admin/pages/trainer-availability/TrainerAvailabilityPage").then(m => ({ default: m.TrainerAvailabilityPage })));
 
 import { MemberSuspense } from '../member/components/MemberSuspense';
 import { MemberAuthProvider } from '../member/auth/MemberAuthContext';
@@ -253,6 +254,10 @@ const router = createBrowserRouter([
       {
         path: "trainer",
         element: <AdminSuspense><TrainerDashboard /></AdminSuspense>,
+      },
+      {
+        path: "my-availability",
+        element: <AdminSuspense><TrainerAvailabilityPage /></AdminSuspense>,
       },
       {
         path: "my-members",
