@@ -298,7 +298,7 @@ class TrainerAvailabilityController
         ];
     }
 
-    private function executeTransactionalReplace(int $trainerId, string $trainerName, int $actorAdminId, array $validated): void
+    private function executeTransactionalReplace(int $trainerId, int $actorAdminId, array $validated, bool $requireActive): void
     {
         $windows = $validated['weekly_windows'];
         $blocks = $validated['unavailability_blocks'];
@@ -315,6 +315,12 @@ class TrainerAvailabilityController
             if (!$trainer || $trainer['deleted_at'] !== null) {
                 $this->db->rollBack();
                 Response::error('Trainer not found or deleted.', 'NOT_FOUND', 404);
+            }
+
+            // Re-validate active eligibility under lock for trainer-self mutations
+            if ($requireActive && (int)$trainer['is_active'] !== 1) {
+                $this->db->rollBack();
+                Response::error('Trainer profile is inactive.', 'TRAINER_INELIGIBLE', 403);
             }
 
             // 2. Delete existing windows
@@ -377,8 +383,8 @@ class TrainerAvailabilityController
                 error_log("Failed to log trainer availability update: " . $e->getMessage());
             }
 
-            // Return updated configuration
-            $response = $this->fetchAvailabilityResponse($trainerId, $trainer['name']);
+            // Return updated configuration using locked row name
+            $response = $this->fetchAvailabilityResponse($trainerId, (string)$trainer['name']);
             Response::json($response);
 
         } catch (Throwable $e) {
@@ -406,7 +412,7 @@ class TrainerAvailabilityController
         }
         $trainer = $this->resolveTrainerById($trainerId);
         $validated = $this->parseAndValidateReplacePayload();
-        $this->executeTransactionalReplace((int)$trainer['id'], $trainer['name'], $adminId, $validated);
+        $this->executeTransactionalReplace((int)$trainer['id'], $adminId, $validated, false);
     }
 
     public function getTrainerAvailability(): void
@@ -425,6 +431,6 @@ class TrainerAvailabilityController
         }
         $trainer = $this->resolveTrainerFromSession();
         $validated = $this->parseAndValidateReplacePayload();
-        $this->executeTransactionalReplace((int)$trainer['id'], $trainer['name'], $adminId, $validated);
+        $this->executeTransactionalReplace((int)$trainer['id'], $adminId, $validated, true);
     }
 }

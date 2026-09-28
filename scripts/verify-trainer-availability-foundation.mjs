@@ -216,6 +216,55 @@ assert(
   "PUT locks target trainer row FOR UPDATE"
 );
 assert(
+  /SELECT\s+[^;]*is_active[^;]*FROM\s+trainers\s+WHERE\s+id\s*=\s*\?\s+FOR\s+UPDATE/i.test(ctrlContent),
+  "FOR UPDATE query explicitly selects is_active to inspect locked trainer state"
+);
+
+// Transactional trainer eligibility closure (Phase 7B.4G-F.24B.1.1)
+const replaceFnMatch = ctrlContent.match(/function\s+executeTransactionalReplace\s*\([\s\S]*?\{([\s\S]*?)\n\s*public\s+function/);
+assert(replaceFnMatch !== null, "executeTransactionalReplace method found in controller");
+const replaceFnBody = replaceFnMatch ? replaceFnMatch[1] : '';
+
+assert(
+  replaceFnBody.includes("is_active") && replaceFnBody.includes("TRAINER_INELIGIBLE"),
+  "executeTransactionalReplace verifies active eligibility under lock with TRAINER_INELIGIBLE"
+);
+
+const forUpdatePos = replaceFnBody.indexOf("FOR UPDATE");
+const trainerIneligiblePos = replaceFnBody.indexOf("TRAINER_INELIGIBLE");
+const delWinPos = replaceFnBody.indexOf("DELETE FROM trainer_availability_windows");
+const delBlockPos = replaceFnBody.indexOf("DELETE FROM trainer_unavailability_blocks");
+
+assert(forUpdatePos !== -1, "FOR UPDATE present in executeTransactionalReplace");
+assert(trainerIneligiblePos !== -1, "TRAINER_INELIGIBLE active check present in executeTransactionalReplace");
+assert(delWinPos !== -1, "DELETE FROM trainer_availability_windows present in executeTransactionalReplace");
+assert(delBlockPos !== -1, "DELETE FROM trainer_unavailability_blocks present in executeTransactionalReplace");
+
+assert(
+  forUpdatePos < trainerIneligiblePos &&
+  trainerIneligiblePos < delWinPos &&
+  delWinPos < delBlockPos,
+  "Strict transaction order enforced: FOR UPDATE < TRAINER_INELIGIBLE check < DELETE windows < DELETE blocks"
+);
+
+// Admin vs Self differentiation
+assert(
+  /replaceAdminAvailability[\s\S]*?executeTransactionalReplace\s*\([^,]+,[^,]+,[^,]+,\s*false\s*\)/.test(ctrlContent),
+  "Admin PUT allows inactive trainer availability management (requireActive = false)"
+);
+assert(
+  /replaceTrainerAvailability[\s\S]*?executeTransactionalReplace\s*\([^,]+,[^,]+,[^,]+,\s*true\s*\)/.test(ctrlContent),
+  "Trainer self PUT requires active trainer eligibility under lock (requireActive = true)"
+);
+
+// Stale name avoidance: use locked row data
+assert(
+  replaceFnBody.includes("$this->fetchAvailabilityResponse($trainerId, (string)$trainer['name'])") ||
+  replaceFnBody.includes("$this->fetchAvailabilityResponse($trainerId, $trainer['name'])"),
+  "executeTransactionalReplace uses locked trainer row name for post-commit response"
+);
+
+assert(
   ctrlContent.includes("DELETE FROM trainer_availability_windows WHERE trainer_id = ?"),
   "PUT deletes existing weekly windows before replacement"
 );
@@ -315,6 +364,6 @@ if (exitCode !== 0) {
   console.error("\n❌ FAILED: Trainer Availability Domain Foundation verification detected violations.");
   process.exit(1);
 } else {
-  console.log("\n✅ SUCCESS: All Trainer Availability Domain Foundation invariants verified.");
+  console.log("\nPASS — F.24B.1 TRAINER AVAILABILITY DOMAIN FOUNDATION & API CLOSED");
   process.exit(0);
 }
