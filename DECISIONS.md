@@ -335,6 +335,21 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * package eligibility is evaluated on appointment date
 * member booking remains read-only in F.24C.1
 
+## F.24C.2 Transaction-Safe Member Self-Service Appointment Create
+* POST /api/member/appointments exposes atomic member self-service appointment creation
+* client payload strictly limited to starts_at and member_session_package_id; member, trainer, ends_at, and creator attribution derived via server authority
+* member_accounts -> members -> trainers -> member_session_packages rows locked FOR UPDATE in serial order
+* membership active status, date range, trainer assignment, and trainer active status revalidated under lock
+* session package locked FOR UPDATE with fail-closed ledger integrity check and positive balance requirement
+* booking policy revalidated under lock: 14-day horizon (Europe/Istanbul) and 120-minute minimum notice period
+* slot must match active weekly availability window and not overlap with unavailability blocks
+* mutual exclusion between trainer and member scheduled appointments verified with FOR UPDATE locks
+* atomic write creates appointments row with created_by = NULL and created_by_member_account_id = session member_account_id
+* atomic reserve ledger row inserted with delta = -1 and created_by_member_account_id attribution matching appointment
+* returns HTTP 201 with persisted appointment snapshot
+* no cancellation, reschedule, or frontend booking UI introduced in this phase
+
+
 
 
 

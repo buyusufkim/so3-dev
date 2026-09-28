@@ -423,4 +423,402 @@ class MemberAppointmentBookingController
             'days' => $days
         ]);
     }
+
+    private function generateUuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    public function createAppointment(): void
+    {
+        $this->guard();
+
+        // 1. Content-Type validation
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') === false) {
+            Response::error('Content-Type must be application/json.', 'INVALID_CONTENT_TYPE', 415);
+        }
+
+        // 2. Payload size validation (1MB limit)
+        $raw = file_get_contents('php://input');
+        if (strlen($raw) > 1048576) {
+            Response::error('Payload too large.', 'PAYLOAD_TOO_LARGE', 413);
+        }
+
+        // 3. JSON parse validation
+        $data = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            Response::error('Malformed JSON payload.', 'INVALID_JSON', 400);
+        }
+
+        // 4. Strict payload keys (only member_session_package_id and starts_at)
+        $dataKeys = array_keys($data);
+        sort($dataKeys);
+        if ($dataKeys !== ['member_session_package_id', 'starts_at']) {
+            Response::error('Exact payload keys required: member_session_package_id, starts_at.', 'VALIDATION_ERROR', 422);
+        }
+
+        // 5. Validate member_session_package_id
+        if (!is_int($data['member_session_package_id']) || $data['member_session_package_id'] <= 0) {
+            Response::error('Invalid member_session_package_id.', 'VALIDATION_ERROR', 422);
+        }
+        $packageId = (int)$data['member_session_package_id'];
+
+        // 6. Validate starts_at format (YYYY-MM-DD HH:mm:ss, Europe/Istanbul)
+        if (!is_string($data['starts_at'])) {
+            Response::error('starts_at must be a string.', 'VALIDATION_ERROR', 422);
+        }
+        $startsAtStr = trim($data['starts_at']);
+        $tz = new DateTimeZone(self::TIMEZONE);
+        $startsDt = DateTime::createFromFormat('Y-m-d H:i:s', $startsAtStr, $tz);
+        if (!$startsDt || $startsDt->format('Y-m-d H:i:s') !== $startsAtStr) {
+            Response::error('Invalid starts_at format. Expected YYYY-MM-DD HH:mm:ss.', 'VALIDATION_ERROR', 422);
+        }
+
+        // 7. Server authority derives ends_at (exact 60 minutes)
+        $endsDt = (clone $startsDt)->modify('+' . self::SLOT_DURATION_MINUTES . ' minutes');
+        $endsAtStr = $endsDt->format('Y-m-d H:i:s');
+        $dateStr = $startsDt->format('Y-m-d');
+
+        if ($startsDt->format('Y-m-d') !== $endsDt->format('Y-m-d')) {
+            Response::error('Appointment must start and end on the same calendar day (Europe/Istanbul).', 'VALIDATION_ERROR', 422);
+        }
+
+        // 8. Server-side booking policy pre-checks
+        $businessNow = new DateTime('now', $tz);
+        $todayStr = $businessNow->format('Y-m-d');
+        $horizonEndStr = (clone $businessNow)->modify('+' . (self::BOOKING_HORIZON_DAYS - 1) . ' days')->format('Y-m-d');
+
+        if ($dateStr < $todayStr || $dateStr > $horizonEndStr) {
+            Response::error('Appointment date is outside the 14-day booking horizon.', 'BOOKING_POLICY_VIOLATION', 409);
+        }
+
+        $minimumBookableAt = (clone $businessNow)->modify('+' . self::MINIMUM_NOTICE_MINUTES . ' minutes');
+        if ($startsDt < $minimumBookableAt) {
+            Response::error('Appointment does not satisfy minimum notice period of 120 minutes.', 'MINIMUM_NOTICE_VIOLATION', 409);
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            // STEP 1: Lock member account FOR UPDATE
+            $accStmt = $this->db->prepare("
+                SELECT id, status, must_change_password
+                FROM member_accounts
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $accStmt->execute([$this->accountId]);
+            $account = $accStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$account || $account['status'] !== 'active') {
+                $this->db->rollBack();
+                Response::error('Member account is not active.', 'UNAUTHORIZED', 401);
+            }
+
+            if ((int)$account['must_change_password'] === 1) {
+                $this->db->rollBack();
+                Response::error('Password change required before proceeding.', 'PASSWORD_CHANGE_REQUIRED', 403);
+            }
+
+            // STEP 2: Lock member profile FOR UPDATE
+            $memStmt = $this->db->prepare("
+                SELECT id, status, membership_start_date, membership_end_date, trainer_id, deleted_at
+                FROM members
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $memStmt->execute([$this->memberId]);
+            $member = $memStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$member || $member['deleted_at'] !== null) {
+                $this->db->rollBack();
+                Response::error('Member not found or deleted.', 'NOT_FOUND', 404);
+            }
+
+            if ($member['status'] !== 'active') {
+                $this->db->rollBack();
+                Response::error('Member is not active.', 'MEMBER_INELIGIBLE', 409);
+            }
+
+            $startDate = $member['membership_start_date'];
+            $endDate = $member['membership_end_date'];
+
+            if (($startDate === null && $endDate !== null) || ($startDate !== null && $endDate === null)) {
+                $this->db->rollBack();
+                Response::error('Member membership date range is inconsistent.', 'MEMBER_MEMBERSHIP_DATA_INCONSISTENT', 409);
+            }
+
+            if ($startDate === null && $endDate === null) {
+                $this->db->rollBack();
+                Response::error('Member has no active membership range.', 'MEMBER_INELIGIBLE', 409);
+            }
+
+            if ($dateStr < $startDate || $dateStr > $endDate) {
+                $this->db->rollBack();
+                Response::error('Appointment date is outside member membership date range.', 'MEMBER_INELIGIBLE', 409);
+            }
+
+            $trainerId = (int)($member['trainer_id'] ?? 0);
+            if ($trainerId <= 0) {
+                $this->db->rollBack();
+                Response::error('No trainer assigned to this member.', 'TRAINER_NOT_ASSIGNED', 409);
+            }
+
+            // STEP 3: Lock assigned trainer profile FOR UPDATE
+            $trStmt = $this->db->prepare("
+                SELECT id, name, is_active, deleted_at
+                FROM trainers
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $trStmt->execute([$trainerId]);
+            $trainer = $trStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$trainer || $trainer['deleted_at'] !== null) {
+                $this->db->rollBack();
+                Response::error('Assigned trainer not found or deleted.', 'NOT_FOUND', 404);
+            }
+
+            if ((int)$trainer['is_active'] !== 1) {
+                $this->db->rollBack();
+                Response::error('Assigned trainer is inactive.', 'TRAINER_INELIGIBLE', 409);
+            }
+
+            // STEP 4: Lock session package FOR UPDATE
+            $pkgStmt = $this->db->prepare("
+                SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, status
+                FROM member_session_packages
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $pkgStmt->execute([$packageId]);
+            $pkg = $pkgStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$pkg || (int)$pkg['member_id'] !== $this->memberId) {
+                $this->db->rollBack();
+                Response::error('Session package not found or does not belong to the member.', 'SESSION_PACKAGE_NOT_FOUND', 404);
+            }
+
+            if ($pkg['status'] !== 'active') {
+                $this->db->rollBack();
+                Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+            }
+
+            if ($pkg['valid_from'] > $dateStr || ($pkg['valid_until'] !== null && $pkg['valid_until'] < $dateStr)) {
+                $this->db->rollBack();
+                Response::error('Appointment date is outside session package validity window.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+            }
+
+            // Fail-closed ledger integrity check for member's active packages with scheduled appointments
+            $chkStmt = $this->db->prepare("
+                SELECT a.id as appointment_id,
+                       COALESCE(SUM(CASE WHEN l.entry_type = 'reserve' THEN 1 ELSE 0 END), 0) as res_count,
+                       COALESCE(SUM(CASE WHEN l.entry_type = 'release' THEN 1 ELSE 0 END), 0) as rel_count
+                FROM appointments a
+                LEFT JOIN member_session_package_ledger l 
+                  ON l.member_session_package_id = a.member_session_package_id 
+                 AND l.appointment_id = a.id
+                WHERE a.member_session_package_id = ?
+                  AND a.status = 'scheduled'
+                GROUP BY a.id
+            ");
+            $chkStmt->execute([$packageId]);
+            $pkgLedgerRows = $chkStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($pkgLedgerRows as $chk) {
+                if ((int)$chk['res_count'] !== 1 || (int)$chk['rel_count'] !== 0) {
+                    $this->db->rollBack();
+                    Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+                }
+            }
+
+            // Check remaining session balance
+            $ledgerBalStmt = $this->db->prepare("
+                SELECT COALESCE(SUM(delta), 0) as used_delta
+                FROM member_session_package_ledger
+                WHERE member_session_package_id = ?
+            ");
+            $ledgerBalStmt->execute([$packageId]);
+            $ledgerBal = $ledgerBalStmt->fetch(PDO::FETCH_ASSOC);
+
+            $remaining = (int)$pkg['total_sessions'] + (int)$ledgerBal['used_delta'];
+            if ($remaining <= 0) {
+                $this->db->rollBack();
+                Response::error('Session package is exhausted.', 'SESSION_PACKAGE_EXHAUSTED', 409);
+            }
+
+            // STEP 5: Validate trainer weekly availability window & slot alignment
+            $dayOfWeek = (int)$startsDt->format('N');
+            $wStmt = $this->db->prepare("
+                SELECT start_time, end_time
+                FROM trainer_availability_windows
+                WHERE trainer_id = ? AND day_of_week = ?
+                ORDER BY start_time ASC
+            ");
+            $wStmt->execute([$trainerId, $dayOfWeek]);
+            $windows = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($windows)) {
+                $this->db->rollBack();
+                Response::error('Trainer has no working hours on this day.', 'SLOT_NOT_AVAILABLE', 409);
+            }
+
+            $slotMatched = false;
+            foreach ($windows as $win) {
+                $sParts = explode(':', $win['start_time']);
+                $startMinutes = (int)$sParts[0] * 60 + (int)$sParts[1];
+                $eParts = explode(':', $win['end_time']);
+                $endMinutes = (int)$eParts[0] * 60 + (int)$eParts[1];
+
+                for ($cur = $startMinutes; $cur + self::SLOT_DURATION_MINUTES <= $endMinutes; $cur += self::SLOT_STEP_MINUTES) {
+                    $slotStartH = intdiv($cur, 60);
+                    $slotStartM = $cur % 60;
+                    $slotEndTotal = $cur + self::SLOT_DURATION_MINUTES;
+                    $slotEndH = intdiv($slotEndTotal, 60);
+                    $slotEndM = $slotEndTotal % 60;
+
+                    if ($slotEndTotal > 1440) {
+                        continue;
+                    }
+
+                    $candidateStart = sprintf('%s %02d:%02d:00', $dateStr, $slotStartH, $slotStartM);
+                    $candidateEnd = sprintf('%s %02d:%02d:00', $dateStr, $slotEndH, $slotEndM);
+
+                    if ($candidateStart === $startsAtStr && $candidateEnd === $endsAtStr) {
+                        $slotMatched = true;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$slotMatched) {
+                $this->db->rollBack();
+                Response::error('Selected time is not a valid bookable working hours slot.', 'SLOT_NOT_AVAILABLE', 409);
+            }
+
+            // STEP 6: Validate trainer unavailability blocks
+            $unavailStmt = $this->db->prepare("
+                SELECT id
+                FROM trainer_unavailability_blocks
+                WHERE trainer_id = ?
+                  AND starts_at < ?
+                  AND ends_at > ?
+            ");
+            $unavailStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
+            if ($unavailStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Trainer is unavailable at the selected time.', 'SLOT_NOT_AVAILABLE', 409);
+            }
+
+            // STEP 7: Validate trainer conflict (scheduled appointments overlapping, FOR UPDATE)
+            $tConfStmt = $this->db->prepare("
+                SELECT id
+                FROM appointments
+                WHERE trainer_id = ?
+                  AND status = 'scheduled'
+                  AND starts_at < ?
+                  AND ends_at > ?
+                FOR UPDATE
+            ");
+            $tConfStmt->execute([$trainerId, $endsAtStr, $startsAtStr]);
+            if ($tConfStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Trainer is already booked for this time.', 'TRAINER_CONFLICT', 409);
+            }
+
+            // STEP 8: Validate member conflict (scheduled appointments overlapping, FOR UPDATE)
+            $mConfStmt = $this->db->prepare("
+                SELECT id
+                FROM appointments
+                WHERE member_id = ?
+                  AND status = 'scheduled'
+                  AND starts_at < ?
+                  AND ends_at > ?
+                FOR UPDATE
+            ");
+            $mConfStmt->execute([$this->memberId, $endsAtStr, $startsAtStr]);
+            if ($mConfStmt->fetch()) {
+                $this->db->rollBack();
+                Response::error('Member already has an appointment scheduled at this time.', 'MEMBER_CONFLICT', 409);
+            }
+
+            // STEP 9: Atomic insert into appointments with member account creator attribution
+            $apptUuid = $this->generateUuid();
+            $insApptStmt = $this->db->prepare("
+                INSERT INTO appointments (
+                    uuid, member_id, trainer_id, member_session_package_id,
+                    starts_at, ends_at, status, created_by, created_by_member_account_id
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, 'scheduled', NULL, ?
+                )
+            ");
+            $insApptStmt->bindValue(1, $apptUuid, PDO::PARAM_STR);
+            $insApptStmt->bindValue(2, $this->memberId, PDO::PARAM_INT);
+            $insApptStmt->bindValue(3, $trainerId, PDO::PARAM_INT);
+            $insApptStmt->bindValue(4, $packageId, PDO::PARAM_INT);
+            $insApptStmt->bindValue(5, $startsAtStr, PDO::PARAM_STR);
+            $insApptStmt->bindValue(6, $endsAtStr, PDO::PARAM_STR);
+            $insApptStmt->bindValue(7, $this->accountId, PDO::PARAM_INT);
+            $insApptStmt->execute();
+
+            $appointmentId = (int)$this->db->lastInsertId();
+
+            // STEP 10: Atomic insert into member_session_package_ledger (reserve -1) with member account creator attribution
+            $ledgerUuid = $this->generateUuid();
+            $insLedgerStmt = $this->db->prepare("
+                INSERT INTO member_session_package_ledger (
+                    uuid, member_session_package_id, appointment_id,
+                    entry_type, delta, created_by, created_by_member_account_id
+                ) VALUES (
+                    ?, ?, ?,
+                    'reserve', -1, NULL, ?
+                )
+            ");
+            $insLedgerStmt->bindValue(1, $ledgerUuid, PDO::PARAM_STR);
+            $insLedgerStmt->bindValue(2, $packageId, PDO::PARAM_INT);
+            $insLedgerStmt->bindValue(3, $appointmentId, PDO::PARAM_INT);
+            $insLedgerStmt->bindValue(4, $this->accountId, PDO::PARAM_INT);
+            $insLedgerStmt->execute();
+
+            // Retrieve persisted appointment
+            $fetchStmt = $this->db->prepare("
+                SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status
+                FROM appointments
+                WHERE id = ?
+            ");
+            $fetchStmt->execute([$appointmentId]);
+            $persisted = $fetchStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$persisted) {
+                $this->db->rollBack();
+                Response::error('Failed to retrieve persisted appointment.', 'INTERNAL_ERROR', 500);
+            }
+
+            $this->db->commit();
+
+            Response::json([
+                'appointment' => [
+                    'id' => (int)$persisted['id'],
+                    'uuid' => $persisted['uuid'],
+                    'member_id' => (int)$persisted['member_id'],
+                    'trainer_id' => (int)$persisted['trainer_id'],
+                    'member_session_package_id' => (int)$persisted['member_session_package_id'],
+                    'starts_at' => $persisted['starts_at'],
+                    'ends_at' => $persisted['ends_at'],
+                    'status' => $persisted['status']
+                ]
+            ], 201);
+
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Member Appointment Create Error: " . $e->getMessage());
+            Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
+        }
+    }
 }

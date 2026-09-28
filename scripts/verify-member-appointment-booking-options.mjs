@@ -234,11 +234,13 @@ assert(loopMatch !== null, "Calendar dates projection loop identified");
 const loopBody = loopMatch ? loopMatch[1] : '';
 assert(!loopBody.includes("->prepare(") && !loopBody.includes("->query("), "Zero SQL queries executed inside date/slot projection loop (no per-slot/per-day SQL)");
 
-// Pure read-model: no appointment or ledger mutations
-assert(!ctrl.includes("INSERT INTO appointments"), "No INSERT INTO appointments in booking options controller");
-assert(!ctrl.includes("UPDATE appointments"), "No UPDATE appointments in booking options controller");
-assert(!ctrl.includes("DELETE FROM appointments"), "No DELETE FROM appointments in booking options controller");
-assert(!ctrl.includes("INSERT INTO member_session_package_ledger"), "No INSERT INTO member_session_package_ledger in booking options controller");
+// Pure read-model: no appointment or ledger mutations in getBookingOptions
+const getBookingMatch = ctrl.match(/public\s+function\s+getBookingOptions\s*\(\s*\)[\s\S]*?(?=\n\s*(?:public|private|protected)\s+function|\n\})/);
+const getBookingBody = getBookingMatch ? getBookingMatch[0] : '';
+assert(!getBookingBody.includes("INSERT INTO appointments"), "No INSERT INTO appointments in getBookingOptions read model");
+assert(!getBookingBody.includes("UPDATE appointments"), "No UPDATE appointments in getBookingOptions read model");
+assert(!getBookingBody.includes("DELETE FROM appointments"), "No DELETE FROM appointments in getBookingOptions read model");
+assert(!getBookingBody.includes("INSERT INTO member_session_package_ledger"), "No INSERT INTO member_session_package_ledger in getBookingOptions read model");
 
 console.log("\n=== 4. Route Registration in api/index.php ===");
 
@@ -252,9 +254,8 @@ assert(
   "Exact route registered: GET /api/member/appointment-booking-options"
 );
 assert(
-  !indexContent.includes("'/api/member/appointments'") ||
-  !indexContent.includes("'/api/member/appointments' && $method === 'POST'"),
-  "No POST /api/member/appointments route in index.php (mutations not introduced yet)"
+  indexContent.includes("'/api/member/appointments'"),
+  "Route registered: /api/member/appointments"
 );
 
 console.log("\n=== 5. Decisions Documentation Invariants ===");
