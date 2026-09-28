@@ -134,7 +134,10 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
     }
 
     // 3. Forbid any other /api/member/appointments usage
-    const maskedIndexSrc = indexSrc.replace(canonicalMemberRouteRegex, "");
+    const canonicalMemberPostRouteRegex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'POST'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
+    const maskedIndexSrc = indexSrc
+        .replace(canonicalMemberRouteRegex, "")
+        .replace(canonicalMemberPostRouteRegex, "");
     if (maskedIndexSrc.includes('/api/member/appointments')) {
         throw new Error("Unauthorized member appointment route/subpath found");
     }

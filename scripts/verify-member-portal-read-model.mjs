@@ -133,7 +133,7 @@ const routes = ['/api/member/overview', '/api/member/session-packages', '/api/me
 for (const r of routes) {
     if (!index.includes(`$requestUri === '${r}' && $method === 'GET'`)) fail(`Missing GET route: ${r}`);
 }
-const memberMutation = /if\s*\(\s*\$requestUri\s*===\s*'\/api\/member\/.*?&&\s*\$method\s*===\s*'(POST|PATCH|DELETE)'\)/;
+const memberMutation = /if\s*\(\s*\$requestUri\s*===\s*'\/api\/member\/(?!appointments')(.*?)&&\s*\$method\s*===\s*'(POST|PATCH|DELETE)'\)/;
 if (memberMutation.test(index)) fail('Found POST/PATCH/DELETE route for /api/member/');
 if (index.includes('/api/member/members/')) fail('Contains member ID path selector');
 if (!index.includes('\\Controllers\\MemberPortalController')) fail('\\Controllers\\MemberPortalController not found in index.php');

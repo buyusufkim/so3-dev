@@ -174,6 +174,123 @@ assert(
   "Self-test: Trainer lock acts as concurrency mutex preventing double booking"
 );
 
+// Helper for route extraction and same-block assertion
+function extractRouteBlock(content, routeUri, method) {
+  const escapedUri = routeUri.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `if\\s*\\(\\s*(?:\\$requestUri\\s*===\\s*['"]${escapedUri}['"]\\s*&&\\s*\\$method\\s*===\\s*['"]${method}['"]|\\$method\\s*===\\s*['"]${method}['"]\\s*&&\\s*\\$requestUri\\s*===\\s*['"]${escapedUri}['"])\\s*\\)\\s*\\{([\\s\\S]*?)\\}`,
+    'g'
+  );
+  const matches = [...content.matchAll(pattern)];
+  if (matches.length === 0) return null;
+  return matches[0][1];
+}
+
+function verifyRouteBlock(content, routeUri, method, controllerName, methodName) {
+  const concatRegex = new RegExp(`\\$requestUri\\s*===[^;]*['"][^'"]*['"]\\s*\\.\\s*['"][^'"]*['"]`, 'g');
+  if (concatRegex.test(content)) {
+    return false;
+  }
+  const block = extractRouteBlock(content, routeUri, method);
+  if (!block) return false;
+  return block.includes(controllerName) && block.includes(`${methodName}()`);
+}
+
+// 2.8 Positive route matching self-test
+const positiveRouteSnippet = `
+if ($requestUri === '/api/member/appointments' && $method === 'POST') {
+    require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';
+    (new \\Controllers\\MemberAppointmentBookingController())->createAppointment();
+    $matched = true;
+}
+`;
+assert(
+  verifyRouteBlock(positiveRouteSnippet, '/api/member/appointments', 'POST', 'MemberAppointmentBookingController', 'createAppointment') === true,
+  "Self-test: Positive route matching correctly verifies canonical same-block handler"
+);
+
+// 2.9 False positive separation model self-test
+const falsePositiveRouteSnippet = `
+if ($requestUri === '/api/member/appointments' && $method === 'GET') {
+    require_once __DIR__ . '/controllers/MemberPortalController.php';
+    (new \\Controllers\\MemberPortalController())->getAppointments();
+    $matched = true;
+}
+
+if ($method === 'POST') {
+    (new \\Controllers\\MemberAppointmentBookingController())->createAppointment();
+}
+`;
+assert(
+  verifyRouteBlock(falsePositiveRouteSnippet, '/api/member/appointments', 'POST', 'MemberAppointmentBookingController', 'createAppointment') === false,
+  "Self-test: Route assertion fails on separated requestUri and method blocks (false positive closure)"
+);
+
+// 2.10 Concatenation model self-test
+const concatRouteSnippet = `
+if ($requestUri === ('/api/member/' . 'appointments') && $method === 'POST') {
+    require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';
+    (new \\Controllers\\MemberAppointmentBookingController())->createAppointment();
+    $matched = true;
+}
+`;
+assert(
+  verifyRouteBlock(concatRouteSnippet, '/api/member/appointments', 'POST', 'MemberAppointmentBookingController', 'createAppointment') === false,
+  "Self-test: Route assertion strictly rejects concatenated route literals ('/api/member/' . 'appointments')"
+);
+
+// 2.11 Canonical response contract validation self-test
+function validateCanonicalResponseStructure(resp) {
+  if (!resp || typeof resp !== 'object' || !resp.appointment) return false;
+  const a = resp.appointment;
+  const hasRequiredFields = Boolean(
+    typeof a.id === 'number' &&
+    typeof a.uuid === 'string' &&
+    typeof a.starts_at === 'string' &&
+    typeof a.ends_at === 'string' &&
+    a.status === 'scheduled' &&
+    a.trainer && typeof a.trainer.id === 'number' && typeof a.trainer.name === 'string' &&
+    a.session_package && typeof a.session_package.id === 'number' && typeof a.session_package.package_name === 'string'
+  );
+  const hasForbiddenRawKeys = Boolean(
+    'member_id' in a ||
+    'trainer_id' in a ||
+    'member_session_package_id' in a ||
+    'created_by' in a ||
+    'created_by_member_account_id' in a ||
+    'admin_id' in a ||
+    'member' in a
+  );
+  return hasRequiredFields && !hasForbiddenRawKeys;
+}
+
+const validSampleResp = {
+  appointment: {
+    id: 123,
+    uuid: 'test-uuid-1234',
+    starts_at: '2026-10-02 10:00:00',
+    ends_at: '2026-10-02 11:00:00',
+    status: 'scheduled',
+    trainer: { id: 7, name: 'Can Trainer' },
+    session_package: { id: 42, package_name: 'PT 10 Seans' }
+  }
+};
+assert(validateCanonicalResponseStructure(validSampleResp) === true, "Self-test: Canonical response shape satisfies safe contract");
+
+const invalidRawSampleResp = {
+  appointment: {
+    id: 123,
+    uuid: 'test-uuid-1234',
+    member_id: 5,
+    trainer_id: 7,
+    member_session_package_id: 42,
+    starts_at: '2026-10-02 10:00:00',
+    ends_at: '2026-10-02 11:00:00',
+    status: 'scheduled'
+  }
+};
+assert(validateCanonicalResponseStructure(invalidRawSampleResp) === false, "Self-test: Old response with raw authority fields rejected by contract");
+
 console.log("\n=== 3. Controller Architecture & Static Invariants ===");
 
 const ctrlPath = path.resolve(process.cwd(), 'api/controllers/MemberAppointmentBookingController.php');
@@ -326,8 +443,42 @@ assert(
   "INSERT INTO member_session_package_ledger sets created_by = NULL, created_by_member_account_id, entry_type = 'reserve', delta = -1"
 );
 
-// 3.14 Response format: 201 Created with appointment snapshot
-assert(ctrl.includes("Response::json([\n                'appointment' => ["), "Returns JSON with 'appointment' root key");
+// 3.14 Locked package query selects package_name_snapshot
+assert(
+  ctrl.includes("package_name_snapshot") &&
+  ctrl.includes("FROM member_session_packages\n                WHERE id = ?\n                FOR UPDATE"),
+  "Locked package query selects package_name_snapshot FOR UPDATE"
+);
+
+// 3.15 Response format: 201 Created with canonical snapshot response
+const createMethodMatch = ctrl.match(/public\s+function\s+createAppointment\s*\(\s*\)\s*:\s*void\s*\{([\s\S]*)/);
+assert(createMethodMatch !== null, "createAppointment method extracted");
+const createBody = createMethodMatch[1];
+
+const responseBlockMatch = createBody.match(/Response::json\s*\(\s*\[([\s\S]*?)\],\s*201\s*\);/);
+assert(responseBlockMatch !== null, "Response::json([ ... ], 201) block found in createAppointment");
+const responseBlock = responseBlockMatch[1];
+
+assert(responseBlock.includes("'appointment' => ["), "Response has root 'appointment' key");
+assert(responseBlock.includes("'id' => (int)$persisted['id']"), "Response includes appointment.id");
+assert(responseBlock.includes("'uuid' => $persisted['uuid']"), "Response includes appointment.uuid");
+assert(responseBlock.includes("'starts_at' => $persisted['starts_at']"), "Response includes starts_at");
+assert(responseBlock.includes("'ends_at' => $persisted['ends_at']"), "Response includes ends_at");
+assert(responseBlock.includes("'status' => $persisted['status']"), "Response includes status");
+assert(responseBlock.includes("'trainer' => ["), "Response includes nested trainer snapshot object");
+assert(responseBlock.includes("'name' => $trainer['name']"), "Response includes trainer.name snapshot");
+assert(responseBlock.includes("'session_package' => ["), "Response includes nested session_package snapshot object");
+assert(responseBlock.includes("'package_name' => $pkg['package_name_snapshot']"), "Response includes session_package.package_name from locked snapshot");
+
+// Disallow raw authority fields in create response
+assert(!responseBlock.includes("'member_id' =>"), "Create response does NOT emit raw member_id");
+assert(!responseBlock.includes("'trainer_id' =>"), "Create response does NOT emit raw trainer_id");
+assert(!responseBlock.includes("'member_session_package_id' =>"), "Create response does NOT emit raw member_session_package_id");
+assert(!responseBlock.includes("'created_by' =>"), "Create response does NOT emit created_by");
+assert(!responseBlock.includes("'created_by_member_account_id' =>"), "Create response does NOT emit created_by_member_account_id");
+assert(!responseBlock.includes("'admin_id' =>"), "Create response does NOT emit admin_id");
+assert(!responseBlock.includes("'member' =>"), "Create response does NOT emit member object");
+assert(!responseBlock.includes("'ledger' =>"), "Create response does NOT emit ledger row");
 assert(ctrl.includes("], 201);"), "Returns HTTP 201 Created status");
 
 console.log("\n=== 4. Route Registration in api/index.php ===");
@@ -336,17 +487,24 @@ const indexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(indexPath), "api/index.php exists");
 const indexContent = fs.readFileSync(indexPath, 'utf8');
 
+// Reject concatenated route literals
+assert(!indexContent.includes("'/api/member/' . 'appointments'"), "No concatenated '/api/member/' . 'appointments' in api/index.php");
+assert(!indexContent.includes('"/api/member/" . "appointments"'), 'No concatenated "/api/member/" . "appointments" in api/index.php');
+assert(!indexContent.includes("'/api/member/' . \"appointments\""), "No mixed quote concatenation in api/index.php");
+assert(!/if\s*\([^;]*\$requestUri[^;]*['"][^'"]*['"]\s*\.\s*['"][^'"]*['"]/.test(indexContent), "No string concatenation in any $requestUri if-condition");
+
+// Same-block route assertions
 assert(
-  indexContent.includes("$requestUri === '/api/member/appointments'") &&
-  indexContent.includes("$method === 'POST'") &&
-  indexContent.includes("createAppointment()"),
-  "POST /api/member/appointments routed to MemberAppointmentBookingController->createAppointment()"
+  verifyRouteBlock(indexContent, '/api/member/appointments', 'POST', 'MemberAppointmentBookingController', 'createAppointment'),
+  "POST /api/member/appointments canonically routed in same block to MemberAppointmentBookingController->createAppointment()"
 );
 assert(
-  indexContent.includes("$requestUri === '/api/member/appointments'") &&
-  indexContent.includes("$method === 'GET'") &&
-  indexContent.includes("getAppointments()"),
-  "GET /api/member/appointments routed to MemberPortalController->getAppointments()"
+  verifyRouteBlock(indexContent, '/api/member/appointments', 'GET', 'MemberPortalController', 'getAppointments'),
+  "GET /api/member/appointments canonically routed in same block to MemberPortalController->getAppointments()"
+);
+assert(
+  verifyRouteBlock(indexContent, '/api/member/appointment-booking-options', 'GET', 'MemberAppointmentBookingController', 'getBookingOptions'),
+  "GET /api/member/appointment-booking-options regression preserved in same block to MemberAppointmentBookingController->getBookingOptions()"
 );
 
 console.log("\n=== 5. Decisions Documentation Invariants ===");

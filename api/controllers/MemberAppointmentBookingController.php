@@ -713,7 +713,7 @@ class MemberAppointmentBookingController
 
             // STEP 9: Lock session package FOR UPDATE (canonical lock order: after conflict locks)
             $pkgStmt = $this->db->prepare("
-                SELECT id, member_id, session_package_id, total_sessions, valid_from, valid_until, status
+                SELECT id, member_id, session_package_id, package_name_snapshot, total_sessions, valid_from, valid_until, status
                 FROM member_session_packages
                 WHERE id = ?
                 FOR UPDATE
@@ -832,12 +832,17 @@ class MemberAppointmentBookingController
                 'appointment' => [
                     'id' => (int)$persisted['id'],
                     'uuid' => $persisted['uuid'],
-                    'member_id' => (int)$persisted['member_id'],
-                    'trainer_id' => (int)$persisted['trainer_id'],
-                    'member_session_package_id' => (int)$persisted['member_session_package_id'],
                     'starts_at' => $persisted['starts_at'],
                     'ends_at' => $persisted['ends_at'],
-                    'status' => $persisted['status']
+                    'status' => $persisted['status'],
+                    'trainer' => [
+                        'id' => (int)$trainer['id'],
+                        'name' => $trainer['name']
+                    ],
+                    'session_package' => [
+                        'id' => (int)$pkg['id'],
+                        'package_name' => $pkg['package_name_snapshot']
+                    ]
                 ]
             ], 201);
 
