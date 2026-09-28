@@ -94,6 +94,47 @@ assert(isValidGregorianDatetime('2028-02-29 12:00:00') === true, "Leap year 2028
 assert(isValidGregorianDatetime('2027-02-29 12:00:00') === false, "Non-leap year 2027-02-29 is invalid Gregorian");
 assert(isValidGregorianDatetime('2026-02-31 12:00:00') === false, "2026-02-31 rollover date is invalid Gregorian");
 
+// Simulation of request cancellation & generation guard (Section 19 & 20)
+let activeController = null;
+let currentGen = 0;
+let lastPopulated = null;
+
+function simulateFetch(id) {
+  activeController?.abort();
+  const controller = { aborted: false, abort() { this.aborted = true; } };
+  activeController = controller;
+  const gen = ++currentGen;
+  return {
+    controller,
+    gen,
+    finish() {
+      if (gen !== currentGen || controller.aborted) return;
+      lastPopulated = id;
+    }
+  };
+}
+
+const reqA = simulateFetch('A');
+const reqB = simulateFetch('B');
+assert(reqA.controller.aborted === true, "Starting Request B aborts Request A");
+assert(reqB.controller.aborted === false, "Request B controller remains active");
+reqA.finish();
+assert(lastPopulated !== 'A', "Aborted / stale Request A cannot populate state");
+reqB.finish();
+assert(lastPopulated === 'B', "Current Request B successfully populates state");
+
+// Simulation of unmount cleanup (Section 20)
+function simulateUnmount() {
+  currentGen += 1;
+  activeController?.abort();
+  activeController = null;
+}
+const reqC = simulateFetch('C');
+simulateUnmount();
+assert(reqC.controller.aborted === true, "Unmount aborts active controller");
+reqC.finish();
+assert(lastPopulated !== 'C', "Unmounted component aborts active request and invalidates generation");
+
 console.log("\n=== 3. Shared Editor Contract & Safety ===");
 
 assert(editorContent.includes("mode: 'admin'"), "TrainerAvailabilityEditor supports mode: 'admin'");
@@ -141,9 +182,40 @@ assert(!editorContent.includes("getTimezoneOffset("), "No getTimezoneOffset conv
 // No nested forms
 assert(!editorContent.includes("<form"), "TrainerAvailabilityEditor contains zero nested <form> elements");
 
-// Concurrency & Race guards
-assert(editorContent.includes("AbortController"), "Component uses AbortController for GET requests");
-assert(editorContent.includes("requestGenRef") || editorContent.includes("GenRef"), "Component tracks request generation to drop stale responses");
+// Concurrency & Race guards (Phase 7B.4G-F.24B.2.1)
+assert(editorContent.includes("requestGenRef"), "Component tracks request generation (requestGenRef) to drop stale responses");
+assert(
+  editorContent.includes("requestAbortRef") &&
+  editorContent.includes("useRef<AbortController | null>"),
+  "Component maintains active request ref (requestAbortRef = useRef<AbortController | null>)"
+);
+assert(
+  editorContent.includes("requestAbortRef.current?.abort()"),
+  "New fetch cancels still-running previous request (requestAbortRef.current?.abort())"
+);
+
+// Effect cleanup validation (Section 15)
+assert(
+  /useEffect\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?return\s*\(\s*\)\s*=>\s*\{[\s\S]*?requestAbortRef\.current\?\.abort\(\)[\s\S]*?\}\s*;\s*\}\s*,\s*\[fetchAvailability\]\s*\)/.test(editorContent),
+  "useEffect registers synchronous cleanup returning function that aborts active request and increments generation"
+);
+
+// Prohibit broken pattern where async fetch returns cleanup function (Section 16)
+const fetchFnMatch = editorContent.match(/const\s+fetchAvailability\s*=\s*useCallback\s*\(\s*async\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[/);
+assert(fetchFnMatch !== null, "fetchAvailability useCallback definition found");
+const fetchFnBody = fetchFnMatch ? fetchFnMatch[1] : '';
+assert(
+  !/return\s+(?:\(\s*\)\s*=>|function)/.test(fetchFnBody),
+  "Prohibits broken pattern: async fetchAvailability function must not return cleanup function"
+);
+
+// Finally block current-controller protection (Section 12)
+assert(
+  editorContent.includes("if (requestAbortRef.current === controller)") &&
+  editorContent.includes("requestAbortRef.current = null;"),
+  "finally block only clears requestAbortRef if it still points to current controller"
+);
+
 assert(editorContent.includes("submitLockRef") && editorContent.includes("isSaving"), "Component implements double-submit race lock on PUT");
 
 // Payload stripping

@@ -258,8 +258,9 @@ export function TrainerAvailabilityEditor(props: TrainerAvailabilityEditorProps)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Stale request protection
+  // Stale request protection & request cancellation
   const requestGenRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
   const submitLockRef = useRef(false);
 
   // Pristine canonical server state
@@ -290,10 +291,14 @@ export function TrainerAvailabilityEditor(props: TrainerAvailabilityEditorProps)
     );
   }, []);
 
-  // Initial fetch with AbortController and generation protection
+  // Fetch with AbortController cancellation and generation protection
   const fetchAvailability = useCallback(async () => {
-    const gen = ++requestGenRef.current;
+    // Abort any still-running previous request
+    requestAbortRef.current?.abort();
+
     const controller = new AbortController();
+    requestAbortRef.current = controller;
+    const gen = ++requestGenRef.current;
 
     try {
       setLoading(true);
@@ -314,18 +319,23 @@ export function TrainerAvailabilityEditor(props: TrainerAvailabilityEditorProps)
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Müsaitlik bilgisi yüklenemedi.';
       setLoadError(msg);
     } finally {
+      if (requestAbortRef.current === controller) {
+        requestAbortRef.current = null;
+      }
       if (gen === requestGenRef.current) {
         setLoading(false);
       }
     }
-
-    return () => {
-      controller.abort();
-    };
   }, [endpoint, populateLocalState]);
 
   useEffect(() => {
-    fetchAvailability();
+    void fetchAvailability();
+
+    return () => {
+      requestGenRef.current += 1;
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
+    };
   }, [fetchAvailability]);
 
   // Client-side local validation
