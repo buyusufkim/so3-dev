@@ -246,32 +246,33 @@ assert(
   "AppointmentController does not contain member actor reschedule attribution (admin/trainer only)"
 );
 
-// 7.2 MemberAppointmentBookingController untouched for cancel/reschedule
+// 7.2 MemberAppointmentBookingController member lifecycle actor attribution usage
 const memberBookingControllerPath = path.resolve(process.cwd(), 'api/controllers/MemberAppointmentBookingController.php');
 assert(fs.existsSync(memberBookingControllerPath), "MemberAppointmentBookingController.php exists");
 const memberBookingControllerContent = fs.readFileSync(memberBookingControllerPath, 'utf8');
 
 assert(
-  !memberBookingControllerContent.includes("cancel"),
-  "MemberAppointmentBookingController contains no cancel implementation"
+  memberBookingControllerContent.includes("cancelled_by_member_account_id"),
+  "MemberAppointmentBookingController uses cancelled_by_member_account_id for cancellation attribution"
 );
 assert(
-  !memberBookingControllerContent.includes("reschedule"),
-  "MemberAppointmentBookingController contains no reschedule implementation"
+  memberBookingControllerContent.includes("rescheduled_by_member_account_id"),
+  "MemberAppointmentBookingController uses rescheduled_by_member_account_id for reschedule attribution"
 );
 
-// 7.3 api/index.php has no member cancel or reschedule routes
+// 7.3 api/index.php registers only canonical PATCH routes for member cancel/reschedule
 const apiIndexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(apiIndexPath), "api/index.php exists");
 const apiIndexContent = fs.readFileSync(apiIndexPath, 'utf8');
 
 assert(
-  !apiIndexContent.includes("appointments/cancel") && !apiIndexContent.includes("appointments/{id}/cancel"),
-  "api/index.php registers no member cancellation route"
+  apiIndexContent.includes("api/member/appointments/([1-9]\\d*)/cancel") &&
+  apiIndexContent.includes("api/member/appointments/([1-9]\\d*)/reschedule"),
+  "api/index.php registers canonical member cancellation and reschedule routes"
 );
 assert(
-  !apiIndexContent.includes("appointments/reschedule") && !apiIndexContent.includes("appointments/{id}/reschedule"),
-  "api/index.php registers no member reschedule route"
+  !apiIndexContent.includes("POST /api/member/appointments/") && !apiIndexContent.includes("DELETE /api/member/appointments/"),
+  "api/index.php registers no alternative/non-canonical POST/DELETE member lifecycle routes"
 );
 
 // 7.4 Ledger schema not modified by 042

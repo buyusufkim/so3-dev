@@ -1174,6 +1174,20 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         (new \Controllers\MemberAppointmentBookingController())->createAppointment();
         $matched = true;
     }
+    if (preg_match('#^/api/member/appointments/([1-9]\d*)/cancel$#', $requestUri, $matches)) {
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';
+            (new \Controllers\MemberAppointmentBookingController())->cancelAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
+    if (preg_match('#^/api/member/appointments/([1-9]\d*)/reschedule$#', $requestUri, $matches)) {
+        if ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';
+            (new \Controllers\MemberAppointmentBookingController())->rescheduleAppointment((int)$matches[1]);
+            $matched = true;
+        }
+    }
     if ($requestUri === '/api/member/training-program' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
         (new \Controllers\MemberPortalController())->getTrainingPrograms();

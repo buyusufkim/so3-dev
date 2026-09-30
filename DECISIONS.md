@@ -371,17 +371,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no completed/no-show member actor attribution
 * F25A is schema foundation for F25B
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+## F.25B Member Self-Service Appointment Lifecycle API
+* members mutate only own scheduled appointments
+* cancel releases reserved session exactly once (entry_type = release, delta = +1)
+* cancel actor = member_accounts.id (cancelled_by = NULL, cancelled_by_member_account_id = session member_account_id)
+* reschedule preserves reserve/package/trainer
+* reschedule actor = member_accounts.id (rescheduled_by = NULL, rescheduled_by_member_account_id = session member_account_id)
+* reschedule revalidates F24 slot policy transactionally (14-day horizon, 120-min notice, availability windows, unavailability blocks, conflict mutexes)
+* same-slot reschedule rejected as no-op (409 APPOINTMENT_RESCHEDULE_NO_CHANGE)
+* no frontend in F25B
 

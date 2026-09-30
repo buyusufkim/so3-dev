@@ -67,7 +67,8 @@
     "verify:member-appointment-booking-options": "node scripts/verify-member-appointment-booking-options.mjs",
     "verify:member-appointment-create": "node scripts/verify-member-appointment-create.mjs",
     "verify:member-appointment-booking-ui": "node scripts/verify-member-appointment-booking-ui.mjs",
-    "verify:member-appointment-lifecycle-actor-attribution": "node scripts/verify-member-appointment-lifecycle-actor-attribution.mjs"
+    "verify:member-appointment-lifecycle-actor-attribution": "node scripts/verify-member-appointment-lifecycle-actor-attribution.mjs",
+    "verify:member-appointment-lifecycle-api": "node scripts/verify-member-appointment-lifecycle-api.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -135,9 +135,13 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
 
     // 3. Forbid any other /api/member/appointments usage
     const canonicalMemberPostRouteRegex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'POST'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
+    const canonicalMemberCancelRouteRegex = /if\s*\(preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#',\s*\$requestUri,\s*\$matches\)\)\s*\{[\s\S]*?\$matched\s*=\s*true;\s*\}\s*\}/;
+    const canonicalMemberRescheduleRouteRegex = /if\s*\(preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#',\s*\$requestUri,\s*\$matches\)\)\s*\{[\s\S]*?\$matched\s*=\s*true;\s*\}\s*\}/;
     const maskedIndexSrc = indexSrc
         .replace(canonicalMemberRouteRegex, "")
-        .replace(canonicalMemberPostRouteRegex, "");
+        .replace(canonicalMemberPostRouteRegex, "")
+        .replace(canonicalMemberCancelRouteRegex, "")
+        .replace(canonicalMemberRescheduleRouteRegex, "");
     if (maskedIndexSrc.includes('/api/member/appointments')) {
         throw new Error("Unauthorized member appointment route/subpath found");
     }
