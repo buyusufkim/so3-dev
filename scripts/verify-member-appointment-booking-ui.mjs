@@ -108,6 +108,191 @@ assert(
   "Self-test: Raw authority fields rejected"
 );
 
+// 2.5 GET request generation & unmount invalidation pure simulation
+function simulateGetLifecycle() {
+  let requestGen = 0;
+  let activeController = null;
+  let mounted = true;
+  let stateWrittenAfterUnmount = false;
+
+  // Start request 1
+  if (activeController) activeController.abort();
+  const c1 = new AbortController();
+  activeController = c1;
+  requestGen += 1;
+  const currentGen = requestGen;
+
+  // Unmount happens before c1 resolves
+  requestGen += 1; // Unmount invalidates generation
+  if (activeController) {
+    activeController.abort();
+    activeController = null;
+  }
+  mounted = false;
+
+  // c1 finally block executes
+  if (currentGen === requestGen && mounted) {
+    stateWrittenAfterUnmount = true;
+  }
+
+  return (
+    c1.signal.aborted === true &&
+    activeController === null &&
+    stateWrittenAfterUnmount === false &&
+    currentGen !== requestGen
+  );
+}
+assert(
+  simulateGetLifecycle(),
+  "Self-test: Unmount cleanup aborts active GET, invalidates generation, and prevents unmounted state updates"
+);
+
+// 2.6 Concurrent / Superceded GET requests pure simulation
+function simulateConcurrentGetRequests() {
+  let requestGen = 0;
+  let activeController = null;
+  const completedGenerations = [];
+
+  // Start Request 1
+  if (activeController) activeController.abort();
+  const c1 = new AbortController();
+  activeController = c1;
+  requestGen += 1;
+  const gen1 = requestGen;
+
+  // Before Request 1 finishes, user/system triggers Request 2
+  if (activeController) activeController.abort();
+  const c2 = new AbortController();
+  activeController = c2;
+  requestGen += 1;
+  const gen2 = requestGen;
+
+  // Delayed Request 1 finishes later
+  if (gen1 === requestGen && !c1.signal.aborted) {
+    completedGenerations.push(gen1);
+  }
+
+  // Request 2 finishes
+  if (gen2 === requestGen && !c2.signal.aborted) {
+    completedGenerations.push(gen2);
+  }
+
+  return (
+    c1.signal.aborted === true &&
+    c2.signal.aborted === false &&
+    completedGenerations.length === 1 &&
+    completedGenerations[0] === gen2
+  );
+}
+assert(
+  simulateConcurrentGetRequests(),
+  "Self-test: Superceded GET request is aborted and its stale response rejected by generation check"
+);
+
+// 2.7 POST mutation unmount & in-flight cancellation simulation
+function simulatePostUnmountCancellation() {
+  let submitLock = false;
+  let isSubmitting = false;
+  let activeSubmitController = null;
+  let mounted = true;
+  let mutationStateWritten = false;
+
+  // Start submit
+  if (submitLock || isSubmitting) return false;
+  submitLock = true;
+  isSubmitting = true;
+  const controller = new AbortController();
+  activeSubmitController = controller;
+
+  // Component unmounts while request is in-flight
+  if (activeSubmitController) {
+    activeSubmitController.abort();
+    activeSubmitController = null;
+  }
+  mounted = false;
+
+  // In-flight POST response arrives or catches AbortError
+  try {
+    if (!mounted || controller.signal.aborted) {
+      // Early exit on unmount/abort
+    } else {
+      mutationStateWritten = true;
+    }
+  } finally {
+    submitLock = false;
+    if (activeSubmitController === controller) {
+      activeSubmitController = null;
+    }
+    if (mounted) {
+      isSubmitting = false;
+    }
+  }
+
+  return (
+    controller.signal.aborted === true &&
+    activeSubmitController === null &&
+    submitLock === false &&
+    mutationStateWritten === false
+  );
+}
+assert(
+  simulatePostUnmountCancellation(),
+  "Self-test: Unmount cleanup aborts in-flight POST and prevents post-unmount mutation state writes"
+);
+
+// 2.8 Auth-ready options load gate simulation
+function shouldFetchBookingOptions(authLoading, isAuthenticated, identity, mustChangePassword) {
+  if (authLoading || !isAuthenticated || !identity || mustChangePassword) {
+    return false;
+  }
+  return true;
+}
+assert(shouldFetchBookingOptions(true, true, { account: { must_change_password: false } }, false) === false, "Self-test: Auth loading blocks booking options fetch");
+assert(shouldFetchBookingOptions(false, false, null, false) === false, "Self-test: Unauthenticated state blocks booking options fetch");
+assert(shouldFetchBookingOptions(false, true, null, false) === false, "Self-test: Missing identity blocks booking options fetch");
+assert(shouldFetchBookingOptions(false, true, { account: { must_change_password: true } }, true) === false, "Self-test: Password change requirement blocks booking options fetch");
+assert(shouldFetchBookingOptions(false, true, { account: { must_change_password: false } }, false) === true, "Self-test: Fully resolved authenticated identity allows booking options fetch");
+
+// 2.9 Negative invariant detection self-tests (Structural Analysis)
+function evaluateCleanupInvariant(src) {
+  const hasGenInvalidation = /requestGenRef\.current\s*\+=\s*1|\+\+\s*requestGenRef\.current/.test(src);
+  const hasOptionsAbort = /optionsAbortRef\.current(?:\.abort\(\)|\?\.abort\(\))/.test(src);
+  const hasOptionsClear = /optionsAbortRef\.current\s*=\s*null/.test(src);
+  const hasSubmitAbort = /submitAbortRef\.current(?:\.abort\(\)|\?\.abort\(\))/.test(src);
+  const hasSubmitClear = /submitAbortRef\.current\s*=\s*null/.test(src);
+  const hasMountInvalidation = /mountedRef\.current\s*=\s*false/.test(src);
+  return hasGenInvalidation && hasOptionsAbort && hasOptionsClear && hasSubmitAbort && hasSubmitClear && hasMountInvalidation;
+}
+const mockWeakCleanupNoGen = `
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      optionsAbortRef.current?.abort();
+      optionsAbortRef.current = null;
+      submitAbortRef.current?.abort();
+      submitAbortRef.current = null;
+    };
+  }, []);
+`;
+assert(
+  evaluateCleanupInvariant(mockWeakCleanupNoGen) === false,
+  "Self-test: Weak cleanup missing generation invalidation is correctly rejected"
+);
+const mockWeakCleanupNoAbort = `
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      requestGenRef.current += 1;
+      optionsAbortRef.current = null;
+      submitAbortRef.current = null;
+    };
+  }, []);
+`;
+assert(
+  evaluateCleanupInvariant(mockWeakCleanupNoAbort) === false,
+  "Self-test: Weak cleanup missing abort calls is correctly rejected"
+);
+
 console.log("\n=== 3. Types & Runtime Validators Invariants ===");
 
 const validatorsPath = path.resolve(process.cwd(), 'src/member/api/validators.ts');
@@ -237,12 +422,87 @@ assert(pageSrc.includes("aria-pressed"), "Uses aria-pressed for accessible selec
 assert(pageSrc.includes("eligible_packages.length === 1"), "Auto-selects package when exactly one is available");
 assert(pageSrc.includes("min-h-[44px]") || pageSrc.includes("min-h-[48px]"), "Enforces min 44px+ touch targets on interactive buttons");
 
-// 5.7 Race safety & submit lock
+// 5.7 Race safety & submit lock structural assertions
+// 5.7.1 Dedicated mount authority
+assert(pageSrc.includes("mountedRef = useRef"), "Uses mountedRef to track component mount status");
+assert(pageSrc.includes("mountedRef.current = true"), "Sets mountedRef.current = true on mount");
+assert(pageSrc.includes("mountedRef.current = false"), "Invalidates mountedRef.current = false on unmount cleanup");
+
+// 5.7.2 GET generation invalidation and abort on cleanup
+assert(
+  /requestGenRef\.current\s*\+=\s*1|\+\+\s*requestGenRef\.current/.test(pageSrc),
+  "Effect cleanup explicitly invalidates requestGenRef on unmount/re-trigger"
+);
+assert(
+  /optionsAbortRef\.current(?:\.abort\(\)|\?\.abort\(\))/.test(pageSrc),
+  "Effect cleanup aborts in-flight booking options GET request"
+);
+assert(
+  /optionsAbortRef\.current\s*=\s*null/.test(pageSrc),
+  "Effect cleanup clears optionsAbortRef to null"
+);
+
+// 5.7.3 In-flight POST mutation abort on cleanup
+assert(pageSrc.includes("submitAbortRef"), "Uses submitAbortRef to track in-flight appointment creation");
+assert(
+  /submitAbortRef\.current(?:\.abort\(\)|\?\.abort\(\))/.test(pageSrc),
+  "Effect cleanup aborts in-flight appointment creation submit request"
+);
+assert(
+  /submitAbortRef\.current\s*=\s*null/.test(pageSrc),
+  "Effect cleanup clears submitAbortRef to null"
+);
+
+// 5.7.4 GET fetch stale generation and unmount authority guards
+assert(
+  pageSrc.includes("requestGenRef.current += 1") && pageSrc.includes("const currentGen = requestGenRef.current"),
+  "fetchBookingOptions increments and captures current generation"
+);
+assert(
+  pageSrc.includes("currentGen !== requestGenRef.current || !mountedRef.current || controller.signal.aborted"),
+  "fetchBookingOptions guards setOptions with stale generation, unmount, and aborted checks"
+);
+assert(
+  /if\s*\(\s*currentGen\s*===\s*requestGenRef\.current\s*&&\s*mountedRef\.current\s*\)\s*\{\s*setLoading\(false\);?\s*\}/.test(pageSrc),
+  "fetchBookingOptions finally block guards setLoading(false) with current generation and mountedRef"
+);
+assert(
+  /if\s*\(\s*optionsAbortRef\.current\s*===\s*controller\s*\)\s*\{\s*optionsAbortRef\.current\s*=\s*null;?\s*\}/.test(pageSrc),
+  "fetchBookingOptions finally block safely clears optionsAbortRef only if matching active controller"
+);
+
+// 5.7.5 Auth-ready load gate
+assert(
+  pageSrc.includes("authLoading") &&
+  pageSrc.includes("!isAuthenticated") &&
+  pageSrc.includes("!identity") &&
+  pageSrc.includes("identity.account.must_change_password"),
+  "fetchBookingOptions effect gates on authLoading, !isAuthenticated, !identity, and must_change_password"
+);
+
+// 5.7.6 POST mutation mount authority and concurrency locks
 assert(pageSrc.includes("submitLockRef"), "Uses submitLockRef to prevent double submissions");
 assert(pageSrc.includes("isSubmitting"), "Tracks isSubmitting state");
-assert(pageSrc.includes("optionsAbortRef"), "Uses optionsAbortRef for GET request cancellation");
-assert(pageSrc.includes("requestGenRef"), "Uses request generation protection against stale responses");
-assert(pageSrc.includes("submitAbortRef"), "Uses submitAbortRef to abort pending submits on unmount");
+assert(
+  pageSrc.includes("submitAbortRef.current = controller"),
+  "handleSubmit sets submitAbortRef to active controller"
+);
+assert(
+  pageSrc.includes("!mountedRef.current || controller.signal.aborted"),
+  "handleSubmit verifies mount authority and signal before processing create result"
+);
+assert(
+  /if\s*\(\s*mountedRef\.current\s*\)\s*\{\s*setIsSubmitting\(false\);?\s*\}/.test(pageSrc),
+  "handleSubmit finally block guards setIsSubmitting(false) with mountedRef"
+);
+assert(
+  /if\s*\(\s*submitAbortRef\.current\s*===\s*controller\s*\)\s*\{\s*submitAbortRef\.current\s*=\s*null;?\s*\}/.test(pageSrc),
+  "handleSubmit finally block safely clears submitAbortRef only if matching active controller"
+);
+assert(
+  pageSrc.includes("submitLockRef.current = false"),
+  "handleSubmit finally block safely releases submitLockRef"
+);
 
 // 5.8 Server authority reload after success / conflict
 assert(

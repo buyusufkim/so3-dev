@@ -77,6 +77,7 @@ export function MemberAppointmentBookingPage() {
   const requestGenRef = useRef<number>(0);
   const submitLockRef = useRef<boolean>(false);
   const submitAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef<boolean>(true);
 
   const fetchBookingOptions = useCallback(async () => {
     if (optionsAbortRef.current) {
@@ -88,12 +89,14 @@ export function MemberAppointmentBookingPage() {
     requestGenRef.current += 1;
     const currentGen = requestGenRef.current;
 
-    setLoading(true);
-    setLoadError(null);
+    if (mountedRef.current) {
+      setLoading(true);
+      setLoadError(null);
+    }
 
     try {
       const data = await memberApiClient.getAppointmentBookingOptions(controller.signal);
-      if (currentGen !== requestGenRef.current) {
+      if (currentGen !== requestGenRef.current || !mountedRef.current || controller.signal.aborted) {
         return;
       }
       setOptions(data);
@@ -115,27 +118,57 @@ export function MemberAppointmentBookingPage() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
-      if (currentGen === requestGenRef.current) {
+      if (currentGen === requestGenRef.current && mountedRef.current) {
         setLoadError('Randevu saatleri yüklenemedi.');
       }
     } finally {
-      if (currentGen === requestGenRef.current) {
+      if (currentGen === requestGenRef.current && mountedRef.current) {
         setLoading(false);
+      }
+      if (optionsAbortRef.current === controller) {
+        optionsAbortRef.current = null;
       }
     }
   }, []);
 
+  // Dedicated mount tracking lifecycle
   useEffect(() => {
-    fetchBookingOptions();
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Auth-ready booking options fetch effect
+  useEffect(() => {
+    if (
+      authLoading ||
+      !isAuthenticated ||
+      !identity ||
+      identity.account.must_change_password
+    ) {
+      return;
+    }
+
+    void fetchBookingOptions();
+
+    return () => {
+      requestGenRef.current += 1;
       if (optionsAbortRef.current) {
         optionsAbortRef.current.abort();
+        optionsAbortRef.current = null;
       }
       if (submitAbortRef.current) {
         submitAbortRef.current.abort();
+        submitAbortRef.current = null;
       }
     };
-  }, [fetchBookingOptions]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    identity,
+    fetchBookingOptions
+  ]);
 
   // Handle selected day changes (auto-select single eligible package)
   const currentDay: MemberBookingDay | null =
@@ -208,52 +241,97 @@ export function MemberAppointmentBookingPage() {
         controller.signal
       );
 
+      if (!mountedRef.current || controller.signal.aborted) {
+        return;
+      }
+
       // Successful creation
-      setCreatedSuccess(res);
-      setSelectedSlot(null);
-      setSelectedPackageId(null);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setCreatedSuccess(res);
+        setSelectedSlot(null);
+        setSelectedPackageId(null);
+      }
 
       // Immediately refetch booking options to refresh server authority
-      await fetchBookingOptions();
+      if (mountedRef.current && !controller.signal.aborted) {
+        await fetchBookingOptions();
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
 
+      if (!mountedRef.current || controller.signal.aborted) {
+        return;
+      }
+
       if (err instanceof MemberApiError) {
         if (err.code === 'BOOKING_SLOT_UNAVAILABLE') {
-          setSubmitError('Seçtiğin saat artık uygun değil. Müsait saatler yenilendi.');
-          setSelectedSlot(null);
-          setSelectedPackageId(null);
-          await fetchBookingOptions();
+          if (mountedRef.current) {
+            setSubmitError('Seçtiğin saat artık uygun değil. Müsait saatler yenilendi.');
+            setSelectedSlot(null);
+            setSelectedPackageId(null);
+          }
+          if (mountedRef.current && !controller.signal.aborted) {
+            await fetchBookingOptions();
+          }
         } else if (err.code === 'TRAINER_CONFLICT' || err.code === 'MEMBER_CONFLICT') {
-          setSubmitError('Bu saat artık kullanılamıyor. Müsait saatler yenilendi.');
-          setSelectedSlot(null);
-          await fetchBookingOptions();
+          if (mountedRef.current) {
+            setSubmitError('Bu saat artık kullanılamıyor. Müsait saatler yenilendi.');
+            setSelectedSlot(null);
+          }
+          if (mountedRef.current && !controller.signal.aborted) {
+            await fetchBookingOptions();
+          }
         } else if (err.code === 'SESSION_PACKAGE_EXHAUSTED' || err.code === 'SESSION_PACKAGE_INELIGIBLE') {
-          setSubmitError('Seçtiğin seans paketi artık kullanılamıyor. Paketler yenilendi.');
-          setSelectedPackageId(null);
-          await fetchBookingOptions();
+          if (mountedRef.current) {
+            setSubmitError('Seçtiğin seans paketi artık kullanılamıyor. Paketler yenilendi.');
+            setSelectedPackageId(null);
+          }
+          if (mountedRef.current && !controller.signal.aborted) {
+            await fetchBookingOptions();
+          }
         } else if (err.code === 'SESSION_PACKAGE_LEDGER_INCONSISTENT') {
-          setSubmitError('Seans paketi bilgileri şu anda doğrulanamıyor. Lütfen resepsiyonla iletişime geç.');
+          if (mountedRef.current) {
+            setSubmitError('Seans paketi bilgileri şu anda doğrulanamıyor. Lütfen resepsiyonla iletişime geç.');
+          }
         } else if (err.code === 'TRAINER_NOT_ASSIGNED' || err.code === 'TRAINER_INELIGIBLE') {
-          await fetchBookingOptions();
+          if (mountedRef.current && !controller.signal.aborted) {
+            await fetchBookingOptions();
+          }
         } else if (err.code === 'MEMBER_INELIGIBLE' || err.code === 'MEMBER_MEMBERSHIP_DATA_INCONSISTENT') {
-          setSubmitError('Üyelik durumunuz randevu almak için uygun değil.');
-          await fetchBookingOptions();
+          if (mountedRef.current) {
+            setSubmitError('Üyelik durumunuz randevu almak için uygun değil.');
+          }
+          if (mountedRef.current && !controller.signal.aborted) {
+            await fetchBookingOptions();
+          }
         } else if (err.code === 'PASSWORD_CHANGE_REQUIRED') {
           await refreshIdentity();
-          navigate('/uye/sifre-degistir', { replace: true });
+          if (mountedRef.current) {
+            navigate('/uye/sifre-degistir', { replace: true });
+          }
           return;
         } else {
-          setSubmitError(err.message || 'Randevu oluşturulamadı. Lütfen tekrar dene.');
+          if (mountedRef.current) {
+            setSubmitError(err.message || 'Randevu oluşturulamadı. Lütfen tekrar dene.');
+          }
         }
       } else {
-        setSubmitError('Randevu oluşturulamadı. Lütfen tekrar dene.');
+        if (mountedRef.current) {
+          setSubmitError('Randevu oluşturulamadı. Lütfen tekrar dene.');
+        }
       }
     } finally {
       submitLockRef.current = false;
-      setIsSubmitting(false);
+
+      if (submitAbortRef.current === controller) {
+        submitAbortRef.current = null;
+      }
+
+      if (mountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
