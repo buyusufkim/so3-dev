@@ -281,7 +281,15 @@ export function MemberDashboardPage() {
       {/* Appointments */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div>
-          <h2 className="text-lg font-medium text-white mb-4">Yaklaşan Randevular</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-white">Yaklaşan Randevular</h2>
+            <Link
+              to="/uye/randevu-al"
+              className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg bg-[#851C35] hover:bg-[#851C35]/90 text-white transition-colors"
+            >
+              Randevu Al
+            </Link>
+          </div>
           {!appointments?.upcoming || appointments.upcoming.length === 0 ? (
             <div className="bg-[#121212] border border-white/10 rounded-2xl p-6 text-center text-white/50 text-sm">
               Planlanmış bir randevun bulunmuyor.

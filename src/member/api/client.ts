@@ -13,7 +13,11 @@ import {
   MemberLoginResponse,
   isRecord,
   MemberMeasurement,
-  validateMeasurements
+  validateMeasurements,
+  MemberAppointmentBookingOptions,
+  validateAppointmentBookingOptions,
+  MemberCreatedAppointment,
+  validateCreatedAppointment
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -175,5 +179,26 @@ export const memberApiClient = {
   async getMeasurements(signal?: AbortSignal): Promise<MemberMeasurement[]> {
     const data = await request('/api/member/measurements', { signal });
     return validateMeasurements(data);
+  },
+
+  async getAppointmentBookingOptions(signal?: AbortSignal): Promise<MemberAppointmentBookingOptions> {
+    const data = await request('/api/member/appointment-booking-options', { signal });
+    return validateAppointmentBookingOptions(data);
+  },
+
+  async createAppointment(
+    startsAt: string,
+    memberSessionPackageId: number,
+    signal?: AbortSignal
+  ): Promise<MemberCreatedAppointment> {
+    const data = await request('/api/member/appointments', {
+      method: 'POST',
+      body: JSON.stringify({
+        starts_at: startsAt,
+        member_session_package_id: memberSessionPackageId
+      }),
+      signal
+    });
+    return validateCreatedAppointment(data);
   }
 };

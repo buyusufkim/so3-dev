@@ -78,6 +78,12 @@ export function MemberLayout() {
                   Ana Sayfa
                 </NavLink>
                 <NavLink 
+                  to="/uye/randevu-al" 
+                  className={({isActive}) => `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  Randevu Al
+                </NavLink>
+                <NavLink 
                   to="/uye/gelisim" 
                   className={({isActive}) => `px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
                 >
@@ -112,6 +118,12 @@ export function MemberLayout() {
                 className={({isActive}) => `whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
               >
                 Ana Sayfa
+              </NavLink>
+              <NavLink 
+                to="/uye/randevu-al" 
+                className={({isActive}) => `whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
+              >
+                Randevu Al
               </NavLink>
               <NavLink 
                 to="/uye/gelisim" 

@@ -48,6 +48,7 @@ const MemberLoginPage = lazy(() => import("../member/pages/MemberLoginPage").the
 const MemberChangePasswordPage = lazy(() => import("../member/pages/MemberChangePasswordPage").then(m => ({ default: m.MemberChangePasswordPage })));
 
 const MemberDashboardPage = lazy(() => import("../member/pages/MemberDashboardPage").then(m => ({ default: m.MemberDashboardPage })));
+const MemberAppointmentBookingPage = lazy(() => import("../member/pages/MemberAppointmentBookingPage").then(m => ({ default: m.MemberAppointmentBookingPage })));
 const MemberProgressPage = lazy(() => import("../member/pages/MemberProgressPage").then(m => ({ default: m.MemberProgressPage })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
@@ -118,6 +119,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <MemberSuspense><MemberDashboardPage /></MemberSuspense>,
+      },
+      {
+        path: "randevu-al",
+        element: <MemberSuspense><MemberAppointmentBookingPage /></MemberSuspense>,
       },
       {
         path: "gelisim",

@@ -65,7 +65,8 @@
     "verify:trainer-availability-foundation": "node scripts/verify-trainer-availability-foundation.mjs",
     "verify:trainer-availability-ui": "node scripts/verify-trainer-availability-ui.mjs",
     "verify:member-appointment-booking-options": "node scripts/verify-member-appointment-booking-options.mjs",
-    "verify:member-appointment-create": "node scripts/verify-member-appointment-create.mjs"
+    "verify:member-appointment-create": "node scripts/verify-member-appointment-create.mjs",
+    "verify:member-appointment-booking-ui": "node scripts/verify-member-appointment-booking-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

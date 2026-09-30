@@ -349,6 +349,17 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * returns HTTP 201 with persisted appointment snapshot
 * no cancellation, reschedule, or frontend booking UI introduced in this phase
 
+## F.24C.3 Member Self-Service Appointment Booking UI
+* member booking UI consumes server-generated 14-day options only
+* frontend never generates slots or evaluates booking eligibility
+* flow is date → slot → eligible package → confirmation
+* single eligible package may auto-select; multiple packages require explicit selection
+* POST uses exact server-provided starts_at
+* successful booking refetches booking options
+* slot/package race failures refetch server authority
+* member cancellation/reschedule remain out of scope
+
+
 
 
 
