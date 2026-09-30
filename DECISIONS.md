@@ -359,6 +359,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * slot/package race failures refetch server authority
 * member cancellation/reschedule remain out of scope
 
+## F.25A Member Appointment Lifecycle Actor Attribution Foundation
+* member cancellation attribution uses member_accounts.id
+* member reschedule attribution uses member_accounts.id
+* admin cancellation/reschedule attribution remains based on admins.id
+* appointment cancellation permits zero-or-one actor because non-cancelled/legacy rows exist
+* appointment reschedule history requires exactly one actor
+* member cancel/reschedule API is NOT part of F25A
+* no frontend changes
+* no ledger schema changes
+* no completed/no-show member actor attribution
+* F25A is schema foundation for F25B
+
+
 
 
 

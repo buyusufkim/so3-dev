@@ -141,6 +141,14 @@ assert(
   historyEntries.includes('040_add_member_appointment_actor_attribution.sql'),
   "040_add_member_appointment_actor_attribution.sql is explicitly recorded in schema_migrations history"
 );
+assert(
+  historyEntries.includes('041_create_trainer_availability.sql'),
+  "041_create_trainer_availability.sql is explicitly recorded in schema_migrations history"
+);
+assert(
+  historyEntries.includes('042_add_member_appointment_lifecycle_actor_attribution.sql'),
+  "042_add_member_appointment_lifecycle_actor_attribution.sql is explicitly recorded in schema_migrations history"
+);
 
 console.log("\n=== 6. Migration 039 Schema Parity in Fresh Install ===");
 
@@ -245,6 +253,31 @@ for (const token of structuralTokens040) {
   assert(mig040Content.includes(token), `Migration 040 authoritative token '${token}' exists in migration file`);
   assert(freshInstallContent.includes(token), `Authoritative token '${token}' replicated in fresh-install.sql`);
 }
+
+console.log("\n=== 6C. Migration 042 Schema Parity in Fresh Install ===");
+
+const mig042Path = path.resolve(migrationsDir, '042_add_member_appointment_lifecycle_actor_attribution.sql');
+assert(fs.existsSync(mig042Path), "042_add_member_appointment_lifecycle_actor_attribution.sql exists in database/migrations");
+const mig042Content = fs.readFileSync(mig042Path, 'utf8');
+
+const structuralTokens042 = [
+  'cancelled_by_member_account_id',
+  'fk_appointments_cancelled_by_member_account',
+  'idx_appointments_cancelled_by_member_account',
+  'chk_appointments_cancellation_actor_attribution',
+  'rescheduled_by_member_account_id',
+  'fk_appointment_reschedules_rescheduled_by_member_account',
+  'idx_appointment_reschedules_rescheduled_by_member_account',
+  'chk_appointment_reschedules_actor_attribution'
+];
+for (const token of structuralTokens042) {
+  assert(mig042Content.includes(token), `Migration 042 authoritative token '${token}' exists in migration file`);
+  assert(freshInstallContent.includes(token), `Authoritative token '${token}' replicated in fresh-install.sql`);
+}
+assert(
+  /ALTER\s+TABLE\s+`?appointment_reschedules`?\s+MODIFY\s+COLUMN\s+`?rescheduled_by`?\s+INT\s+NULL/i.test(freshInstallContent),
+  "fresh-install.sql includes nullable conversion for appointment_reschedules.rescheduled_by"
+);
 
 console.log("\n=== 7. Deployment Documentation Verification ===");
 const deployDocPath = path.resolve(process.cwd(), 'DEPLOYMENT_PHP_MYSQL.md');
@@ -406,9 +439,9 @@ console.log("\n=== 10. Simulation Self-Tests for Drift & Parity Checks ===");
   assert(!isDocValid, "Simulation 5: Stale migration range in documentation correctly detected as violation");
 }
 
-// 10.6 Simulation: Future-safety check: hypothetical 042 migration with current header fails automatically
+// 10.6 Simulation: Future-safety check: hypothetical 043 migration with current header fails automatically
 {
-  const hypotheticalLatestNum = '042';
+  const hypotheticalLatestNum = '043';
   const currentHeaderContent = `Generated from migrations ${firstNum}-${latestNum}`;
   const m = currentHeaderContent.match(/Generated from migrations\s+(\d+)[–-](\d+)/i);
   const hEnd = m ? m[2] : null;

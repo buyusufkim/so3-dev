@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-041
+-- Generated from migrations 001-042
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -1144,6 +1144,56 @@ CREATE TABLE IF NOT EXISTS `trainer_unavailability_blocks` (
 CREATE INDEX `idx_trainer_unavailability_lookup` ON `trainer_unavailability_blocks`(`trainer_id`, `starts_at`, `ends_at`);
 
 
+-- Migration: 042_add_member_appointment_lifecycle_actor_attribution.sql
+-- 1. appointments table: add cancelled_by_member_account_id FK, index and cancellation actor CHECK constraint
+ALTER TABLE `appointments`
+ADD COLUMN `cancelled_by_member_account_id` INT NULL AFTER `cancelled_by`;
+
+ALTER TABLE `appointments`
+ADD CONSTRAINT `fk_appointments_cancelled_by_member_account`
+FOREIGN KEY (`cancelled_by_member_account_id`) REFERENCES `member_accounts`(`id`)
+ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+CREATE INDEX `idx_appointments_cancelled_by_member_account` ON `appointments`(`cancelled_by_member_account_id`);
+
+ALTER TABLE `appointments`
+ADD CONSTRAINT `chk_appointments_cancellation_actor_attribution`
+CHECK (
+    NOT (
+        `cancelled_by` IS NOT NULL
+        AND `cancelled_by_member_account_id` IS NOT NULL
+    )
+);
+
+-- 2. appointment_reschedules table: modify rescheduled_by to NULL, add rescheduled_by_member_account_id FK, index and exactly-one CHECK constraint
+ALTER TABLE `appointment_reschedules`
+MODIFY COLUMN `rescheduled_by` INT NULL;
+
+ALTER TABLE `appointment_reschedules`
+ADD COLUMN `rescheduled_by_member_account_id` INT NULL AFTER `rescheduled_by`;
+
+ALTER TABLE `appointment_reschedules`
+ADD CONSTRAINT `fk_appointment_reschedules_rescheduled_by_member_account`
+FOREIGN KEY (`rescheduled_by_member_account_id`) REFERENCES `member_accounts`(`id`)
+ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+CREATE INDEX `idx_appointment_reschedules_rescheduled_by_member_account` ON `appointment_reschedules`(`rescheduled_by_member_account_id`);
+
+ALTER TABLE `appointment_reschedules`
+ADD CONSTRAINT `chk_appointment_reschedules_actor_attribution`
+CHECK (
+    (
+        `rescheduled_by` IS NOT NULL
+        AND `rescheduled_by_member_account_id` IS NULL
+    )
+    OR
+    (
+        `rescheduled_by` IS NULL
+        AND `rescheduled_by_member_account_id` IS NOT NULL
+    )
+);
+
+
 -- Insert migration history to prevent migrate.php from rerunning these
 INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('001_create_schema_migrations.sql', CURRENT_TIMESTAMP),
@@ -1186,6 +1236,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('038_create_member_portal_auth.sql', CURRENT_TIMESTAMP),
 ('039_create_admin_notifications.sql', CURRENT_TIMESTAMP),
 ('040_add_member_appointment_actor_attribution.sql', CURRENT_TIMESTAMP),
-('041_create_trainer_availability.sql', CURRENT_TIMESTAMP);
+('041_create_trainer_availability.sql', CURRENT_TIMESTAMP),
+('042_add_member_appointment_lifecycle_actor_attribution.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
