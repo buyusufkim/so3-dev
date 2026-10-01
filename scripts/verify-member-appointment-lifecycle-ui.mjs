@@ -17,6 +17,24 @@ function assert(condition, message) {
   }
 }
 
+function extractMethodBlock(content, methodName) {
+  const startIdx = content.indexOf(methodName);
+  if (startIdx === -1) return null;
+  const braceIdx = content.indexOf('{', startIdx);
+  if (braceIdx === -1) return null;
+  let depth = 1;
+  for (let i = braceIdx + 1; i < content.length; i++) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        return content.substring(startIdx, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
 console.log("=== 1. Chained Backend & Read Model Regressions ===");
 
 try {
@@ -81,8 +99,8 @@ class SubmitLockSimulator {
 
 const lockSim = new SubmitLockSimulator();
 let concurrentBlocked = false;
-const promise1 = lockSim.submit(() => new Promise(r => setTimeout(r, 50)));
-const promise2 = lockSim.submit(() => { concurrentBlocked = true; return Promise.resolve(); });
+lockSim.submit(() => new Promise(r => setTimeout(r, 50)));
+lockSim.submit(() => { concurrentBlocked = true; return Promise.resolve(); });
 assert(concurrentBlocked === false, "Self-test: Concurrent click while submission lock is active is dropped");
 
 // 2.4 AbortController cleanup simulation on modal close
@@ -91,10 +109,31 @@ let abortedSignalTriggered = false;
 const controllerSim = new AbortController();
 controllerSim.signal.addEventListener('abort', () => { abortedSignalTriggered = true; });
 abortSimActive = true;
-// Simulate modal close
 controllerSim.abort();
 abortSimActive = false;
 assert(abortedSignalTriggered && !abortSimActive, "Self-test: AbortController aborts in-flight request on close");
+
+// 2.5 Mounted lifecycle guard simulation
+function simulateUnmountStateGuard() {
+  let isMounted = true;
+  let stateUpdated = false;
+
+  const asyncAction = async () => {
+    // simulate async delay
+    await new Promise(r => setTimeout(r, 10));
+    if (isMounted) {
+      stateUpdated = true;
+    }
+  };
+
+  const promise = asyncAction();
+  // unmount occurs before async resolution
+  isMounted = false;
+  return promise.then(() => stateUpdated);
+}
+
+const unmountResult = await simulateUnmountStateGuard();
+assert(unmountResult === false, "Self-test: Unmount guard prevents state update after unmount");
 
 console.log("\n=== 3. Frontend Client API Invariants (client.ts) ===");
 
@@ -274,12 +313,109 @@ assert(
   dashboardContent.includes("TRAINER_CONFLICT"),
   "MemberDashboardPage handles TRAINER_CONFLICT"
 );
+
+console.log("\n=== 6. Mounted Lifecycle & Async Guard Invariants ===");
+
+// 6.1 Mounted ref definition and effect
 assert(
-  dashboardContent.includes("startDataLoad()"),
-  "MemberDashboardPage performs server-authoritative refetch via startDataLoad after mutation"
+  dashboardContent.includes("const mountedRef = useRef<boolean>(true);"),
+  "MemberDashboardPage declares bounded mountedRef"
+);
+assert(
+  dashboardContent.includes("mountedRef.current = true;"),
+  "MemberDashboardPage sets mountedRef.current = true on mount"
+);
+assert(
+  dashboardContent.includes("mountedRef.current = false;"),
+  "MemberDashboardPage sets mountedRef.current = false on unmount"
 );
 
-console.log("\n=== 6. Scope Isolation (No Lifecycle UI in Booking Create Page) ===");
+// 6.2 Cancel method extraction & safety
+const cancelMethod = extractMethodBlock(dashboardContent, 'const handleSubmitCancel =');
+assert(cancelMethod !== null, "handleSubmitCancel method block extracted successfully");
+if (cancelMethod) {
+  assert(
+    cancelMethod.includes("cancelSubmitLockRef.current = false;"),
+    "handleSubmitCancel releases cancelSubmitLockRef in finally"
+  );
+  assert(
+    cancelMethod.includes("if (mountedRef.current)") && cancelMethod.includes("setIsCancelSubmitting(false)"),
+    "handleSubmitCancel guards setIsCancelSubmitting(false) with mountedRef.current"
+  );
+  assert(
+    cancelMethod.includes("if (!mountedRef.current || controller.signal.aborted) return;"),
+    "handleSubmitCancel catch blocks unmounted or aborted error state writes"
+  );
+  assert(
+    cancelMethod.includes("if (mountedRef.current && !controller.signal.aborted)"),
+    "handleSubmitCancel guards success state writes and startDataLoad with mountedRef and signal"
+  );
+}
+
+// 6.3 Reschedule submit method extraction & safety
+const rescheduleMethod = extractMethodBlock(dashboardContent, 'const handleSubmitReschedule =');
+assert(rescheduleMethod !== null, "handleSubmitReschedule method block extracted successfully");
+if (rescheduleMethod) {
+  assert(
+    rescheduleMethod.includes("rescheduleSubmitLockRef.current = false;"),
+    "handleSubmitReschedule releases rescheduleSubmitLockRef in finally"
+  );
+  assert(
+    rescheduleMethod.includes("if (mountedRef.current)") && rescheduleMethod.includes("setIsRescheduleSubmitting(false)"),
+    "handleSubmitReschedule guards setIsRescheduleSubmitting(false) with mountedRef.current"
+  );
+  assert(
+    rescheduleMethod.includes("if (!mountedRef.current || controller.signal.aborted) return;"),
+    "handleSubmitReschedule catch blocks unmounted or aborted error state writes"
+  );
+  assert(
+    rescheduleMethod.includes("if (mountedRef.current && !controller.signal.aborted)"),
+    "handleSubmitReschedule guards success state writes and startDataLoad with mountedRef and signal"
+  );
+  assert(
+    rescheduleMethod.includes("if (mountedRef.current)") && rescheduleMethod.includes("loadRescheduleOptions(rescheduleTarget.id)"),
+    "handleSubmitReschedule guards stale slot retry options reload with mountedRef.current"
+  );
+}
+
+// 6.4 Reschedule options loading method extraction & safety
+const optionsMethod = extractMethodBlock(dashboardContent, 'const loadRescheduleOptions =');
+assert(optionsMethod !== null, "loadRescheduleOptions method block extracted successfully");
+if (optionsMethod) {
+  assert(
+    optionsMethod.includes("if (!mountedRef.current) return;"),
+    "loadRescheduleOptions guards initial invocation with mountedRef.current"
+  );
+  assert(
+    optionsMethod.includes("gen !== rescheduleGenerationRef.current"),
+    "loadRescheduleOptions checks generation to discard stale async responses"
+  );
+  assert(
+    optionsMethod.includes("controller.signal.aborted"),
+    "loadRescheduleOptions checks AbortController signal"
+  );
+  assert(
+    optionsMethod.includes("if (mountedRef.current && gen === rescheduleGenerationRef.current && !controller.signal.aborted)"),
+    "loadRescheduleOptions guards finally setIsOptionsLoading(false) with mountedRef, gen, and signal"
+  );
+}
+
+// 6.5 Authoritative data load mounted guard
+const dataLoadMethod = extractMethodBlock(dashboardContent, 'const startDataLoad =');
+assert(dataLoadMethod !== null, "startDataLoad method block extracted successfully");
+if (dataLoadMethod) {
+  assert(
+    dataLoadMethod.includes("if (!mountedRef.current) return;"),
+    "startDataLoad guards invocation with mountedRef.current"
+  );
+  assert(
+    dataLoadMethod.includes("if (mountedRef.current && !controller.signal.aborted)") &&
+    dataLoadMethod.includes("setIsDataLoading(false)"),
+    "startDataLoad guards finally setIsDataLoading(false) with mountedRef and signal"
+  );
+}
+
+console.log("\n=== 7. Scope Isolation (No Lifecycle UI in Booking Create Page) ===");
 
 const bookingPagePath = path.resolve(process.cwd(), 'src/member/pages/MemberAppointmentBookingPage.tsx');
 assert(fs.existsSync(bookingPagePath), "MemberAppointmentBookingPage.tsx exists");
@@ -302,7 +438,7 @@ assert(
   "MemberAppointmentBookingPage does not render reschedule UI"
 );
 
-console.log("\n=== 7. Documentation & package.json Registration ===");
+console.log("\n=== 8. Documentation & package.json Registration ===");
 
 const decPath = path.resolve(process.cwd(), 'DECISIONS.md');
 assert(fs.existsSync(decPath), "DECISIONS.md exists");

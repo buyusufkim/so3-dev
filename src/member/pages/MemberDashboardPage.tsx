@@ -74,6 +74,7 @@ export function MemberDashboardPage() {
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   // Cancel Modal State
+  const mountedRef = useRef<boolean>(true);
   const [cancelTarget, setCancelTarget] = useState<MemberAppointment | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -98,14 +99,17 @@ export function MemberDashboardPage() {
   const dataAbortRef = useRef<AbortController | null>(null);
 
   const startDataLoad = useCallback(async () => {
+    if (!mountedRef.current) return;
     dataAbortRef.current?.abort();
 
     const controller = new AbortController();
     dataAbortRef.current = controller;
 
     try {
-      setIsDataLoading(true);
-      setDataError(null);
+      if (mountedRef.current) {
+        setIsDataLoading(true);
+        setDataError(null);
+      }
 
       const signal = controller.signal;
 
@@ -116,14 +120,14 @@ export function MemberDashboardPage() {
         memberApiClient.getTrainingPrograms(signal)
       ]);
 
-      if (signal.aborted) return;
+      if (!mountedRef.current || signal.aborted) return;
 
       setOverview(o);
       setPackages(p);
       setAppointments(a);
       setPrograms(t);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (!mountedRef.current || controller.signal.aborted) return;
 
       if (err instanceof MemberApiError && err.code === 'PASSWORD_CHANGE_REQUIRED') {
         await refreshIdentity();
@@ -133,7 +137,7 @@ export function MemberDashboardPage() {
       
       setDataError('Veriler yüklenirken bir hata oluştu.');
     } finally {
-      if (!controller.signal.aborted) {
+      if (mountedRef.current && !controller.signal.aborted) {
         setIsDataLoading(false);
       }
     }
@@ -147,6 +151,14 @@ export function MemberDashboardPage() {
       };
     }
   }, [isLoading, identity, startDataLoad]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -192,12 +204,14 @@ export function MemberDashboardPage() {
 
     try {
       await memberApiClient.cancelAppointment(cancelTarget.id, trimmed, controller.signal);
-      setCancelTarget(null);
-      setCancelReason('');
-      setActionSuccessMessage('Randevu iptal edildi.');
-      await startDataLoad();
+      if (mountedRef.current && !controller.signal.aborted) {
+        setCancelTarget(null);
+        setCancelReason('');
+        setActionSuccessMessage('Randevu iptal edildi.');
+        await startDataLoad();
+      }
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (!mountedRef.current || controller.signal.aborted) return;
 
       if (err instanceof MemberApiError) {
         if (err.code === 'APPOINTMENT_NOT_CANCELLABLE') {
@@ -216,12 +230,15 @@ export function MemberDashboardPage() {
       }
     } finally {
       cancelSubmitLockRef.current = false;
-      setIsCancelSubmitting(false);
+      if (mountedRef.current) {
+        setIsCancelSubmitting(false);
+      }
     }
   };
 
   // Reschedule Handlers
   const loadRescheduleOptions = useCallback(async (appointmentId: number) => {
+    if (!mountedRef.current) return;
     rescheduleOptionsAbortRef.current?.abort();
 
     const controller = new AbortController();
@@ -233,14 +250,14 @@ export function MemberDashboardPage() {
 
     try {
       const opts = await memberApiClient.getAppointmentRescheduleOptions(appointmentId, controller.signal);
-      if (gen !== rescheduleGenerationRef.current || controller.signal.aborted) return;
+      if (!mountedRef.current || gen !== rescheduleGenerationRef.current || controller.signal.aborted) return;
 
       setRescheduleOptions(opts);
       const firstBookable = opts.days.find(d => d.state === 'BOOKABLE');
       setSelectedRescheduleDate(firstBookable ? firstBookable.date : null);
       setSelectedRescheduleSlot(null);
     } catch (err) {
-      if (gen !== rescheduleGenerationRef.current || controller.signal.aborted) return;
+      if (!mountedRef.current || gen !== rescheduleGenerationRef.current || controller.signal.aborted) return;
 
       if (err instanceof MemberApiError && err.code === 'PASSWORD_CHANGE_REQUIRED') {
         await refreshIdentity();
@@ -249,7 +266,7 @@ export function MemberDashboardPage() {
       }
       setOptionsError('Uygun saatler yüklenirken bir hata oluştu.');
     } finally {
-      if (gen === rescheduleGenerationRef.current && !controller.signal.aborted) {
+      if (mountedRef.current && gen === rescheduleGenerationRef.current && !controller.signal.aborted) {
         setIsOptionsLoading(false);
       }
     }
@@ -295,20 +312,24 @@ export function MemberDashboardPage() {
         selectedRescheduleSlot.starts_at,
         controller.signal
       );
-      setRescheduleTarget(null);
-      setSelectedRescheduleDate(null);
-      setSelectedRescheduleSlot(null);
-      setRescheduleOptions(null);
-      setActionSuccessMessage('Randevu yeniden planlandı.');
-      await startDataLoad();
+      if (mountedRef.current && !controller.signal.aborted) {
+        setRescheduleTarget(null);
+        setSelectedRescheduleDate(null);
+        setSelectedRescheduleSlot(null);
+        setRescheduleOptions(null);
+        setActionSuccessMessage('Randevu yeniden planlandı.');
+        await startDataLoad();
+      }
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (!mountedRef.current || controller.signal.aborted) return;
 
       if (err instanceof MemberApiError) {
         if (err.code === 'TRAINER_CONFLICT' || err.code === 'BOOKING_SLOT_UNAVAILABLE') {
-          setRescheduleSubmitError('Seçilen saat artık müsait değil. Lütfen güncellenen saatlerden yeni bir seçim yapın.');
-          setSelectedRescheduleSlot(null);
-          void loadRescheduleOptions(rescheduleTarget.id);
+          if (mountedRef.current) {
+            setRescheduleSubmitError('Seçilen saat artık müsait değil. Lütfen güncellenen saatlerden yeni bir seçim yapın.');
+            setSelectedRescheduleSlot(null);
+            void loadRescheduleOptions(rescheduleTarget.id);
+          }
         } else if (err.code === 'APPOINTMENT_NOT_RESCHEDULABLE') {
           setRescheduleSubmitError('Bu randevu artık yeniden planlanamaz.');
         } else if (err.code === 'APPOINTMENT_RESCHEDULE_NO_CHANGE') {
@@ -333,7 +354,9 @@ export function MemberDashboardPage() {
       }
     } finally {
       rescheduleSubmitLockRef.current = false;
-      setIsRescheduleSubmitting(false);
+      if (mountedRef.current) {
+        setIsRescheduleSubmitting(false);
+      }
     }
   };
 
