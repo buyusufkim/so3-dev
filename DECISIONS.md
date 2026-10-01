@@ -419,4 +419,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * existing trainer dashboard and appointment lifecycle endpoints remain canonical
 * no UI in F26A
 
+## F.26B Trainer Daily Agenda UI
+* daily agenda workspace integrated directly into trainer home (/admin/trainer) via DailyAgendaWorkspace
+* component consumes GET /api/trainer/daily-agenda validated with validateTrainerDailyAgenda
+* independent loading, error, and refreshKey lifecycle isolated from general dashboard metrics
+* in-flight requests abortable via AbortController on component unmount and re-fetch
+* request generation counter guards against out-of-order race conditions
+* focus cards project active in-progress ("Şu An") and next upcoming ("Sıradaki") appointments
+* needs-terminalization banner highlights past-due scheduled appointments requiring action
+* daily timeline renders today's appointments in chronological order with wall time, member link, and badges
+* strictly read-only: no inline complete, no-show, cancel, or reschedule mutations
+* canonical appointment lifecycle management and actions route into /admin/my-appointments
+* mobile-first layout with 44px minimum touch targets and zero performance ranking or notification anti-features
+
+
 

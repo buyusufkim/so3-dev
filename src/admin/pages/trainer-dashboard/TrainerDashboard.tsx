@@ -1,8 +1,22 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { apiClient, ApiError } from "../../api/client";
-import { TrainerDashboardData, isTrainerDashboardData } from "./types";
-import { Users, Dumbbell, ArrowRight, RefreshCw, AlertCircle, AlertTriangle, FileText, Calendar, Clock } from "lucide-react";
+import {
+  TrainerDashboardData,
+  isTrainerDashboardData
+} from "./types";
+import { DailyAgendaWorkspace } from "./DailyAgendaWorkspace";
+import {
+  Users,
+  Dumbbell,
+  ArrowRight,
+  RefreshCw,
+  AlertCircle,
+  AlertTriangle,
+  FileText,
+  Calendar,
+  Clock
+} from "lucide-react";
 
 function formatSafeDate(dateStr: string): string {
   try {
@@ -182,6 +196,11 @@ export function TrainerDashboard() {
           Tüm Üyeler
           <ArrowRight className="w-4 h-4 text-white/40" />
         </Link>
+      </div>
+
+      {/* F.26B: Günlük Çalışma Alanı (Mobile order-1, renders right after Header) */}
+      <div className="order-1 lg:order-none">
+        <DailyAgendaWorkspace />
       </div>
 
       {/* Member Metrics */}
@@ -451,7 +470,7 @@ export function TrainerDashboard() {
                 </tbody>
               </table>
             </div>
-            
+
             {/* Mobile View */}
             <div className="divide-y divide-white/10 lg:hidden">
               {data.recent_members.map((member) => (

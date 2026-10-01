@@ -71,7 +71,8 @@
     "verify:member-appointment-lifecycle-api": "node scripts/verify-member-appointment-lifecycle-api.mjs",
     "verify:member-appointment-reschedule-options": "node scripts/verify-member-appointment-reschedule-options.mjs",
     "verify:member-appointment-lifecycle-ui": "node scripts/verify-member-appointment-lifecycle-ui.mjs",
-    "verify:trainer-daily-agenda": "node scripts/verify-trainer-daily-agenda.mjs"
+    "verify:trainer-daily-agenda": "node scripts/verify-trainer-daily-agenda.mjs",
+    "verify:trainer-daily-agenda-ui": "node scripts/verify-trainer-daily-agenda-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
