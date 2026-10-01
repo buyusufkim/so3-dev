@@ -17,7 +17,9 @@ import {
   MemberAppointmentBookingOptions,
   validateAppointmentBookingOptions,
   MemberCreatedAppointment,
-  validateCreatedAppointment
+  validateCreatedAppointment,
+  MemberAppointmentRescheduleOptions,
+  validateAppointmentRescheduleOptions
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -200,5 +202,16 @@ export const memberApiClient = {
       signal
     });
     return validateCreatedAppointment(data);
+  },
+
+  async getAppointmentRescheduleOptions(
+    appointmentId: number,
+    signal?: AbortSignal
+  ): Promise<MemberAppointmentRescheduleOptions> {
+    if (!Number.isInteger(appointmentId) || appointmentId <= 0) {
+      throw new MemberApiError('Geçersiz randevu kimliği.', 400, 'VALIDATION_ERROR');
+    }
+    const data = await request(`/api/member/appointments/${appointmentId}/reschedule-options`, { signal });
+    return validateAppointmentRescheduleOptions(data);
   }
 };

@@ -932,3 +932,234 @@ export function validateCreatedAppointment(data: unknown): MemberCreatedAppointm
     }
   };
 }
+
+export type MemberRescheduleSlot = {
+  starts_at: string;
+  ends_at: string;
+};
+
+export type MemberRescheduleDayState =
+  | 'BOOKABLE'
+  | 'MEMBERSHIP_INACTIVE'
+  | 'PACKAGE_INELIGIBLE'
+  | 'NO_WORKING_HOURS'
+  | 'FULLY_BOOKED';
+
+export type MemberRescheduleDay = {
+  date: string;
+  state: MemberRescheduleDayState;
+  slots: MemberRescheduleSlot[];
+};
+
+export type MemberAppointmentRescheduleOptions = {
+  timezone: 'Europe/Istanbul';
+  appointment: {
+    id: number;
+    uuid: string;
+    starts_at: string;
+    ends_at: string;
+  };
+  trainer: {
+    id: number;
+    name: string;
+  };
+  session_package: {
+    id: number;
+    package_name: string;
+  } | null;
+  policy: {
+    slot_duration_minutes: 60;
+    slot_step_minutes: 60;
+    minimum_notice_minutes: 120;
+    booking_horizon_days: 14;
+  };
+  days: MemberRescheduleDay[];
+};
+
+export function validateAppointmentRescheduleOptions(data: unknown): MemberAppointmentRescheduleOptions {
+  if (!isRecord(data)) throw new Error('Invalid reschedule options data');
+
+  if (data.timezone !== 'Europe/Istanbul') {
+    throw new Error('Invalid timezone: expected Europe/Istanbul');
+  }
+
+  // 1. Target appointment snapshot
+  if (!isRecord(data.appointment)) throw new Error('Invalid appointment object');
+  const a = data.appointment;
+  if (typeof a.id !== 'number' || !Number.isInteger(a.id) || a.id <= 0) {
+    throw new Error('Invalid appointment id');
+  }
+  if (typeof a.uuid !== 'string' || !a.uuid.trim()) {
+    throw new Error('Invalid appointment uuid');
+  }
+  if (!isValidDateTime(a.starts_at) || !a.starts_at.endsWith(':00')) {
+    throw new Error('Invalid appointment starts_at');
+  }
+  if (!isValidDateTime(a.ends_at) || !a.ends_at.endsWith(':00')) {
+    throw new Error('Invalid appointment ends_at');
+  }
+  if (!isExact60MinuteSlot(a.starts_at, a.ends_at)) {
+    throw new Error('Appointment is not an exact 60-minute same-day slot');
+  }
+
+  const appointmentSnapshot = {
+    id: a.id,
+    uuid: a.uuid.trim(),
+    starts_at: a.starts_at,
+    ends_at: a.ends_at
+  };
+
+  // 2. Trainer snapshot
+  if (!isRecord(data.trainer)) throw new Error('Invalid trainer object');
+  if (typeof data.trainer.id !== 'number' || !Number.isInteger(data.trainer.id) || data.trainer.id <= 0) {
+    throw new Error('Invalid trainer id');
+  }
+  if (typeof data.trainer.name !== 'string' || !data.trainer.name.trim()) {
+    throw new Error('Invalid trainer name');
+  }
+  const trainerSnapshot = {
+    id: data.trainer.id,
+    name: data.trainer.name.trim()
+  };
+
+  // 3. Session package snapshot (nullable)
+  let packageSnapshot: { id: number; package_name: string } | null = null;
+  if (data.session_package !== null) {
+    if (!isRecord(data.session_package)) throw new Error('Invalid session_package object');
+    if (typeof data.session_package.id !== 'number' || !Number.isInteger(data.session_package.id) || data.session_package.id <= 0) {
+      throw new Error('Invalid session_package id');
+    }
+    if (typeof data.session_package.package_name !== 'string' || !data.session_package.package_name.trim()) {
+      throw new Error('Invalid session_package package_name');
+    }
+    packageSnapshot = {
+      id: data.session_package.id,
+      package_name: data.session_package.package_name.trim()
+    };
+  }
+
+  // 4. Policy constants
+  if (!isRecord(data.policy)) throw new Error('Invalid policy object');
+  const pol = data.policy;
+  if (
+    pol.slot_duration_minutes !== 60 ||
+    pol.slot_step_minutes !== 60 ||
+    pol.minimum_notice_minutes !== 120 ||
+    pol.booking_horizon_days !== 14
+  ) {
+    throw new Error('Invalid booking policy constants');
+  }
+  const policySnapshot = {
+    slot_duration_minutes: 60 as const,
+    slot_step_minutes: 60 as const,
+    minimum_notice_minutes: 120 as const,
+    booking_horizon_days: 14 as const
+  };
+
+  // 5. Days array
+  if (!Array.isArray(data.days)) throw new Error('Invalid days: expected array');
+  if (data.days.length !== 14) {
+    throw new Error(`Expected exactly 14 days, got ${data.days.length}`);
+  }
+
+  const validDayStates: MemberRescheduleDayState[] = [
+    'BOOKABLE',
+    'MEMBERSHIP_INACTIVE',
+    'PACKAGE_INELIGIBLE',
+    'NO_WORKING_HOURS',
+    'FULLY_BOOKED'
+  ];
+
+  const days: MemberRescheduleDay[] = [];
+  let prevDate: string | null = null;
+
+  for (let dIdx = 0; dIdx < data.days.length; dIdx++) {
+    const d = data.days[dIdx];
+    if (!isRecord(d)) throw new Error(`Day ${dIdx} is not an object`);
+
+    if (!isValidDate(d.date)) throw new Error(`Invalid date format in day ${dIdx}`);
+    const dateStr = d.date;
+
+    if (prevDate !== null) {
+      if (dateStr <= prevDate) {
+        throw new Error(`Days must be in strict ascending order: ${prevDate} >= ${dateStr}`);
+      }
+      if (!areDatesConsecutive(prevDate, dateStr)) {
+        throw new Error(`Days must be consecutive: ${prevDate} to ${dateStr}`);
+      }
+    }
+    prevDate = dateStr;
+
+    if (typeof d.state !== 'string' || !validDayStates.includes(d.state as MemberRescheduleDayState)) {
+      throw new Error(`Invalid day state ${String(d.state)} on date ${dateStr}`);
+    }
+    const dayState = d.state as MemberRescheduleDayState;
+
+    if (!Array.isArray(d.slots)) throw new Error(`slots must be an array on date ${dateStr}`);
+
+    if (dayState !== 'BOOKABLE') {
+      if (d.slots.length !== 0) {
+        throw new Error(`Non-BOOKABLE day ${dateStr} (${dayState}) must have 0 slots, got ${d.slots.length}`);
+      }
+    } else {
+      if (d.slots.length === 0) {
+        throw new Error(`BOOKABLE day ${dateStr} must have at least 1 slot`);
+      }
+    }
+
+    const slots: MemberRescheduleSlot[] = [];
+    let prevSlotStart: string | null = null;
+    const seenSlots = new Set<string>();
+
+    for (let sIdx = 0; sIdx < d.slots.length; sIdx++) {
+      const s = d.slots[sIdx];
+      if (!isRecord(s)) throw new Error(`Slot ${sIdx} on date ${dateStr} is not an object`);
+      if (typeof s.starts_at !== 'string' || typeof s.ends_at !== 'string') {
+        throw new Error(`Slot ${sIdx} on date ${dateStr} missing starts_at/ends_at string`);
+      }
+      if (!isExact60MinuteSlot(s.starts_at, s.ends_at)) {
+        throw new Error(`Slot ${sIdx} on date ${dateStr} is not an exact 60-minute same-day slot (${s.starts_at} - ${s.ends_at})`);
+      }
+      if (!s.starts_at.startsWith(dateStr) || !s.ends_at.startsWith(dateStr)) {
+        throw new Error(`Slot ${sIdx} datetime does not match day date ${dateStr}`);
+      }
+
+      // Current appointment slot must NOT be present in options
+      if (s.starts_at === appointmentSnapshot.starts_at) {
+        throw new Error(`Current appointment slot ${s.starts_at} must not be included in reschedule options`);
+      }
+
+      // Check slot ordering (starts_at ASC)
+      if (prevSlotStart !== null && s.starts_at <= prevSlotStart) {
+        throw new Error(`Slots must be in strict ascending order on date ${dateStr}`);
+      }
+      prevSlotStart = s.starts_at;
+
+      const slotKey = `${s.starts_at}|${s.ends_at}`;
+      if (seenSlots.has(slotKey)) {
+        throw new Error(`Duplicate slot ${slotKey} on date ${dateStr}`);
+      }
+      seenSlots.add(slotKey);
+
+      slots.push({
+        starts_at: s.starts_at,
+        ends_at: s.ends_at
+      });
+    }
+
+    days.push({
+      date: dateStr,
+      state: dayState,
+      slots
+    });
+  }
+
+  return {
+    timezone: 'Europe/Istanbul',
+    appointment: appointmentSnapshot,
+    trainer: trainerSnapshot,
+    session_package: packageSnapshot,
+    policy: policySnapshot,
+    days
+  };
+}

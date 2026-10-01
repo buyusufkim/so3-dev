@@ -381,3 +381,13 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * same-slot reschedule rejected as no-op (409 APPOINTMENT_RESCHEDULE_NO_CHANGE)
 * no frontend in F25B
 
+## F.25C.1 Member Appointment Reschedule Options Read Model
+* reschedule options appointment-specific (GET /api/member/appointments/{id}/reschedule-options)
+* create booking options are intentionally not reused as authoritative reschedule projection
+* existing reserve/package is preserved
+* package remaining balance is not re-consumed (no remaining_sessions > 0 check)
+* target appointment excluded from conflict projection (id <> targetAppointmentId)
+* target appointment current slot excluded from generated reschedule choices
+* mutation API remains F25B authoritative
+* no UI in C.1
+

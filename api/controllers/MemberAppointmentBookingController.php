@@ -1577,4 +1577,350 @@ class MemberAppointmentBookingController
             Response::error('An unexpected error occurred.', 'INTERNAL_ERROR', 500);
         }
     }
+
+    public function getRescheduleOptions(int $appointmentId): void
+    {
+        $this->guard();
+
+        // 1. Fetch target appointment
+        $apptStmt = $this->db->prepare("
+            SELECT id, uuid, member_id, trainer_id, member_session_package_id, starts_at, ends_at, status
+            FROM appointments
+            WHERE id = ?
+        ");
+        $apptStmt->execute([$appointmentId]);
+        $appt = $apptStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$appt) {
+            Response::error('Appointment not found.', 'NOT_FOUND', 404);
+        }
+
+        // Information isolation: another member's appointment returns 404 NOT_FOUND
+        if ((int)$appt['member_id'] !== $this->memberId) {
+            Response::error('Appointment not found.', 'NOT_FOUND', 404);
+        }
+
+        // Eligibility: only scheduled appointments can be rescheduled
+        if ($appt['status'] !== 'scheduled') {
+            Response::error('Only scheduled appointments can be rescheduled.', 'APPOINTMENT_NOT_RESCHEDULABLE', 409);
+        }
+
+        // 2. Fetch authenticated member & validate active state
+        $mStmt = $this->db->prepare("
+            SELECT id, status, membership_start_date, membership_end_date, trainer_id, deleted_at
+            FROM members
+            WHERE id = ? AND deleted_at IS NULL AND status = 'active'
+        ");
+        $mStmt->execute([$this->memberId]);
+        $member = $mStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$member) {
+            Response::error('Member not found or inactive.', 'NOT_FOUND', 404);
+        }
+
+        $startDate = $member['membership_start_date'];
+        $endDate = $member['membership_end_date'];
+
+        // If only one membership date is null, return 409 inconsistent
+        if (($startDate === null && $endDate !== null) || ($startDate !== null && $endDate === null)) {
+            Response::error('Member membership date range is inconsistent.', 'MEMBER_MEMBERSHIP_DATA_INCONSISTENT', 409);
+        }
+
+        if ($startDate === null && $endDate === null) {
+            Response::error('Member has no active membership range.', 'MEMBER_INELIGIBLE', 409);
+        }
+
+        $assignedTrainerId = $member['trainer_id'] !== null ? (int)$member['trainer_id'] : 0;
+        if ($assignedTrainerId <= 0) {
+            Response::error('No trainer assigned to this member.', 'TRAINER_NOT_ASSIGNED', 409);
+        }
+
+        // Immutable relationships: trainer must match currently assigned trainer
+        $trainerId = (int)$appt['trainer_id'];
+        if ($trainerId !== $assignedTrainerId) {
+            Response::error('Appointment trainer does not match assigned trainer.', 'TRAINER_INELIGIBLE', 409);
+        }
+
+        $tStmt = $this->db->prepare("
+            SELECT id, name, is_active, deleted_at 
+            FROM trainers 
+            WHERE id = ?
+        ");
+        $tStmt->execute([$trainerId]);
+        $trainer = $tStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$trainer || $trainer['deleted_at'] !== null) {
+            Response::error('Assigned trainer not found or deleted.', 'NOT_FOUND', 404);
+        }
+
+        if ((int)$trainer['is_active'] !== 1) {
+            Response::error('Assigned trainer is inactive.', 'TRAINER_INELIGIBLE', 409);
+        }
+
+        $trainerInfo = [
+            'id' => (int)$trainer['id'],
+            'name' => (string)$trainer['name']
+        ];
+
+        // 3. Existing package / ledger validation
+        $packageId = $appt['member_session_package_id'] !== null ? (int)$appt['member_session_package_id'] : null;
+        $packageInfo = null;
+        $packageRow = null;
+
+        if ($packageId !== null) {
+            $pkgStmt = $this->db->prepare("
+                SELECT id, member_id, package_name_snapshot, status, valid_from, valid_until
+                FROM member_session_packages
+                WHERE id = ?
+            ");
+            $pkgStmt->execute([$packageId]);
+            $packageRow = $pkgStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$packageRow || (int)$packageRow['member_id'] !== $this->memberId) {
+                Response::error('Session package is ineligible.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+            }
+
+            if ($packageRow['status'] !== 'active') {
+                Response::error('Session package is not active.', 'SESSION_PACKAGE_INELIGIBLE', 409);
+            }
+
+            // Verify ledger integrity for this appointment: exactly 1 reserve, 0 release
+            $chkStmt = $this->db->prepare("
+                SELECT
+                    COALESCE(SUM(CASE WHEN entry_type = 'reserve' THEN 1 ELSE 0 END), 0) as res_count,
+                    COALESCE(SUM(CASE WHEN entry_type = 'release' THEN 1 ELSE 0 END), 0) as rel_count
+                FROM member_session_package_ledger
+                WHERE member_session_package_id = ? AND appointment_id = ?
+            ");
+            $chkStmt->execute([$packageId, $appointmentId]);
+            $chk = $chkStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ((int)$chk['res_count'] !== 1 || (int)$chk['rel_count'] !== 0) {
+                Response::error('Session package ledger is inconsistent.', 'SESSION_PACKAGE_LEDGER_INCONSISTENT', 409);
+            }
+
+            $packageInfo = [
+                'id' => (int)$packageRow['id'],
+                'package_name' => (string)$packageRow['package_name_snapshot']
+            ];
+        }
+
+        // 4. Projection window: Europe/Istanbul, 14 calendar days (today + 13 days)
+        $tz = new DateTimeZone(self::TIMEZONE);
+        $businessNow = new DateTime('now', $tz);
+        $minimumBookableAt = (clone $businessNow)->modify('+' . self::MINIMUM_NOTICE_MINUTES . ' minutes');
+
+        $calendarDates = [];
+        for ($i = 0; $i < self::BOOKING_HORIZON_DAYS; $i++) {
+            $cur = (clone $businessNow)->modify("+$i days");
+            $calendarDates[] = $cur->format('Y-m-d');
+        }
+
+        $firstDate = $calendarDates[0];
+        $lastDate = $calendarDates[count($calendarDates) - 1];
+        $rangeStartStr = $firstDate . ' 00:00:00';
+        $rangeEndStr = $lastDate . ' 23:59:59';
+
+        // 5. Fetch trainer weekly availability windows
+        $wStmt = $this->db->prepare("
+            SELECT day_of_week, start_time, end_time
+            FROM trainer_availability_windows
+            WHERE trainer_id = ?
+            ORDER BY day_of_week ASC, start_time ASC, end_time ASC
+        ");
+        $wStmt->execute([$trainerId]);
+        $weeklyWindows = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $windowsByDay = [];
+        for ($d = 1; $d <= 7; $d++) {
+            $windowsByDay[$d] = [];
+        }
+        foreach ($weeklyWindows as $w) {
+            $windowsByDay[(int)$w['day_of_week']][] = [
+                'start_time' => substr($w['start_time'], 0, 5),
+                'end_time' => substr($w['end_time'], 0, 5)
+            ];
+        }
+
+        // 6. Fetch trainer unavailability blocks overlapping projection range (privacy preserved, no reason)
+        $bStmt = $this->db->prepare("
+            SELECT starts_at, ends_at
+            FROM trainer_unavailability_blocks
+            WHERE trainer_id = ?
+              AND starts_at < ?
+              AND ends_at > ?
+            ORDER BY starts_at ASC, ends_at ASC
+        ");
+        $bStmt->execute([$trainerId, $rangeEndStr, $rangeStartStr]);
+        $unavailabilityBlocks = $bStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 7. Fetch scheduled appointment conflicts (trainer OR member) EXCLUDING target appointment ($appointmentId)
+        $cStmt = $this->db->prepare("
+            SELECT starts_at, ends_at
+            FROM appointments
+            WHERE id <> ?
+              AND status = 'scheduled'
+              AND (trainer_id = ? OR member_id = ?)
+              AND starts_at < ?
+              AND ends_at > ?
+            ORDER BY starts_at ASC, ends_at ASC
+        ");
+        $cStmt->execute([$appointmentId, $trainerId, $this->memberId, $rangeEndStr, $rangeStartStr]);
+        $conflicts = $cStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 8. Day-by-day projection
+        $days = [];
+        foreach ($calendarDates as $dateStr) {
+            // Check membership validity for date
+            $isMembershipActive = ($dateStr >= $startDate && $dateStr <= $endDate);
+            if (!$isMembershipActive) {
+                $days[] = [
+                    'date' => $dateStr,
+                    'state' => 'MEMBERSHIP_INACTIVE',
+                    'slots' => []
+                ];
+                continue;
+            }
+
+            // Check existing package validity for date (if package-linked)
+            if ($packageRow !== null) {
+                $pkgValid = ($packageRow['valid_from'] <= $dateStr && ($packageRow['valid_until'] === null || $packageRow['valid_until'] >= $dateStr));
+                if (!$pkgValid) {
+                    $days[] = [
+                        'date' => $dateStr,
+                        'state' => 'PACKAGE_INELIGIBLE',
+                        'slots' => []
+                    ];
+                    continue;
+                }
+            }
+
+            // ISO weekday: 1 (Monday) .. 7 (Sunday)
+            $dayOfWeek = (int)(new DateTime($dateStr, $tz))->format('N');
+            $dayWindows = $windowsByDay[$dayOfWeek] ?? [];
+
+            if (empty($dayWindows)) {
+                $days[] = [
+                    'date' => $dateStr,
+                    'state' => 'NO_WORKING_HOURS',
+                    'slots' => []
+                ];
+                continue;
+            }
+
+            // Generate candidate slots for each weekly window
+            $bookableSlots = [];
+            $seenSlotStarts = [];
+
+            foreach ($dayWindows as $win) {
+                $sParts = explode(':', $win['start_time']);
+                $startMinutes = (int)$sParts[0] * 60 + (int)$sParts[1];
+
+                $eParts = explode(':', $win['end_time']);
+                $endMinutes = (int)$eParts[0] * 60 + (int)$eParts[1];
+
+                for ($cur = $startMinutes; $cur + self::SLOT_DURATION_MINUTES <= $endMinutes; $cur += self::SLOT_STEP_MINUTES) {
+                    $slotStartH = intdiv($cur, 60);
+                    $slotStartM = $cur % 60;
+                    $slotEndTotal = $cur + self::SLOT_DURATION_MINUTES;
+                    $slotEndH = intdiv($slotEndTotal, 60);
+                    $slotEndM = $slotEndTotal % 60;
+
+                    if ($slotEndTotal > 1440) {
+                        continue;
+                    }
+
+                    $slotStartStr = sprintf('%s %02d:%02d:00', $dateStr, $slotStartH, $slotStartM);
+                    $slotEndStr = sprintf('%s %02d:%02d:00', $dateStr, $slotEndH, $slotEndM);
+
+                    // Deduplicate overlapping windows
+                    if (isset($seenSlotStarts[$slotStartStr])) {
+                        continue;
+                    }
+
+                    // Exclude target appointment current slot (no-op reschedule forbidden)
+                    if ($slotStartStr === $appt['starts_at']) {
+                        continue;
+                    }
+
+                    // Minimum notice check (120 minutes)
+                    $slotStartDt = new DateTime($slotStartStr, $tz);
+                    if ($slotStartDt < $minimumBookableAt) {
+                        continue;
+                    }
+
+                    // Unavailability blocks overlap check
+                    $isBlocked = false;
+                    foreach ($unavailabilityBlocks as $ub) {
+                        if ($ub['starts_at'] < $slotEndStr && $ub['ends_at'] > $slotStartStr) {
+                            $isBlocked = true;
+                            break;
+                        }
+                    }
+                    if ($isBlocked) {
+                        continue;
+                    }
+
+                    // Scheduled appointments conflict check (trainer or member, target excluded)
+                    $isConflicted = false;
+                    foreach ($conflicts as $c) {
+                        if ($c['starts_at'] < $slotEndStr && $c['ends_at'] > $slotStartStr) {
+                            $isConflicted = true;
+                            break;
+                        }
+                    }
+                    if ($isConflicted) {
+                        continue;
+                    }
+
+                    $seenSlotStarts[$slotStartStr] = true;
+                    $bookableSlots[] = [
+                        'starts_at' => $slotStartStr,
+                        'ends_at' => $slotEndStr
+                    ];
+                }
+            }
+
+            // Sort slots chronologically
+            usort($bookableSlots, function ($a, $b) {
+                if ($a['starts_at'] !== $b['starts_at']) {
+                    return strcmp($a['starts_at'], $b['starts_at']);
+                }
+                return strcmp($a['ends_at'], $b['ends_at']);
+            });
+
+            if (empty($bookableSlots)) {
+                $days[] = [
+                    'date' => $dateStr,
+                    'state' => 'FULLY_BOOKED',
+                    'slots' => []
+                ];
+            } else {
+                $days[] = [
+                    'date' => $dateStr,
+                    'state' => 'BOOKABLE',
+                    'slots' => $bookableSlots
+                ];
+            }
+        }
+
+        Response::json([
+            'timezone' => self::TIMEZONE,
+            'appointment' => [
+                'id' => (int)$appt['id'],
+                'uuid' => (string)$appt['uuid'],
+                'starts_at' => (string)$appt['starts_at'],
+                'ends_at' => (string)$appt['ends_at']
+            ],
+            'trainer' => $trainerInfo,
+            'session_package' => $packageInfo,
+            'policy' => [
+                'slot_duration_minutes' => self::SLOT_DURATION_MINUTES,
+                'slot_step_minutes' => self::SLOT_STEP_MINUTES,
+                'minimum_notice_minutes' => self::MINIMUM_NOTICE_MINUTES,
+                'booking_horizon_days' => self::BOOKING_HORIZON_DAYS,
+            ],
+            'days' => $days
+        ]);
+    }
 }
