@@ -404,3 +404,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * after successful cancellation or reschedule, client re-fetches authoritative appointment and session package state from server
 * booking-create page (MemberAppointmentBookingPage) remains isolated and unchanged
 
+## F.26A Trainer Daily Agenda Read Model Foundation
+* daily agenda is trainer-self-only (GET /api/trainer/daily-agenda)
+* business time Europe/Istanbul
+* server date only; no arbitrary date selector in F26A
+* read-only projection (zero mutation queries)
+* today appointment timeline (starts_at >= today 00:00:00 and < tomorrow 00:00:00)
+* temporal states (upcoming, in_progress, past_due, terminal) are derived, not persisted
+* past_due means scheduled appointment whose end has passed
+* no automatic no_show or completed transition
+* focus projection provides current in-progress and next upcoming appointment
+* needs_terminalization queue exposes scheduled past-due appointments requiring action
+* no trainer scoring, ranking, or performance analytics
+* existing trainer dashboard and appointment lifecycle endpoints remain canonical
+* no UI in F26A
+
+

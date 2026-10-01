@@ -596,6 +596,16 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    // Dynamic matching for trainer daily agenda endpoint
+    if (preg_match('#^/api/trainer/daily-agenda$#', $requestUri)) {
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/TrainerDailyAgendaController.php';
+            (new \Controllers\TrainerDailyAgendaController())->index();
+            $matched = true;
+        }
+    }
+
     if ($requestUri === '/api/trainer/availability') {
         AuthMiddleware::handle();
         AuthMiddleware::hasRole(['trainer']);
