@@ -133,6 +133,22 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
         throw new Error("Canonical GET /api/member/appointments route block must use MemberPortalController->getAppointments()");
     }
 
+    // 2.1 Canonical member reschedule-options GET route check (F25C.1)
+    const canonicalMemberRescheduleOptionsRouteRegex = /if\s*\(preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#',\s*\$requestUri,\s*\$matches\)\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}\s*\}/;
+    const matchRescheduleOptions = indexSrc.match(canonicalMemberRescheduleOptionsRouteRegex);
+    if (!matchRescheduleOptions) {
+        throw new Error("Missing exact canonical GET /api/member/appointments/{id}/reschedule-options route block");
+    }
+    const reschOptsBlock = matchRescheduleOptions[1];
+    if (!reschOptsBlock.includes("$method === 'GET'")) {
+        throw new Error("Canonical reschedule-options route must check $method === 'GET'");
+    }
+    if (!reschOptsBlock.includes("require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php';") ||
+        (!reschOptsBlock.includes("new \\Controllers\\MemberAppointmentBookingController()") && !reschOptsBlock.includes("new \Controllers\MemberAppointmentBookingController()")) ||
+        !reschOptsBlock.includes("->getRescheduleOptions((int)$matches[1]);")) {
+        throw new Error("Canonical reschedule-options route must invoke MemberAppointmentBookingController->getRescheduleOptions((int)$matches[1])");
+    }
+
     // 3. Forbid any other /api/member/appointments usage
     const canonicalMemberPostRouteRegex = /if\s*\(\$requestUri\s*===\s*'\/api\/member\/appointments'\s*&&\s*\$method\s*===\s*'POST'\)\s*\{([\s\S]*?)\$matched\s*=\s*true;\s*\}/;
     const canonicalMemberCancelRouteRegex = /if\s*\(preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#',\s*\$requestUri,\s*\$matches\)\)\s*\{[\s\S]*?\$matched\s*=\s*true;\s*\}\s*\}/;
@@ -141,7 +157,8 @@ function verifyNamespaceCapabilityMatrix(indexSrc) {
         .replace(canonicalMemberRouteRegex, "")
         .replace(canonicalMemberPostRouteRegex, "")
         .replace(canonicalMemberCancelRouteRegex, "")
-        .replace(canonicalMemberRescheduleRouteRegex, "");
+        .replace(canonicalMemberRescheduleRouteRegex, "")
+        .replace(canonicalMemberRescheduleOptionsRouteRegex, "");
     if (maskedIndexSrc.includes('/api/member/appointments')) {
         throw new Error("Unauthorized member appointment route/subpath found");
     }
@@ -733,6 +750,33 @@ checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT CANCEL INJECTED", () => {
 });
 checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT RESCHEDULE INJECTED", () => {
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: DYNAMIC MEMBER APPOINTMENT RESCHEDULE-OPTIONS DUPLICATE INJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule-options$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS ZERO ID ROUTE REJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/0/reschedule-options$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS ALPHA ID ROUTE REJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/abc/reschedule-options$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS RANDOM SUBPATH REJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/123/random$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS DELETE SUBPATH REJECTED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/member/appointments/123/delete$#', $requestUri, $matches); '/api/public/events'")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS CANONICAL ROUTE REMOVED", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#'.*?\$matched = true;\s*\}\s*\}/s, "")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS WRONG HTTP METHOD", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/(\$method === 'GET'\)\s*\{\s*require_once __DIR__ \. '\/controllers\/MemberAppointmentBookingController\.php';\s*\(new \\Controllers\\MemberAppointmentBookingController\(\)\)->getRescheduleOptions)/, "$method === 'POST') { require_once __DIR__ . '/controllers/MemberAppointmentBookingController.php'; (new \\Controllers\\MemberAppointmentBookingController())->getRescheduleOptions")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS WRONG CONTROLLER", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/MemberAppointmentBookingController/g, "AppointmentController")));
+});
+checkInvariant("Negative: RESCHEDULE-OPTIONS WEAK ID REGEX", () => {
+    assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options/, "appointments/(\\d+)/reschedule-options")));
 });
 checkInvariant("Negative: DYNAMIC PUBLIC APPOINTMENT SUBPATH INJECTED", () => {
     assertThrows(() => verifyNamespaceCapabilityMatrix(origIndexSrc.replace(/'\/api\/public\/events'/, "preg_match('#^/api/public/appointments/([1-9]\\d*)$#', $requestUri, $matches); '/api/public/events'")));
