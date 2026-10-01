@@ -149,6 +149,22 @@ assert(
   "DailyAgendaWorkspace guards component state against unmounted updates"
 );
 
+// Error safety & leakage prevention
+assert(
+  !workspaceContent.includes("setError(err.message") &&
+  !workspaceContent.includes("setError(error.message") &&
+  !workspaceContent.includes("err.message ||"),
+  "err.message is not used as agenda UI error text (no runtime error leakage)"
+);
+assert(
+  workspaceContent.includes("if (err.name === 'AbortError') return;"),
+  "AbortError triggers silent return without writing to error state"
+);
+assert(
+  /}\s*else\s+if\s*\(\s*err\s+instanceof\s+Error\s*\)\s*\{\s*if\s*\(\s*err\.name\s*===\s*['"]AbortError['"]\s*\)\s*return\s*;\s*setError\s*\(\s*['"]Bugünün programı yüklenirken bir hata oluştu\.['"]\s*\)\s*;\s*\}/.test(workspaceContent),
+  "generic Error branch uses fixed safe message 'Bugünün programı yüklenirken bir hata oluştu.'"
+);
+
 console.log("\n=== 5. Mobile-First Presentation & Workspace Navigation ===");
 
 // Header and refresh controls

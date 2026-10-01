@@ -112,7 +112,7 @@ export function DailyAgendaWorkspace() {
           }
         } else if (err instanceof Error) {
           if (err.name === 'AbortError') return;
-          setError(err.message || 'Bugünün programı yüklenirken bir hata oluştu.');
+          setError('Bugünün programı yüklenirken bir hata oluştu.');
         } else {
           setError('Bugünün programı yüklenirken bir hata oluştu.');
         }
