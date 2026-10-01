@@ -391,3 +391,16 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * mutation API remains F25B authoritative
 * no UI in C.1
 
+## F.25C.2 Member Appointment Lifecycle UI
+* lifecycle actions (Yeniden Planla, İptal Et) added to upcoming scheduled appointment cards on member dashboard
+* recent and past appointments have zero mutation actions
+* cancel flow requires member-provided cancellation reason (max 255 chars, trimmed)
+* cancel calls PATCH /api/member/appointments/{id}/cancel
+* reschedule flow loads appointment-specific 14-day options via GET /api/member/appointments/{id}/reschedule-options
+* reschedule options modal allows selecting bookable dates and slots, excluding current slot
+* reschedule calls PATCH /api/member/appointments/{id}/reschedule with exact starts_at
+* duplicate submit and race mutations prevented via submission locks and disabled button states
+* in-flight requests cancelled via AbortController on modal close and component unmount
+* after successful cancellation or reschedule, client re-fetches authoritative appointment and session package state from server
+* booking-create page (MemberAppointmentBookingPage) remains isolated and unchanged
+

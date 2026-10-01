@@ -19,7 +19,11 @@ import {
   MemberCreatedAppointment,
   validateCreatedAppointment,
   MemberAppointmentRescheduleOptions,
-  validateAppointmentRescheduleOptions
+  validateAppointmentRescheduleOptions,
+  MemberCancelledAppointmentResponse,
+  validateCancelledAppointmentResponse,
+  MemberRescheduledAppointmentResponse,
+  validateRescheduledAppointmentResponse
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -213,5 +217,54 @@ export const memberApiClient = {
     }
     const data = await request(`/api/member/appointments/${appointmentId}/reschedule-options`, { signal });
     return validateAppointmentRescheduleOptions(data);
+  },
+
+  async cancelAppointment(
+    appointmentId: number,
+    cancellationReason: string,
+    signal?: AbortSignal
+  ): Promise<MemberCancelledAppointmentResponse> {
+    if (!Number.isInteger(appointmentId) || appointmentId <= 0) {
+      throw new MemberApiError('Geçersiz randevu kimliği.', 400, 'VALIDATION_ERROR');
+    }
+    const trimmedReason = cancellationReason.trim();
+    if (!trimmedReason) {
+      throw new MemberApiError('İptal nedeni boş olamaz.', 422, 'VALIDATION_ERROR');
+    }
+    if (trimmedReason.length > 255) {
+      throw new MemberApiError('İptal nedeni 255 karakterden uzun olamaz.', 422, 'VALIDATION_ERROR');
+    }
+
+    const data = await request(`/api/member/appointments/${appointmentId}/cancel`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        cancellation_reason: trimmedReason
+      }),
+      signal
+    });
+    return validateCancelledAppointmentResponse(data);
+  },
+
+  async rescheduleAppointment(
+    appointmentId: number,
+    startsAt: string,
+    signal?: AbortSignal
+  ): Promise<MemberRescheduledAppointmentResponse> {
+    if (!Number.isInteger(appointmentId) || appointmentId <= 0) {
+      throw new MemberApiError('Geçersiz randevu kimliği.', 400, 'VALIDATION_ERROR');
+    }
+    const trimmedStartsAt = startsAt.trim();
+    if (!trimmedStartsAt) {
+      throw new MemberApiError('Başlangıç saati gereklidir.', 422, 'VALIDATION_ERROR');
+    }
+
+    const data = await request(`/api/member/appointments/${appointmentId}/reschedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        starts_at: trimmedStartsAt
+      }),
+      signal
+    });
+    return validateRescheduledAppointmentResponse(data);
   }
 };

@@ -1163,3 +1163,148 @@ export function validateAppointmentRescheduleOptions(data: unknown): MemberAppoi
     days
   };
 }
+
+export type MemberCancelledAppointmentResponse = {
+  appointment: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    trainer_id: number;
+    member_session_package_id: number | null;
+    starts_at: string;
+    ends_at: string;
+    status: 'cancelled';
+    cancellation_reason: string;
+    cancelled_at: string;
+  };
+};
+
+export function validateCancelledAppointmentResponse(data: unknown): MemberCancelledAppointmentResponse {
+  if (!isRecord(data) || !isRecord(data.appointment)) {
+    throw new Error('Invalid cancelled appointment response');
+  }
+  const a = data.appointment;
+  if (typeof a.id !== 'number' || !Number.isInteger(a.id) || a.id <= 0) {
+    throw new Error('Invalid appointment id');
+  }
+  if (typeof a.uuid !== 'string' || !a.uuid.trim()) {
+    throw new Error('Invalid appointment uuid');
+  }
+  if (typeof a.member_id !== 'number' || !Number.isInteger(a.member_id) || a.member_id <= 0) {
+    throw new Error('Invalid member_id');
+  }
+  if (typeof a.trainer_id !== 'number' || !Number.isInteger(a.trainer_id) || a.trainer_id <= 0) {
+    throw new Error('Invalid trainer_id');
+  }
+  if (a.member_session_package_id !== null && (typeof a.member_session_package_id !== 'number' || !Number.isInteger(a.member_session_package_id) || a.member_session_package_id <= 0)) {
+    throw new Error('Invalid member_session_package_id');
+  }
+  if (!isValidDateTime(a.starts_at)) {
+    throw new Error('Invalid starts_at');
+  }
+  if (!isValidDateTime(a.ends_at)) {
+    throw new Error('Invalid ends_at');
+  }
+  if (a.status !== 'cancelled') {
+    throw new Error('Expected status to be cancelled');
+  }
+  if (typeof a.cancellation_reason !== 'string' || !a.cancellation_reason.trim()) {
+    throw new Error('Invalid cancellation_reason');
+  }
+  if (!isValidDateTime(a.cancelled_at)) {
+    throw new Error('Invalid cancelled_at');
+  }
+
+  return {
+    appointment: {
+      id: a.id,
+      uuid: a.uuid.trim(),
+      member_id: a.member_id,
+      trainer_id: a.trainer_id,
+      member_session_package_id: a.member_session_package_id,
+      starts_at: a.starts_at,
+      ends_at: a.ends_at,
+      status: 'cancelled',
+      cancellation_reason: a.cancellation_reason.trim(),
+      cancelled_at: a.cancelled_at
+    }
+  };
+}
+
+export type MemberRescheduledAppointmentResponse = {
+  appointment: {
+    id: number;
+    uuid: string;
+    member_id: number;
+    trainer_id: number;
+    member_session_package_id: number | null;
+    starts_at: string;
+    ends_at: string;
+    status: 'scheduled';
+  };
+  reschedule: {
+    previous_starts_at: string;
+    previous_ends_at: string;
+    new_starts_at: string;
+    new_ends_at: string;
+  };
+};
+
+export function validateRescheduledAppointmentResponse(data: unknown): MemberRescheduledAppointmentResponse {
+  if (!isRecord(data) || !isRecord(data.appointment) || !isRecord(data.reschedule)) {
+    throw new Error('Invalid rescheduled appointment response');
+  }
+  const a = data.appointment;
+  const r = data.reschedule;
+
+  if (typeof a.id !== 'number' || !Number.isInteger(a.id) || a.id <= 0) {
+    throw new Error('Invalid appointment id');
+  }
+  if (typeof a.uuid !== 'string' || !a.uuid.trim()) {
+    throw new Error('Invalid appointment uuid');
+  }
+  if (typeof a.member_id !== 'number' || !Number.isInteger(a.member_id) || a.member_id <= 0) {
+    throw new Error('Invalid member_id');
+  }
+  if (typeof a.trainer_id !== 'number' || !Number.isInteger(a.trainer_id) || a.trainer_id <= 0) {
+    throw new Error('Invalid trainer_id');
+  }
+  if (a.member_session_package_id !== null && (typeof a.member_session_package_id !== 'number' || !Number.isInteger(a.member_session_package_id) || a.member_session_package_id <= 0)) {
+    throw new Error('Invalid member_session_package_id');
+  }
+  if (!isValidDateTime(a.starts_at)) {
+    throw new Error('Invalid starts_at');
+  }
+  if (!isValidDateTime(a.ends_at)) {
+    throw new Error('Invalid ends_at');
+  }
+  if (a.status !== 'scheduled') {
+    throw new Error('Expected status to be scheduled');
+  }
+
+  if (!isValidDateTime(r.previous_starts_at) || !isValidDateTime(r.previous_ends_at)) {
+    throw new Error('Invalid previous datetime in reschedule');
+  }
+  if (!isValidDateTime(r.new_starts_at) || !isValidDateTime(r.new_ends_at)) {
+    throw new Error('Invalid new datetime in reschedule');
+  }
+
+  return {
+    appointment: {
+      id: a.id,
+      uuid: a.uuid.trim(),
+      member_id: a.member_id,
+      trainer_id: a.trainer_id,
+      member_session_package_id: a.member_session_package_id,
+      starts_at: a.starts_at,
+      ends_at: a.ends_at,
+      status: 'scheduled'
+    },
+    reschedule: {
+      previous_starts_at: r.previous_starts_at,
+      previous_ends_at: r.previous_ends_at,
+      new_starts_at: r.new_starts_at,
+      new_ends_at: r.new_ends_at
+    }
+  };
+}

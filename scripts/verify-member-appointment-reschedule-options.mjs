@@ -369,26 +369,14 @@ assert(
   "getAppointmentRescheduleOptions validates payload with validateAppointmentRescheduleOptions"
 );
 
-console.log("\n=== 5. Scope Isolation (No Lifecycle UI in F.25C.1) ===");
-
-const dashboardPagePath = path.resolve(process.cwd(), 'src/member/pages/MemberDashboardPage.tsx');
-assert(fs.existsSync(dashboardPagePath), "MemberDashboardPage.tsx exists");
-const dashboardPageContent = fs.readFileSync(dashboardPagePath, 'utf8');
-assert(
-  !dashboardPageContent.includes("getAppointmentRescheduleOptions"),
-  "MemberDashboardPage does not consume getAppointmentRescheduleOptions (no UI in C.1)"
-);
-assert(
-  !dashboardPageContent.includes("reschedule-options"),
-  "MemberDashboardPage has zero reschedule options UI"
-);
+console.log("\n=== 5. Scope Isolation (Booking Create Page Unchanged) ===");
 
 const bookingPagePath = path.resolve(process.cwd(), 'src/member/pages/MemberAppointmentBookingPage.tsx');
 assert(fs.existsSync(bookingPagePath), "MemberAppointmentBookingPage.tsx exists");
 const bookingPageContent = fs.readFileSync(bookingPagePath, 'utf8');
 assert(
   !bookingPageContent.includes("getAppointmentRescheduleOptions"),
-  "MemberAppointmentBookingPage does not consume getAppointmentRescheduleOptions (no UI in C.1)"
+  "MemberAppointmentBookingPage does not consume getAppointmentRescheduleOptions (booking create page isolated)"
 );
 assert(
   !bookingPageContent.includes("reschedule-options"),
