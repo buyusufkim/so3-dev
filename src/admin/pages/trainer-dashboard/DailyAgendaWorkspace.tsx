@@ -5,6 +5,8 @@ import {
   TrainerDailyAgenda,
   validateTrainerDailyAgenda
 } from "./types";
+import { AppointmentTerminalModal } from "../appointments/AppointmentTerminalModal";
+import { AppointmentTerminalTarget } from "../appointments/types";
 import {
   ArrowRight,
   RefreshCw,
@@ -57,6 +59,29 @@ export function DailyAgendaWorkspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const [terminalSelection, setTerminalSelection] = useState<{
+    item: AppointmentTerminalTarget;
+    action: 'completed' | 'no_show';
+  } | null>(null);
+
+  const buildTerminalTarget = (item: TrainerDailyAgenda['needs_terminalization'][number]): AppointmentTerminalTarget => ({
+    appointment: {
+      id: item.id,
+      uuid: item.uuid,
+      starts_at: item.starts_at,
+      ends_at: item.ends_at,
+      status: item.status
+    },
+    member: {
+      id: item.member.id,
+      first_name: item.member.first_name,
+      last_name: item.member.last_name
+    },
+    trainer: {
+      id: agenda ? agenda.trainer.id : 0
+    }
+  });
 
   const mountedRef = useRef<boolean>(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -319,13 +344,32 @@ export function DailyAgendaWorkspace() {
                         )}
                       </div>
                     </div>
-                    <Link
-                      to="/admin/my-appointments"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-medium rounded transition self-start sm:self-center shrink-0 min-h-[44px]"
-                    >
-                      Randevularda Yönet
-                      <ArrowRight className="w-3 h-3" />
-                    </Link>
+                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 self-stretch sm:self-center shrink-0 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTerminalSelection({
+                            item: buildTerminalTarget(item),
+                            action: 'completed'
+                          });
+                        }}
+                        className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-green-600/80 hover:bg-green-600 transition flex items-center justify-center cursor-pointer"
+                      >
+                        Tamamla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTerminalSelection({
+                            item: buildTerminalTarget(item),
+                            action: 'no_show'
+                          });
+                        }}
+                        className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-orange-600/80 hover:bg-orange-600 transition flex items-center justify-center cursor-pointer"
+                      >
+                        Gelmedi
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -404,6 +448,21 @@ export function DailyAgendaWorkspace() {
             </div>
           )}
         </div>
+      )}
+
+      {terminalSelection && (
+        <AppointmentTerminalModal
+          key={`daily-terminal-${terminalSelection.action}-${terminalSelection.item.appointment.id}`}
+          scope="trainer"
+          item={terminalSelection.item}
+          action={terminalSelection.action}
+          onClose={() => setTerminalSelection(null)}
+          onSuccess={() => {
+            if (!mountedRef.current) return;
+            setTerminalSelection(null);
+            setRefreshKey((k) => k + 1);
+          }}
+        />
       )}
     </div>
   );

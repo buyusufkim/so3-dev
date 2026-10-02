@@ -124,6 +124,10 @@ assert(!workspaceContent.includes("apiClient.post"), "Zero apiClient.post in Dai
 assert(!workspaceContent.includes("apiClient.patch"), "Zero apiClient.patch in DailyAgendaWorkspace");
 assert(!workspaceContent.includes("apiClient.delete"), "Zero apiClient.delete in DailyAgendaWorkspace");
 assert(!workspaceContent.includes("apiClient.put"), "Zero apiClient.put in DailyAgendaWorkspace");
+assert(
+  workspaceContent.includes("AppointmentTerminalModal"),
+  "DailyAgendaWorkspace performs no direct mutation; terminalization occurs only through canonical AppointmentTerminalModal"
+);
 
 // Validator usage
 assert(

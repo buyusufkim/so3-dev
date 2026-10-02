@@ -29,6 +29,24 @@ export interface AppointmentListItem {
   trainer: Trainer;
 }
 
+export interface AppointmentTerminalTarget {
+  appointment: {
+    id: number;
+    uuid: string;
+    starts_at: string;
+    ends_at: string;
+    status: AppointmentStatus;
+  };
+  member: {
+    id: number;
+    first_name: string;
+    last_name: string;
+  };
+  trainer: {
+    id: number;
+  };
+}
+
 export interface AppointmentListResponse {
   items: AppointmentListItem[];
 }

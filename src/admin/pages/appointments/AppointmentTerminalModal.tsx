@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../../api/client';
-import { AppointmentScope, AppointmentListItem } from './types';
+import { AppointmentScope, AppointmentTerminalTarget } from './types';
 
 interface AppointmentTerminalModalProps {
   scope: AppointmentScope;
-  item: AppointmentListItem;
+  item: AppointmentTerminalTarget;
   action: 'completed' | 'no_show';
   onClose: () => void;
   onSuccess: () => void;

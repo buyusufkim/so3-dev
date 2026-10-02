@@ -432,5 +432,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * canonical appointment lifecycle management and actions route into /admin/my-appointments
 * mobile-first layout with 44px minimum touch targets and zero performance ranking or notification anti-features
 
+## F.26C Daily Appointment Terminalization Actions
+* only needs_terminalization entries actionable for terminalization in daily workspace
+* completed and no_show actions supported via direct modal triggers (Tamamla / Gelmedi)
+* server temporal projection remains authoritative; no client-side time evaluation
+* canonical shared AppointmentTerminalModal reused; no duplicate modal or mutation logic
+* no direct DailyAgendaWorkspace mutation queries (zero apiClient.patch in workspace)
+* no duplicate endpoint string construction; endpoints remain centralized in AppointmentTerminalModal
+* shared modal contract narrowed to AppointmentTerminalTarget (appointment, member, trainer.id)
+* terminalization success triggers authoritative agenda refetch via refreshKey increment
+* cancel and reschedule remain canonical appointment workspace (/admin/my-appointments) concerns
+* zero backend or database schema modifications; existing trainer terminalization endpoints utilized
+
+
 
 
