@@ -25,8 +25,14 @@ export function normalizeWhatsAppPhone(phone: string | null | undefined): string
   const trimmed = phone.trim();
   if (!trimmed) return null;
 
-  // Single leading '+' allowed as international prefix notation
-  let cleaned = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
+  // If input starts with '+', it must start with exactly '+90' and have no second '+'
+  let cleaned = trimmed;
+  if (trimmed.startsWith('+')) {
+    if (!trimmed.startsWith('+90') || trimmed.indexOf('+', 1) !== -1) {
+      return null;
+    }
+    cleaned = trimmed.slice(1);
+  }
 
   // Remove visual separators only
   cleaned = cleaned.replace(/[\s().-]/g, '');

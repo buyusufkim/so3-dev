@@ -25,7 +25,13 @@ function normalizeWhatsAppPhone(phone) {
   const trimmed = phone.trim();
   if (!trimmed) return null;
 
-  let cleaned = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
+  let cleaned = trimmed;
+  if (trimmed.startsWith('+')) {
+    if (!trimmed.startsWith('+90') || trimmed.indexOf('+', 1) !== -1) {
+      return null;
+    }
+    cleaned = trimmed.slice(1);
+  }
   cleaned = cleaned.replace(/[\s().-]/g, '');
 
   if (!/^\d+$/.test(cleaned)) return null;
@@ -91,6 +97,9 @@ const invalidInputs = [
   '0555ABC4567',
   '++905551234567',
   '+90 555-123.45 67+',
+  '+05551234567',
+  '+5551234567',
+  '+00905551234567',
   null,
   undefined
 ];
@@ -146,6 +155,10 @@ assert(
 assert(
   utilSource.includes("/^905\\d{9}$/"),
   "whatsapp.ts enforces strict Turkish mobile regex /^905\\d{9}$/"
+);
+assert(
+  utilSource.includes("trimmed.startsWith('+90')") || utilSource.includes("startsWith('+90')"),
+  "whatsapp.ts restricts leading plus notation strictly to '+90'"
 );
 assert(
   utilSource.includes("https://wa.me/"),
