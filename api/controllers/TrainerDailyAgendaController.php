@@ -82,6 +82,7 @@ class TrainerDailyAgendaController
                 m.uuid AS m_uuid,
                 m.first_name AS m_first_name,
                 m.last_name AS m_last_name,
+                m.phone AS m_phone,
                 m.trainer_id AS m_trainer_id,
                 m.deleted_at AS m_deleted_at,
                 msp.id AS msp_id,
@@ -168,6 +169,14 @@ class TrainerDailyAgendaController
                 $temporalState = 'terminal';
             }
 
+            $contactPhone = null;
+            if ($status === 'scheduled' && $row['m_phone'] !== null) {
+                $trimmedPhone = trim((string)$row['m_phone']);
+                if ($trimmedPhone !== '') {
+                    $contactPhone = $trimmedPhone;
+                }
+            }
+
             $item = [
                 'id' => (int)$row['id'],
                 'uuid' => (string)$row['uuid'],
@@ -179,6 +188,7 @@ class TrainerDailyAgendaController
                     'uuid' => (string)$row['m_uuid'],
                     'first_name' => (string)$row['m_first_name'],
                     'last_name' => (string)$row['m_last_name'],
+                    'phone' => $contactPhone,
                 ],
                 'session_package' => $packageObj,
                 'temporal_state' => $temporalState,

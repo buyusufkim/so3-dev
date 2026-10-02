@@ -455,6 +455,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * trainer member detail workspace (`/admin/my-members/:id`) acts as the first canonical integration surface
 * `DailyAgendaWorkspace` remains completely unchanged in F.27A; agenda quick-contact deferred to F.27B
 
+## F.27B Daily Agenda WhatsApp Quick Contact
+* trainer daily agenda exposes member contact phone strictly for scheduled appointments (`status === 'scheduled'`)
+* historical terminal appointments (completed, no_show, cancelled) strictly project `phone: null` to prevent historical PII leakage
+* single joined query projection in `TrainerDailyAgendaController.php` (`m.phone AS m_phone`), zero N+1 queries
+* fail-closed ownership check preserved: scheduled appointment requires member assigned to current trainer and not soft-deleted
+* TypeScript schema `TrainerDailyAgendaMember` updated to `phone: string | null` with strict runtime validator
+* validator strictly rejects non-null phone for terminal appointments and whitespace-only strings
+* deterministic message template helper `buildTrainerAppointmentWhatsAppMessage` produces Turkish appointment notification
+* quick-contact click-to-chat action provided via `WhatsAppContactLink` on `focus.current`, `focus.next`, and `needs_terminalization`
+* general chronological appointments timeline intentionally does not show WhatsApp action
+* zero automatic messaging, background jobs, external WhatsApp Business API, or webhook integrations
+
 
 
 

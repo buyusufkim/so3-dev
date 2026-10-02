@@ -234,6 +234,14 @@ assert(
   controllerContent.includes("TRAINER_DAILY_AGENDA_INCONSISTENT"),
   "TrainerDailyAgendaController defines canonical 409 error TRAINER_DAILY_AGENDA_INCONSISTENT"
 );
+assert(
+  controllerContent.includes("m.phone AS m_phone"),
+  "Appointments query projects m.phone AS m_phone from joined member"
+);
+assert(
+  controllerContent.includes("$status === 'scheduled' && $row['m_phone'] !== null"),
+  "Controller strictly limits contact phone projection to scheduled appointments"
+);
 
 // Read-only invariants
 assert(!controllerContent.includes("INSERT INTO"), "Zero INSERT queries in TrainerDailyAgendaController");
@@ -315,7 +323,7 @@ const sampleValidAgenda = {
       starts_at: '2026-10-01 10:00:00',
       ends_at: '2026-10-01 11:00:00',
       status: 'scheduled',
-      member: { id: 10, uuid: 'm-10', first_name: 'Ali', last_name: 'Veli' },
+      member: { id: 10, uuid: 'm-10', first_name: 'Ali', last_name: 'Veli', phone: '05551234567' },
       session_package: { id: 1, package_name: 'PT 10' },
       temporal_state: 'in_progress'
     },
@@ -328,7 +336,7 @@ const sampleValidAgenda = {
       starts_at: '2026-10-01 09:00:00',
       ends_at: '2026-10-01 10:00:00',
       status: 'scheduled',
-      member: { id: 11, uuid: 'm-11', first_name: 'Mehmet', last_name: 'Kaya' },
+      member: { id: 11, uuid: 'm-11', first_name: 'Mehmet', last_name: 'Kaya', phone: '05557654321' },
       session_package: null,
       temporal_state: 'past_due'
     }
@@ -340,7 +348,7 @@ const sampleValidAgenda = {
       starts_at: '2026-10-01 08:00:00',
       ends_at: '2026-10-01 09:00:00',
       status: 'completed',
-      member: { id: 12, uuid: 'm-12', first_name: 'Ayşe', last_name: 'Demir' },
+      member: { id: 12, uuid: 'm-12', first_name: 'Ayşe', last_name: 'Demir', phone: null },
       session_package: null,
       temporal_state: 'terminal'
     },
@@ -350,7 +358,7 @@ const sampleValidAgenda = {
       starts_at: '2026-10-01 09:00:00',
       ends_at: '2026-10-01 10:00:00',
       status: 'scheduled',
-      member: { id: 11, uuid: 'm-11', first_name: 'Mehmet', last_name: 'Kaya' },
+      member: { id: 11, uuid: 'm-11', first_name: 'Mehmet', last_name: 'Kaya', phone: '05557654321' },
       session_package: null,
       temporal_state: 'past_due'
     },
@@ -360,7 +368,7 @@ const sampleValidAgenda = {
       starts_at: '2026-10-01 10:00:00',
       ends_at: '2026-10-01 11:00:00',
       status: 'scheduled',
-      member: { id: 10, uuid: 'm-10', first_name: 'Ali', last_name: 'Veli' },
+      member: { id: 10, uuid: 'm-10', first_name: 'Ali', last_name: 'Veli', phone: '05551234567' },
       session_package: { id: 1, package_name: 'PT 10' },
       temporal_state: 'in_progress'
     }
@@ -386,6 +394,20 @@ assert(isTrainerDailyAgenda({
     { ...sampleValidAgenda.appointments[0], temporal_state: 'upcoming' } // completed with upcoming temporal_state
   ]
 }) === false, "Validator rejects terminal status with non-terminal temporal_state");
+assert(isTrainerDailyAgenda({
+  ...sampleValidAgenda,
+  appointments: [
+    { ...sampleValidAgenda.appointments[0], member: { ...sampleValidAgenda.appointments[0].member, phone: '05559999999' } }
+  ]
+}) === false, "Validator rejects terminal status with non-null member.phone");
+assert(isTrainerDailyAgenda({
+  ...sampleValidAgenda,
+  appointments: [
+    sampleValidAgenda.appointments[0],
+    { ...sampleValidAgenda.appointments[1], member: { ...sampleValidAgenda.appointments[1].member, phone: null } },
+    sampleValidAgenda.appointments[2]
+  ]
+}) === true, "Validator accepts scheduled status with null member.phone");
 
 console.log("\n=== 5. Scope Isolation (Zero Changes to UI or Existing Controllers) ===");
 

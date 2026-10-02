@@ -73,3 +73,21 @@ export function buildWhatsAppUrl(phone: string | null | undefined, message?: str
 
   return `https://wa.me/${normalized}`;
 }
+
+export interface TrainerAppointmentWhatsAppMessageInput {
+  firstName: string;
+  startTime: string;
+}
+
+/**
+ * Builds a deterministic neutral WhatsApp contact message for scheduled trainer appointments.
+ * Format: Merhaba {firstName}, bugün saat {HH:mm} için planlanan SO3 PT seansınla ilgili yazıyorum.
+ */
+export function buildTrainerAppointmentWhatsAppMessage(
+  input: TrainerAppointmentWhatsAppMessageInput
+): string {
+  const name = typeof input?.firstName === 'string' ? input.firstName.trim() : '';
+  const time = typeof input?.startTime === 'string' ? input.startTime.trim() : '';
+  return `Merhaba ${name}, bugün saat ${time} için planlanan SO3 PT seansınla ilgili yazıyorum.`;
+}
+

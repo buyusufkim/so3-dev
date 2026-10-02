@@ -170,6 +170,7 @@ export interface TrainerDailyAgendaMember {
   uuid: string;
   first_name: string;
   last_name: string;
+  phone: string | null;
 }
 
 export interface TrainerDailyAgendaSessionPackage {
@@ -353,6 +354,16 @@ export function validateTrainerDailyAgenda(data: unknown): TrainerDailyAgenda {
     if (typeof m.last_name !== 'string' || m.last_name.trim() === '') {
       throw new Error(`TrainerDailyAgenda: member.last_name must be non-empty`);
     }
+    if (m.phone !== null && typeof m.phone !== 'string') {
+      throw new Error(`TrainerDailyAgenda: member.phone must be string or null`);
+    }
+    if (typeof m.phone === 'string' && m.phone.trim() === '') {
+      throw new Error(`TrainerDailyAgenda: member.phone cannot be empty string`);
+    }
+    if (status !== 'scheduled' && m.phone !== null) {
+      throw new Error(`TrainerDailyAgenda: member.phone must be null for terminal status ${status}`);
+    }
+    const memberPhone = m.phone !== null ? (m.phone as string).trim() : null;
 
     // Session package
     let sessionPackage: TrainerDailyAgendaSessionPackage | null = null;
@@ -383,7 +394,8 @@ export function validateTrainerDailyAgenda(data: unknown): TrainerDailyAgenda {
         id: m.id,
         uuid: m.uuid,
         first_name: m.first_name,
-        last_name: m.last_name
+        last_name: m.last_name,
+        phone: memberPhone
       },
       session_package: sessionPackage,
       temporal_state: temporalState

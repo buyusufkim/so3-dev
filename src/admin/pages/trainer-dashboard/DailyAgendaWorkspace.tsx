@@ -7,6 +7,8 @@ import {
 } from "./types";
 import { AppointmentTerminalModal } from "../appointments/AppointmentTerminalModal";
 import { AppointmentTerminalTarget } from "../appointments/types";
+import { WhatsAppContactLink } from "../../components/WhatsAppContactLink";
+import { buildTrainerAppointmentWhatsAppMessage } from "../../utils/whatsapp";
 import {
   ArrowRight,
   RefreshCw,
@@ -269,13 +271,25 @@ export function DailyAgendaWorkspace() {
                       </div>
                     </div>
                   </div>
-                  <Link
-                    to="/admin/my-appointments"
-                    className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#851C35] hover:bg-[#a02240] text-white text-xs font-medium rounded transition min-h-[44px]"
-                  >
-                    Randevuyu Aç
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex flex-col sm:flex-row gap-2 w-full mt-3">
+                    <WhatsAppContactLink
+                      phone={agenda.focus.current.member.phone}
+                      name={`${agenda.focus.current.member.first_name} ${agenda.focus.current.member.last_name}`}
+                      message={buildTrainerAppointmentWhatsAppMessage({
+                        firstName: agenda.focus.current.member.first_name,
+                        startTime: formatWallTime(agenda.focus.current.starts_at)
+                      })}
+                      showDisabledIfInvalid={false}
+                      className="w-full sm:flex-1"
+                    />
+                    <Link
+                      to="/admin/my-appointments"
+                      className="inline-flex items-center justify-center gap-2 w-full sm:flex-1 px-4 py-2.5 bg-[#851C35] hover:bg-[#a02240] text-white text-xs font-medium rounded transition min-h-[44px]"
+                    >
+                      Randevuyu Aç
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               )}
 
@@ -304,13 +318,25 @@ export function DailyAgendaWorkspace() {
                       </div>
                     </div>
                   </div>
-                  <Link
-                    to="/admin/my-appointments"
-                    className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-medium rounded transition min-h-[44px]"
-                  >
-                    Randevulara Git
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex flex-col sm:flex-row gap-2 w-full mt-3">
+                    <WhatsAppContactLink
+                      phone={agenda.focus.next.member.phone}
+                      name={`${agenda.focus.next.member.first_name} ${agenda.focus.next.member.last_name}`}
+                      message={buildTrainerAppointmentWhatsAppMessage({
+                        firstName: agenda.focus.next.member.first_name,
+                        startTime: formatWallTime(agenda.focus.next.starts_at)
+                      })}
+                      showDisabledIfInvalid={false}
+                      className="w-full sm:flex-1"
+                    />
+                    <Link
+                      to="/admin/my-appointments"
+                      className="inline-flex items-center justify-center gap-2 w-full sm:flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-medium rounded transition min-h-[44px]"
+                    >
+                      Randevulara Git
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -344,31 +370,43 @@ export function DailyAgendaWorkspace() {
                         )}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 self-stretch sm:self-center shrink-0 w-full sm:w-auto">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTerminalSelection({
-                            item: buildTerminalTarget(item),
-                            action: 'completed'
-                          });
-                        }}
-                        className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-green-600/80 hover:bg-green-600 transition flex items-center justify-center cursor-pointer"
-                      >
-                        Tamamla
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTerminalSelection({
-                            item: buildTerminalTarget(item),
-                            action: 'no_show'
-                          });
-                        }}
-                        className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-orange-600/80 hover:bg-orange-600 transition flex items-center justify-center cursor-pointer"
-                      >
-                        Gelmedi
-                      </button>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 self-stretch sm:self-center shrink-0 w-full sm:w-auto">
+                      <WhatsAppContactLink
+                        phone={item.member.phone}
+                        name={`${item.member.first_name} ${item.member.last_name}`}
+                        message={buildTrainerAppointmentWhatsAppMessage({
+                          firstName: item.member.first_name,
+                          startTime: formatWallTime(item.starts_at)
+                        })}
+                        showDisabledIfInvalid={false}
+                        className="w-full sm:w-auto"
+                      />
+                      <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTerminalSelection({
+                              item: buildTerminalTarget(item),
+                              action: 'completed'
+                            });
+                          }}
+                          className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-green-600/80 hover:bg-green-600 transition flex items-center justify-center cursor-pointer"
+                        >
+                          Tamamla
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTerminalSelection({
+                              item: buildTerminalTarget(item),
+                              action: 'no_show'
+                            });
+                          }}
+                          className="px-3 py-1.5 min-h-[44px] rounded font-medium text-xs text-white bg-orange-600/80 hover:bg-orange-600 transition flex items-center justify-center cursor-pointer"
+                        >
+                          Gelmedi
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

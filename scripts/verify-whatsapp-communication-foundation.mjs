@@ -225,14 +225,14 @@ assert(
   "TrainerMemberDetail contains zero mutation POST requests"
 );
 
-// Negative check: DailyAgendaWorkspace must NOT contain WhatsApp in F27A
+// Negative check: DailyAgendaWorkspace must NOT construct raw wa.me
 const agendaPath = path.resolve('src/admin/pages/trainer-dashboard/DailyAgendaWorkspace.tsx');
 assert(fs.existsSync(agendaPath), "DailyAgendaWorkspace.tsx exists");
 const agendaSource = fs.readFileSync(agendaPath, 'utf8');
 
 assert(
-  !agendaSource.includes("whatsapp") && !agendaSource.includes("WhatsApp"),
-  "DailyAgendaWorkspace remains completely unchanged without WhatsApp in F27A"
+  !agendaSource.includes("wa.me/"),
+  "DailyAgendaWorkspace contains zero raw wa.me construction"
 );
 
 console.log("\n=== 5. Anti-Feature & Zero-Automation Invariants ===");
