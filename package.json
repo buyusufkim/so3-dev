@@ -73,7 +73,8 @@
     "verify:member-appointment-lifecycle-ui": "node scripts/verify-member-appointment-lifecycle-ui.mjs",
     "verify:trainer-daily-agenda": "node scripts/verify-trainer-daily-agenda.mjs",
     "verify:trainer-daily-agenda-ui": "node scripts/verify-trainer-daily-agenda-ui.mjs",
-    "verify:trainer-daily-terminalization-ui": "node scripts/verify-trainer-daily-terminalization-ui.mjs"
+    "verify:trainer-daily-terminalization-ui": "node scripts/verify-trainer-daily-terminalization-ui.mjs",
+    "verify:whatsapp-communication-foundation": "node scripts/verify-whatsapp-communication-foundation.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

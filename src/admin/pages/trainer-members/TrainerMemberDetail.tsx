@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "./types";
 import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
+import { WhatsAppContactLink } from "../../components/WhatsAppContactLink";
 
 export function TrainerMemberDetail() {
   const { id } = useParams<{ id: string }>();
@@ -118,6 +119,13 @@ export function TrainerMemberDetail() {
             <div className="text-xs lg:text-sm text-white/50 font-mono mt-0.5 lg:mt-1 truncate">{member.uuid}</div>
           </div>
         </div>
+        <div className="w-full sm:w-auto">
+          <WhatsAppContactLink
+            phone={member.phone}
+            name={`${member.first_name} ${member.last_name}`}
+            className="w-full sm:w-auto"
+          />
+        </div>
       </div>
 
       <TrainerMemberWorkspaceNav memberId={member.id} active="member" />
@@ -127,9 +135,16 @@ export function TrainerMemberDetail() {
           <div className="bg-[#121212] border border-white/10 rounded-lg p-4 lg:p-6">
             <h3 className="text-xs lg:text-sm font-semibold uppercase tracking-wider text-white/40 mb-3 lg:mb-4">İletişim Bilgileri</h3>
             <div className="space-y-3 lg:space-y-4 text-sm">
-              <div>
-                <div className="text-white/50 mb-0.5 lg:mb-1">Telefon</div>
-                <div className="font-medium">{member.phone}</div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="text-white/50 mb-0.5 lg:mb-1">Telefon</div>
+                  <div className="font-medium">{member.phone}</div>
+                </div>
+                <WhatsAppContactLink
+                  phone={member.phone}
+                  name={`${member.first_name} ${member.last_name}`}
+                  className="sm:self-end"
+                />
               </div>
               {member.email && (
                 <div>

@@ -444,6 +444,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * cancel and reschedule remain canonical appointment workspace (/admin/my-appointments) concerns
 * zero backend or database schema modifications; existing trainer terminalization endpoints utilized
 
+## F.27A WhatsApp Communication Foundation
+* manual user click-to-chat only; zero background/automated messaging
+* canonical URL base strictly HTTPS `https://wa.me/` (no `whatsapp://`, `api.whatsapp.com`, or `web.whatsapp.com`)
+* strict Turkish mobile phone normalization to `905XXXXXXXXX` via `normalizeWhatsAppPhone`
+* invalid or non-mobile numbers safely produce no clickable link (graceful disabled state)
+* zero WhatsApp Business Cloud API, credentials, webhooks, or external service dependencies
+* zero message logging, conversation history tracking, or database/audit writes on contact actions
+* existing backend member phone authorization strictly preserved (`TrainerMemberController` enforces `m.trainer_id = ?`)
+* trainer member detail workspace (`/admin/my-members/:id`) acts as the first canonical integration surface
+* `DailyAgendaWorkspace` remains completely unchanged in F.27A; agenda quick-contact deferred to F.27B
+
+
 
 
 
