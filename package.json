@@ -75,7 +75,8 @@
     "verify:trainer-daily-agenda-ui": "node scripts/verify-trainer-daily-agenda-ui.mjs",
     "verify:trainer-daily-terminalization-ui": "node scripts/verify-trainer-daily-terminalization-ui.mjs",
     "verify:whatsapp-communication-foundation": "node scripts/verify-whatsapp-communication-foundation.mjs",
-    "verify:trainer-daily-whatsapp-ui": "node scripts/verify-trainer-daily-whatsapp-ui.mjs"
+    "verify:trainer-daily-whatsapp-ui": "node scripts/verify-trainer-daily-whatsapp-ui.mjs",
+    "verify:trainer-whatsapp-quick-messages": "node scripts/verify-trainer-whatsapp-quick-messages.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

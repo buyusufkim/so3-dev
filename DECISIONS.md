@@ -467,6 +467,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * general chronological appointments timeline intentionally does not show WhatsApp action
 * zero automatic messaging, background jobs, external WhatsApp Business API, or webhook integrations
 
+## F.27C Trainer Member WhatsApp Quick Messages
+* trainer member detail workspace (`/admin/my-members/:id`) provides three deterministic WhatsApp quick messages
+* exactly three intents supported: `general` ("Genel İletişim"), `appointment_reminder` ("Randevu Hatırlatma"), `follow_up` ("Takip Mesajı")
+* pure deterministic helper `buildTrainerWhatsAppQuickMessage` constructs Turkish message templates
+* member first name used with whitespace trim; graceful neutral fallback ("Merhaba, ...") if empty
+* sensitive data strictly excluded (no surname, measurements, health data, packages, or payment details)
+* single bounded disabled/empty state rendered when member phone is invalid or missing
+* click-only model via canonical `WhatsAppContactLink` (explicit user anchor click only)
+* zero free-text editor, zero template management/CRUD, zero auto-send or background scheduling
+* zero delivery status claims ("Gönderildi"), zero communication logging or database persistence
+* zero backend or database changes; existing canonical direct WhatsApp contact actions preserved
+
+
 
 
 

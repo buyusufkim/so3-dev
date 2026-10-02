@@ -91,3 +91,36 @@ export function buildTrainerAppointmentWhatsAppMessage(
   return `Merhaba ${name}, bugün saat ${time} için planlanan SO3 PT seansınla ilgili yazıyorum.`;
 }
 
+export type TrainerWhatsAppQuickMessageKind =
+  | 'general'
+  | 'appointment_reminder'
+  | 'follow_up';
+
+export interface TrainerWhatsAppQuickMessageInput {
+  kind: TrainerWhatsAppQuickMessageKind;
+  firstName: string;
+}
+
+/**
+ * Builds deterministic neutral WhatsApp quick messages for trainer-member communication.
+ * Strictly supports 3 intents: 'general', 'appointment_reminder', 'follow_up'.
+ * Uses first name with whitespace trim; provides neutral 'Merhaba, ...' fallback when empty.
+ */
+export function buildTrainerWhatsAppQuickMessage(
+  input: TrainerWhatsAppQuickMessageInput
+): string {
+  const name = typeof input?.firstName === 'string' ? input.firstName.trim() : '';
+  const greeting = name ? `Merhaba ${name},` : 'Merhaba,';
+
+  switch (input.kind) {
+    case 'general':
+      return `${greeting} SO3 PT'den seninle iletişime geçiyorum.`;
+    case 'appointment_reminder':
+      return `${greeting} yaklaşan SO3 PT seansını hatırlatmak için yazıyorum.`;
+    case 'follow_up':
+      return `${greeting} antrenman sürecinin nasıl gittiğini öğrenmek için yazıyorum.`;
+    default:
+      return `${greeting} SO3 PT'den seninle iletişime geçiyorum.`;
+  }
+}
+

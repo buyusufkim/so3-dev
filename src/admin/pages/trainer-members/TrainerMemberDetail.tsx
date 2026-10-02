@@ -5,6 +5,7 @@ import { apiClient, ApiError } from "../../api/client";
 import { TrainerMemberDetail as ITrainerMemberDetail, isTrainerMemberDetail } from "./types";
 import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
 import { WhatsAppContactLink } from "../../components/WhatsAppContactLink";
+import { TrainerWhatsAppQuickActions } from "../../components/TrainerWhatsAppQuickActions";
 
 export function TrainerMemberDetail() {
   const { id } = useParams<{ id: string }>();
@@ -129,6 +130,12 @@ export function TrainerMemberDetail() {
       </div>
 
       <TrainerMemberWorkspaceNav memberId={member.id} active="member" />
+
+      <TrainerWhatsAppQuickActions
+        phone={member.phone}
+        firstName={member.first_name}
+        fullName={`${member.first_name} ${member.last_name}`}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
         <div className="space-y-4 lg:space-y-6">
