@@ -6,6 +6,7 @@ import {
   isTrainerDashboardData
 } from "./types";
 import { DailyAgendaWorkspace } from "./DailyAgendaWorkspace";
+import { TrainerRetentionAttentionPanel } from "./TrainerRetentionAttentionPanel";
 import {
   Users,
   Dumbbell,
@@ -201,6 +202,11 @@ export function TrainerDashboard() {
       {/* F.26B: Günlük Çalışma Alanı (Mobile order-1, renders right after Header) */}
       <div className="order-1 lg:order-none">
         <DailyAgendaWorkspace />
+      </div>
+
+      {/* F.28C: Uzun Süredir Gelmeyenler (Mobile order-2, renders after Daily Agenda) */}
+      <div className="order-2 lg:order-none">
+        <TrainerRetentionAttentionPanel />
       </div>
 
       {/* Member Metrics */}

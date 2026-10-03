@@ -507,6 +507,21 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * Europe/Istanbul timezone authority in PHP; zero DB CURDATE()/NOW() authority
 * read-only foundation only: zero writes, zero CRM models, zero WhatsApp backend behavior, zero UI in F28B
 
+## F.28C Trainer Retention Attention UI
+* independent operational panel (`TrainerRetentionAttentionPanel.tsx`) mounted on `/admin/trainer`
+* consumes dedicated F28B read model (`GET /api/trainer/retention-attention`)
+* independent lifecycle: own data, loading, error, and retry states; errors isolated from parent dashboard
+* race-safe fetch architecture with AbortController, request generation counter, and mounted guard
+* runtime validation via `validateTrainerRetentionAttention` before writing to state
+* server-authoritative inactivity context: displays `inactivity_days` and `last_completed_at` without browser date recalculation
+* preserves API ordering (oldest inactive first); zero client-side `.sort()` or filtering controls
+* neutral check-in outreach: reuses existing F.27C `follow_up` WhatsApp message template
+* canonical click-to-chat via `WhatsAppContactLink`; absent if phone missing/invalid
+* direct member navigation via `/admin/my-members/{id}` ("Üyeyi Aç")
+* mobile-first layout: placed after Daily Agenda (`order-2 lg:order-none`), touch targets >= 44px
+* zero mutation methods (`apiClient.get` only), zero CRM models, zero contacted state tracking, zero churn scoring
+
+
 
 
 
