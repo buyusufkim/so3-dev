@@ -492,6 +492,22 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero retention scoring, segmentation, stages, leads, or churn probability models
 * zero backend or database schema changes; existing canonical renewal mutation flow remains completely unchanged
 
+## F.28B Trainer Retention Attention Read Model
+* dedicated trainer GET read model (`GET /api/trainer/retention-attention`) separate from legacy dashboard
+* 14-day fixed inactivity threshold (`INACTIVITY_DAYS = 14`); boundary inclusive
+* completed appointments only define successful activity (`a.status = 'completed'`)
+* current trainer appointments only (`a.trainer_id = m.trainer_id`); previous trainer sessions ignored
+* active/non-deleted members only (`m.status = 'active'`, `m.deleted_at IS NULL`)
+* expired memberships excluded (`m.membership_end_date IS NULL OR m.membership_end_date >= business_date`)
+* members with current/future scheduled appointment excluded (`a2.starts_at >= business_now`); past-due scheduled do not suppress
+* never-completed members excluded from inactivity attention
+* maximum 20 candidates returned (`LIMIT 20`)
+* chronological inactivity ordering (`last_completed_at ASC, member_id ASC`), zero churn/risk scoring
+* safe PII boundary: member id/uuid/names/phone, last_completed_at, inactivity_days only
+* Europe/Istanbul timezone authority in PHP; zero DB CURDATE()/NOW() authority
+* read-only foundation only: zero writes, zero CRM models, zero WhatsApp backend behavior, zero UI in F28B
+
+
 
 
 

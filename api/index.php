@@ -606,6 +606,16 @@ if (isset($routes[$method][$requestUri])) {
         }
     }
 
+    // Dynamic matching for trainer retention attention endpoint
+    if (preg_match('#^/api/trainer/retention-attention$#', $requestUri)) {
+        AuthMiddleware::hasRole(['trainer']);
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/TrainerRetentionAttentionController.php';
+            (new \Controllers\TrainerRetentionAttentionController())->index();
+            $matched = true;
+        }
+    }
+
     if ($requestUri === '/api/trainer/availability') {
         AuthMiddleware::handle();
         AuthMiddleware::hasRole(['trainer']);

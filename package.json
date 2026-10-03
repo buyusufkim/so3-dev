@@ -77,7 +77,8 @@
     "verify:whatsapp-communication-foundation": "node scripts/verify-whatsapp-communication-foundation.mjs",
     "verify:trainer-daily-whatsapp-ui": "node scripts/verify-trainer-daily-whatsapp-ui.mjs",
     "verify:trainer-whatsapp-quick-messages": "node scripts/verify-trainer-whatsapp-quick-messages.mjs",
-    "verify:renewal-retention-actions": "node scripts/verify-renewal-retention-actions.mjs"
+    "verify:renewal-retention-actions": "node scripts/verify-renewal-retention-actions.mjs",
+    "verify:trainer-retention-attention": "node scripts/verify-trainer-retention-attention.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
