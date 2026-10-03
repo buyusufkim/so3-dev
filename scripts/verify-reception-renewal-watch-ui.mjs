@@ -106,7 +106,7 @@ assert(
 
 // Negative test 4: Notification domain detection
 function testNotificationDomainDetection(source) {
-  const notificationTerms = ["unread", "markRead", "dismiss", "snooze", "notificationId", "push", "SMS", "WhatsApp"];
+  const notificationTerms = ["unread", "markRead", "dismiss", "snooze", "notificationId", "push", "SMS"];
   return notificationTerms.some(term => new RegExp(`\\b${term}\\b`, 'i').test(source));
 }
 assert(
@@ -376,11 +376,27 @@ for (const ft of financialTerms) {
   );
 }
 
-console.log("\n=== 13. Notification Boundary ===");
+console.log("\n=== 13. Notification Boundary & WhatsApp Outreach Safety ===");
 
 assert(
   !testNotificationDomainDetection(panelSource),
-  "Notification boundary: No notification domain terms present in watch panel"
+  "Notification boundary: No notification persistence/delivery domain terms present in watch panel"
+);
+assert(
+  panelSource.includes("WhatsAppContactLink"),
+  "Canonical WhatsAppContactLink component is used"
+);
+assert(
+  !panelSource.includes("wa.me/"),
+  "Zero direct wa.me construction in ReceptionRenewalWatchPanel"
+);
+assert(
+  !panelSource.includes("apiClient.post") && !panelSource.includes("apiClient.patch"),
+  "Zero contact mutation requests in ReceptionRenewalWatchPanel"
+);
+assert(
+  panelSource.includes("onRenew(item)"),
+  "Renewal mutation remains delegated via onRenew(item)"
 );
 
 console.log("\n=== 14. Touch & Accessibility Safety ===");

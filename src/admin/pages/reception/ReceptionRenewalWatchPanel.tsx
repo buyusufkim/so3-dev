@@ -7,6 +7,8 @@ import {
   ReceptionRenewalWatchResponse
 } from "./types";
 import { RotateCcw, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { WhatsAppContactLink } from "../../components/WhatsAppContactLink";
+import { buildRenewalRetentionWhatsAppMessage } from "../../utils/whatsapp";
 
 export interface ReceptionRenewalWatchPanelProps {
   refreshKey: number;
@@ -415,6 +417,10 @@ export function ReceptionRenewalWatchPanel({
             {data.items.map((item) => {
               const isThisRenewing = renewingMemberId === item.id;
               const daysCopy = formatDaysCopy(item.renewal_state, item.days_until_expiry);
+              const retentionMessage = buildRenewalRetentionWhatsAppMessage({
+                state: item.renewal_state,
+                firstName: item.first_name
+              });
 
               let badgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
               let badgeLabel = 'Yaklaşıyor';
@@ -461,7 +467,15 @@ export function ReceptionRenewalWatchPanel({
                     </div>
                   </div>
 
-                  <div className="flex items-center shrink-0">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+                    <WhatsAppContactLink
+                      phone={item.phone}
+                      name={`${item.first_name} ${item.last_name}`}
+                      label="WhatsApp"
+                      message={retentionMessage}
+                      showDisabledIfInvalid={false}
+                      className="w-full sm:w-auto"
+                    />
                     <button
                       type="button"
                       onClick={() => onRenew(item)}

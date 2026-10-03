@@ -124,3 +124,36 @@ export function buildTrainerWhatsAppQuickMessage(
   }
 }
 
+export type RenewalRetentionState =
+  | 'expired'
+  | 'today'
+  | 'upcoming';
+
+export interface RenewalRetentionWhatsAppMessageInput {
+  state: RenewalRetentionState;
+  firstName: string;
+}
+
+/**
+ * Builds deterministic neutral WhatsApp quick messages for membership renewal retention outreach.
+ * Uses member first name with whitespace trim; provides neutral 'Merhaba, ...' fallback when empty.
+ * Server renewal_state is authoritative: 'upcoming', 'today', 'expired'.
+ */
+export function buildRenewalRetentionWhatsAppMessage(
+  input: RenewalRetentionWhatsAppMessageInput
+): string {
+  const name = typeof input?.firstName === 'string' ? input.firstName.trim() : '';
+  const greeting = name ? `Merhaba ${name},` : 'Merhaba,';
+
+  switch (input.state) {
+    case 'upcoming':
+      return `${greeting} SO3 PT üyeliğinin bitiş tarihi yaklaşıyor. Yenileme konusunda yardımcı olmak için yazıyorum.`;
+    case 'today':
+      return `${greeting} SO3 PT üyeliğin bugün sona eriyor. Yenileme konusunda yardımcı olmak için yazıyorum.`;
+    case 'expired':
+      return `${greeting} SO3 PT üyeliğinin süresi doldu. Devam etmek istersen yenileme konusunda yardımcı olmak için yazıyorum.`;
+    default:
+      return `${greeting} SO3 PT üyeliğinin bitiş tarihi yaklaşıyor. Yenileme konusunda yardımcı olmak için yazıyorum.`;
+  }
+}
+

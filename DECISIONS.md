@@ -479,6 +479,20 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero delivery status claims ("Gönderildi"), zero communication logging or database persistence
 * zero backend or database changes; existing canonical direct WhatsApp contact actions preserved
 
+## F.28A Renewal Retention Quick Actions
+* F28 starts from existing Renewal Watch read model (`GET /api/reception/renewal-watch`) rather than new CRM domain
+* retention action = WhatsApp quick outreach + canonical renewal (`onRenew`)
+* server `renewal_state` (`upcoming`, `today`, `expired`) is authoritative; zero client-side date recomputation
+* one deterministic service-oriented message per renewal state via `buildRenewalRetentionWhatsAppMessage`
+* member first name used with whitespace trim; neutral fallback ("Merhaba, ...") if empty; zero surname or financial data
+* click-only model via canonical `WhatsAppContactLink` (explicit user anchor click only)
+* invalid phone results in clean absence of WhatsApp button (`showDisabledIfInvalid={false}`); Yenile action unaffected
+* zero contact logging, contacted_at timestamps, or sent/delivery claims ("Mesaj Gönderildi")
+* zero WhatsApp Business API, webhooks, or background/automated messaging
+* zero retention scoring, segmentation, stages, leads, or churn probability models
+* zero backend or database schema changes; existing canonical renewal mutation flow remains completely unchanged
+
+
 
 
 
