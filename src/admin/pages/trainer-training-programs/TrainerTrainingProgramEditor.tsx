@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useBlocker } from "react-router-dom";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
@@ -6,8 +6,11 @@ import {
   isTrainerTrainingProgramDetail,
   isTrainerTrainingProgramCreateResponse,
   isTrainingProgramStatus,
-  isSuccessResponse
+  isSuccessResponse,
+  TrainerProgramDay,
+  TrainerProgramExercise
 } from "./types";
+import { TrainerProgramDaysPanel } from "./TrainerProgramDaysPanel";
 import { TrainerProgramExercisesPanel } from "./TrainerProgramExercisesPanel";
 
 class ContractValidationError extends Error {
@@ -74,6 +77,22 @@ export function TrainerTrainingProgramEditor() {
 
   const [memberInfo, setMemberInfo] = useState<{ id: number; name: string } | null>(null);
   const [trainerInfo, setTrainerInfo] = useState<{ id: number; name: string } | null>(null);
+
+  const [programDays, setProgramDays] = useState<TrainerProgramDay[]>([]);
+  const [exercises, setExercises] = useState<TrainerProgramExercise[]>([]);
+  const [exerciseRefreshKey, setExerciseRefreshKey] = useState(0);
+
+  const handleDaysChange = useCallback((days: TrainerProgramDay[]) => {
+    setProgramDays(days);
+  }, []);
+
+  const handleDayDeleted = useCallback(() => {
+    setExerciseRefreshKey((k) => k + 1);
+  }, []);
+
+  const handleExercisesChange = useCallback((exs: TrainerProgramExercise[]) => {
+    setExercises(exs);
+  }, []);
 
   const isDirty =
     formData.title !== initialSnapshot.title ||
@@ -460,10 +479,23 @@ export function TrainerTrainingProgramEditor() {
       </form>
 
       {!isNew && canonicalProgramId ? (
-        <TrainerProgramExercisesPanel programId={parseInt(canonicalProgramId, 10)} />
+        <div className="space-y-8">
+          <TrainerProgramDaysPanel
+            programId={parseInt(canonicalProgramId, 10)}
+            onDaysChange={handleDaysChange}
+            onDayDeleted={handleDayDeleted}
+            exercises={exercises}
+          />
+          <TrainerProgramExercisesPanel
+            programId={parseInt(canonicalProgramId, 10)}
+            programDays={programDays}
+            refreshKey={exerciseRefreshKey}
+            onExercisesChange={handleExercisesChange}
+          />
+        </div>
       ) : (
         <div className="bg-[#121212] border border-white/10 rounded-xl p-6 text-center text-white/50 text-sm">
-          Egzersiz eklemek için önce programı kaydedin.
+          Program günleri ve egzersiz eklemek için önce programı kaydedin.
         </div>
       )}
     </div>

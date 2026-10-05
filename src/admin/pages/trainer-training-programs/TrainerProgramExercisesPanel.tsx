@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Pen, Trash2, Plus, X } from "lucide-react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { Pen, Trash2, Plus, X, Calendar, Dumbbell } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
+  TrainerProgramDay,
   TrainerProgramExercise,
   isTrainerProgramExerciseArray,
   isTrainerProgramExerciseCreateResponse,
@@ -10,6 +11,9 @@ import {
 
 interface TrainerProgramExercisesPanelProps {
   programId: number;
+  programDays?: TrainerProgramDay[];
+  refreshKey?: number;
+  onExercisesChange?: (exercises: TrainerProgramExercise[]) => void;
 }
 
 class ContractValidationError extends Error {
@@ -27,6 +31,7 @@ interface ExerciseFormData {
   restSeconds: string;
   instructions: string;
   sortOrder: string;
+  programDayId: string;
 }
 
 const DEFAULT_FORM_DATA: ExerciseFormData = {
@@ -36,7 +41,8 @@ const DEFAULT_FORM_DATA: ExerciseFormData = {
   durationSeconds: "",
   restSeconds: "",
   instructions: "",
-  sortOrder: "0"
+  sortOrder: "0",
+  programDayId: ""
 };
 
 const getErrorMessage = (err: unknown): string => {
@@ -61,7 +67,12 @@ const getErrorMessage = (err: unknown): string => {
   return "Beklenmeyen bir hata oluştu.";
 };
 
-export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExercisesPanelProps) {
+export function TrainerProgramExercisesPanel({
+  programId,
+  programDays = [],
+  refreshKey = 0,
+  onExercisesChange
+}: TrainerProgramExercisesPanelProps) {
   const [exercises, setExercises] = useState<TrainerProgramExercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +89,12 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
 
   const isSubmitting = useRef(false);
   const isDeleting = useRef(false);
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestGenRef = useRef(0);
+
+  const onExercisesChangeRef = useRef(onExercisesChange);
+  onExercisesChangeRef.current = onExercisesChange;
 
   const isDirty =
     formData.exerciseName !== initialSnapshot.exerciseName ||
@@ -86,29 +103,57 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
     formData.durationSeconds !== initialSnapshot.durationSeconds ||
     formData.restSeconds !== initialSnapshot.restSeconds ||
     formData.instructions !== initialSnapshot.instructions ||
-    formData.sortOrder !== initialSnapshot.sortOrder;
+    formData.sortOrder !== initialSnapshot.sortOrder ||
+    formData.programDayId !== initialSnapshot.programDayId;
 
-  const fetchExercises = async () => {
+  const fetchExercises = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentGen = ++requestGenRef.current;
+
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`);
+      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`, {
+        signal: controller.signal
+      });
+
+      if (!isMountedRef.current || currentGen !== requestGenRef.current) return;
+
       if (!isTrainerProgramExerciseArray(res)) {
         throw new ContractValidationError("Egzersiz verisi doğrulanamadı.");
       }
+
       setExercises(res);
+      if (onExercisesChangeRef.current) {
+        onExercisesChangeRef.current(res);
+      }
     } catch (err: unknown) {
+      if (!isMountedRef.current || currentGen !== requestGenRef.current) return;
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && currentGen === requestGenRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [programId]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     if (programId > 0) {
       fetchExercises();
     }
-  }, [programId]);
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [programId, refreshKey, fetchExercises]);
 
   const resetForm = () => {
     setFormData(DEFAULT_FORM_DATA);
@@ -118,7 +163,7 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
     setIsModalOpen(false);
   };
 
-  const openNewModal = () => {
+  const openNewModal = (presetDayId?: number | null) => {
     setEditingId(null);
     const nextSort = exercises.length > 0 ? Math.max(...exercises.map((e) => e.sort_order)) + 1 : 0;
     const initial: ExerciseFormData = {
@@ -128,7 +173,8 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
       durationSeconds: "",
       restSeconds: "",
       instructions: "",
-      sortOrder: nextSort.toString()
+      sortOrder: nextSort.toString(),
+      programDayId: presetDayId ? presetDayId.toString() : ""
     };
     setFormData(initial);
     setInitialSnapshot(initial);
@@ -145,7 +191,8 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
       durationSeconds: ex.duration_seconds === null ? "" : ex.duration_seconds.toString(),
       restSeconds: ex.rest_seconds === null ? "" : ex.rest_seconds.toString(),
       instructions: ex.instructions === null ? "" : ex.instructions,
-      sortOrder: ex.sort_order.toString()
+      sortOrder: ex.sort_order.toString(),
+      programDayId: ex.program_day_id !== null && ex.program_day_id !== undefined ? ex.program_day_id.toString() : ""
     };
     setFormData(initial);
     setInitialSnapshot(initial);
@@ -181,6 +228,22 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
     const payload: Record<string, unknown> = {
       exercise_name: trimmedName
     };
+
+    // Day validation & assignment
+    if (formData.programDayId !== "") {
+      if (!/^[1-9]\d*$/.test(formData.programDayId)) {
+        setFormError("Geçersiz program günü seçimi.");
+        return;
+      }
+      const dayIdNum = parseInt(formData.programDayId, 10);
+      if (programDays.length > 0 && !programDays.some((d) => d.id === dayIdNum)) {
+        setFormError("Seçilen program günü bu programa ait değil.");
+        return;
+      }
+      payload.program_day_id = dayIdNum;
+    } else {
+      payload.program_day_id = null;
+    }
 
     if (formData.sets !== "") {
       if (!/^[1-9]\d*$/.test(formData.sets)) {
@@ -307,14 +370,159 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
     return <div id="trainer-exercises-loading" className="text-white/50 text-sm py-4">Egzersizler yükleniyor...</div>;
   }
 
+  // Sorted program days
+  const sortedDays = [...programDays].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  const unassignedExercises = exercises.filter(
+    (ex) => ex.program_day_id === null || !programDays.some((d) => d.id === ex.program_day_id)
+  );
+
+  const renderExerciseItems = (list: TrainerProgramExercise[]) => (
+    <>
+      {/* Mobile Cards (< lg) */}
+      <div className="lg:hidden divide-y divide-white/10">
+        {list.map((ex) => (
+          <div key={ex.id} className="p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <span className="shrink-0 px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
+                  #{ex.sort_order}
+                </span>
+                <h4 className="font-semibold text-white text-base leading-snug">
+                  {ex.exercise_name}
+                </h4>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
+              <div>
+                <span className="text-white/40 block text-[10px] uppercase font-medium">Set</span>
+                <span className="mt-0.5 block text-white/80 font-medium">{ex.sets ?? "-"}</span>
+              </div>
+              <div>
+                <span className="text-white/40 block text-[10px] uppercase font-medium">Tekrar</span>
+                <span className="mt-0.5 block text-white/80 font-medium">{ex.repetitions ?? "-"}</span>
+              </div>
+              <div>
+                <span className="text-white/40 block text-[10px] uppercase font-medium">Süre</span>
+                <span className="mt-0.5 block text-white/80 font-medium">{ex.duration_seconds ? `${ex.duration_seconds} sn` : "-"}</span>
+              </div>
+              <div>
+                <span className="text-white/40 block text-[10px] uppercase font-medium">Dinlenme</span>
+                <span className="mt-0.5 block text-white/80 font-medium">{ex.rest_seconds !== null && ex.rest_seconds !== undefined ? `${ex.rest_seconds} sn` : "-"}</span>
+              </div>
+            </div>
+
+            {ex.instructions && (
+              <div className="text-xs text-white/60 bg-white/[0.01] p-2.5 rounded-lg border border-white/5">
+                <span className="font-semibold text-white/80">Talimat: </span>
+                <span>{ex.instructions}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => openEditModal(ex)}
+                className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition"
+                aria-label="Egzersizi Düzenle"
+              >
+                <Pen className="w-3.5 h-3.5" />
+                Düzenle
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(ex.id)}
+                disabled={deletingId === ex.id}
+                className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                aria-label="Egzersizi Sil"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Sil
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table (>= lg) */}
+      <div className="hidden lg:block overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-white/5 border-b border-white/10">
+            <tr>
+              <th className="px-4 py-3 font-medium text-white/70">Sıra</th>
+              <th className="px-4 py-3 font-medium text-white/70">Egzersiz Adı</th>
+              <th className="px-4 py-3 font-medium text-white/70">Set</th>
+              <th className="px-4 py-3 font-medium text-white/70">Tekrar</th>
+              <th className="px-4 py-3 font-medium text-white/70">Süre (sn)</th>
+              <th className="px-4 py-3 font-medium text-white/70">Dinlenme (sn)</th>
+              <th className="px-4 py-3 font-medium text-white/70 text-right">İşlemler</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {list.map((ex) => (
+              <React.Fragment key={ex.id}>
+                <tr id={`trainer-exercise-row-${ex.id}`} className="hover:bg-white/5 transition-colors">
+                  <td className="px-4 py-3 text-white/70">{ex.sort_order}</td>
+                  <td className="px-4 py-3 font-medium">{ex.exercise_name}</td>
+                  <td className="px-4 py-3 text-white/70">{ex.sets ?? "-"}</td>
+                  <td className="px-4 py-3 text-white/70">{ex.repetitions ?? "-"}</td>
+                  <td className="px-4 py-3 text-white/70">{ex.duration_seconds ?? "-"}</td>
+                  <td className="px-4 py-3 text-white/70">{ex.rest_seconds ?? "-"}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        id={`btn-edit-exercise-${ex.id}`}
+                        type="button"
+                        onClick={() => openEditModal(ex)}
+                        className="p-2 hover:bg-white/10 rounded-lg transition text-white/70 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title="Düzenle"
+                      >
+                        <Pen className="w-4 h-4" />
+                      </button>
+                      <button
+                        id={`btn-delete-exercise-${ex.id}`}
+                        type="button"
+                        onClick={() => handleDelete(ex.id)}
+                        disabled={deletingId === ex.id}
+                        className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-500/70 hover:text-red-500 disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {ex.instructions && (
+                  <tr id={`trainer-exercise-instructions-${ex.id}`} className="bg-white/[0.02]">
+                    <td colSpan={7} className="px-4 py-2 text-xs text-white/50">
+                      <span className="font-semibold text-white/70">Talimat:</span> {ex.instructions}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+
   return (
-    <div id="trainer-program-exercises-panel" className="space-y-4">
+    <div id="trainer-program-exercises-panel" className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold">Egzersizler</h3>
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Dumbbell className="w-5 h-5 text-white/70" />
+            Egzersizler
+          </h3>
+          <p className="text-xs sm:text-sm text-white/50 mt-0.5">
+            Program egzersizlerini yönetin, günlere atayın veya sırasını belirleyin.
+          </p>
+        </div>
         <button
           id="btn-add-exercise"
           type="button"
-          onClick={openNewModal}
+          onClick={() => openNewModal(null)}
           className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition shadow-sm shrink-0"
         >
           <Plus className="w-4 h-4" />
@@ -329,140 +537,100 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
       )}
 
       {exercises.length === 0 ? (
-        <div id="trainer-exercises-empty" className="text-center py-8 text-white/50 border border-white/10 rounded-xl">
+        <div id="trainer-exercises-empty" className="text-center py-8 text-white/50 border border-white/10 rounded-xl bg-[#121212]">
           Henüz egzersiz eklenmemiş.
         </div>
-      ) : (
-        <div id="trainer-exercises-table-container" className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden shadow-sm">
-          {/* Mobile Cards (< lg) */}
-          <div className="lg:hidden divide-y divide-white/10">
-            {exercises.map((ex) => (
-              <div key={ex.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <span className="shrink-0 px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
-                      #{ex.sort_order}
-                    </span>
-                    <h4 className="font-semibold text-white text-base leading-snug">
-                      {ex.exercise_name}
-                    </h4>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase font-medium">Set</span>
-                    <span className="mt-0.5 block text-white/80 font-medium">{ex.sets ?? "-"}</span>
-                  </div>
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase font-medium">Tekrar</span>
-                    <span className="mt-0.5 block text-white/80 font-medium">{ex.repetitions ?? "-"}</span>
-                  </div>
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase font-medium">Süre</span>
-                    <span className="mt-0.5 block text-white/80 font-medium">{ex.duration_seconds ? `${ex.duration_seconds} sn` : "-"}</span>
-                  </div>
-                  <div>
-                    <span className="text-white/40 block text-[10px] uppercase font-medium">Dinlenme</span>
-                    <span className="mt-0.5 block text-white/80 font-medium">{ex.rest_seconds !== null && ex.rest_seconds !== undefined ? `${ex.rest_seconds} sn` : "-"}</span>
-                  </div>
-                </div>
-
-                {ex.instructions && (
-                  <div className="text-xs text-white/60 bg-white/[0.01] p-2.5 rounded-lg border border-white/5">
-                    <span className="font-semibold text-white/80">Talimat: </span>
-                    <span>{ex.instructions}</span>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(ex)}
-                    className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition"
-                    aria-label="Egzersizi Düzenle"
-                  >
-                    <Pen className="w-3.5 h-3.5" />
-                    Düzenle
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(ex.id)}
-                    disabled={deletingId === ex.id}
-                    className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
-                    aria-label="Egzersizi Sil"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Sil
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Desktop Table (>= lg) */}
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 border-b border-white/10">
-                <tr>
-                  <th className="px-4 py-3 font-medium text-white/70">Sıra</th>
-                  <th className="px-4 py-3 font-medium text-white/70">Egzersiz Adı</th>
-                  <th className="px-4 py-3 font-medium text-white/70">Set</th>
-                  <th className="px-4 py-3 font-medium text-white/70">Tekrar</th>
-                  <th className="px-4 py-3 font-medium text-white/70">Süre (sn)</th>
-                  <th className="px-4 py-3 font-medium text-white/70">Dinlenme (sn)</th>
-                  <th className="px-4 py-3 font-medium text-white/70 text-right">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {exercises.map((ex) => (
-                  <React.Fragment key={ex.id}>
-                    <tr id={`trainer-exercise-row-${ex.id}`} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3 text-white/70">{ex.sort_order}</td>
-                      <td className="px-4 py-3 font-medium">{ex.exercise_name}</td>
-                      <td className="px-4 py-3 text-white/70">{ex.sets ?? "-"}</td>
-                      <td className="px-4 py-3 text-white/70">{ex.repetitions ?? "-"}</td>
-                      <td className="px-4 py-3 text-white/70">{ex.duration_seconds ?? "-"}</td>
-                      <td className="px-4 py-3 text-white/70">{ex.rest_seconds ?? "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            id={`btn-edit-exercise-${ex.id}`}
-                            type="button"
-                            onClick={() => openEditModal(ex)}
-                            className="p-2 hover:bg-white/10 rounded-lg transition text-white/70 hover:text-white"
-                            title="Düzenle"
-                          >
-                            <Pen className="w-4 h-4" />
-                          </button>
-                          <button
-                            id={`btn-delete-exercise-${ex.id}`}
-                            type="button"
-                            onClick={() => handleDelete(ex.id)}
-                            disabled={deletingId === ex.id}
-                            className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-500/70 hover:text-red-500 disabled:opacity-50"
-                            title="Sil"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {ex.instructions && (
-                      <tr id={`trainer-exercise-instructions-${ex.id}`} className="bg-white/[0.02]">
-                        <td colSpan={7} className="px-4 py-2 text-xs text-white/50">
-                          <span className="font-semibold text-white/70">Talimat:</span> {ex.instructions}
-                        </td>
-                      </tr>
+      ) : sortedDays.length > 0 ? (
+        /* Grouped Presentation by Program Day */
+        <div id="trainer-exercises-table-container" className="space-y-5">
+          {sortedDays.map((day) => {
+            const dayExercises = exercises.filter((ex) => ex.program_day_id === day.id);
+            return (
+              <div
+                key={day.id}
+                id={`trainer-day-exercise-group-${day.id}`}
+                className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden shadow-sm"
+              >
+                <div className="p-4 bg-white/[0.02] border-b border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className="px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
+                        #{day.sort_order}
+                      </span>
+                      <h4 className="font-semibold text-white text-base">
+                        {day.title}
+                      </h4>
+                      <span className="text-xs text-white/50 font-medium px-2 py-0.5 rounded bg-white/5">
+                        {dayExercises.length} egzersiz
+                      </span>
+                    </div>
+                    {day.notes && (
+                      <p className="text-xs text-white/50">{day.notes}</p>
                     )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </div>
+                  <button
+                    id={`btn-add-exercise-day-${day.id}`}
+                    type="button"
+                    onClick={() => openNewModal(day.id)}
+                    className="w-full sm:w-auto min-h-[36px] flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Bu Güne Egzersiz Ekle
+                  </button>
+                </div>
+
+                {dayExercises.length === 0 ? (
+                  <div className="p-6 text-center text-white/40 text-sm">
+                    Bu güne henüz egzersiz atanmamış.
+                  </div>
+                ) : (
+                  renderExerciseItems(dayExercises)
+                )}
+              </div>
+            );
+          })}
+
+          {/* Unassigned / Legacy Exercises Section */}
+          {unassignedExercises.length > 0 && (
+            <div
+              id="trainer-unassigned-exercises-group"
+              className="bg-[#121212] border border-amber-500/20 rounded-xl overflow-hidden shadow-sm"
+            >
+              <div className="p-4 bg-amber-500/[0.03] border-b border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h4 className="font-semibold text-white text-base">
+                      Gün Atanmamış Egzersizler
+                    </h4>
+                    <span className="text-xs text-amber-400 font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                      {unassignedExercises.length} egzersiz
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50 mt-0.5">
+                    Bu egzersizler herhangi bir program gününe atanmamış. Düzenleyerek bir güne atayabilirsiniz.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openNewModal(null)}
+                  className="w-full sm:w-auto min-h-[36px] flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Atanmamış Egzersiz Ekle
+                </button>
+              </div>
+              {renderExerciseItems(unassignedExercises)}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Flat Presentation when zero days created (Backward Compatible) */
+        <div id="trainer-exercises-table-container" className="bg-[#121212] border border-white/10 rounded-xl overflow-hidden shadow-sm">
+          {renderExerciseItems(exercises)}
         </div>
       )}
 
+      {/* Modal for Create/Edit Exercise */}
       {isModalOpen && (
         <div
           id="trainer-exercise-modal-backdrop"
@@ -508,6 +676,30 @@ export function TrainerProgramExercisesPanel({ programId }: TrainerProgramExerci
                     placeholder="Örn: Barbell Squat"
                     className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                   />
+                </div>
+
+                {/* Program Day Selector */}
+                <div className="space-y-2">
+                  <label htmlFor="exercise-day-select" className="text-sm font-medium flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-white/60" />
+                    Program Günü
+                  </label>
+                  <select
+                    id="exercise-day-select"
+                    value={formData.programDayId}
+                    onChange={(e) => handleFieldChange("programDayId", e.target.value)}
+                    className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
+                  >
+                    <option value="">Gün Atanmamış</option>
+                    {sortedDays.map((day) => (
+                      <option key={day.id} value={day.id.toString()}>
+                        #{day.sort_order} - {day.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-white/50">
+                    Egzersizi belirli bir güne bağlayabilir veya atanmamış bırakabilirsiniz.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

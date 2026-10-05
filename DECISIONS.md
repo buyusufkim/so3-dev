@@ -539,6 +539,25 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * read/write operations completely isolated from calendar sessions/appointments (program structure semantic only)
 * zero UI refactoring or member portal mutation in F.29A; backend foundation and validation contract only
 
+## F.29B Program Day Management & Exercise Assignment UI
+* trainer program editor surface (`/admin/my-members/:memberId/training-programs/:programId`) integrates program day management alongside exercise assignments
+* `TrainerProgramDaysPanel` component provides day CRUD: list, create, edit, delete with modal form (title: 1-160 chars, sort_order: integer >= 0, notes: max 2000 chars)
+* race-safe day loading with `AbortController`, unmount protection, and request generation counter; zero polling
+* empty state with CTA "İlk Günü Oluştur" when zero program days exist
+* exercise form in `TrainerProgramExercisesPanel` enhanced with program day selector dropdown (`#exercise-day-select`)
+* exercise day selector defaults to "Gün Atanmamış" (null) or allows choosing any active program day
+* validation confirms selected day belongs to the current program before mutation submission
+* supports moving/changing existing exercise to another day or unassigning back to "Gün Atanmamış"
+* grouped exercise presentation: when program days exist, exercises are displayed grouped under their respective day sections with day header, exercise count, and "+ Bu Güne Egzersiz Ekle" CTA
+* unassigned / legacy exercises preserved in dedicated "Gün Atanmamış Egzersizler" section
+* backward compatibility: programs with zero program days continue displaying flat exercises cleanly without breakage
+* single canonical day list flow between parent `TrainerTrainingProgramEditor`, `TrainerProgramDaysPanel`, and `TrainerProgramExercisesPanel`
+* when a day is deleted, UI notifies trainer that exercises are moved to "Gün Atanmamış", and exercises list automatically refreshes
+* real-time exercise counts reflected on day cards in `TrainerProgramDaysPanel`
+* mobile-first design with touch targets >= 44px, responsive card/table views, and Turkish language UI
+* zero schema changes, zero new backend endpoints; utilizes F.29A REST endpoints
+
+
 
 
 
