@@ -521,6 +521,22 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * mobile-first layout: placed after Daily Agenda (`order-2 lg:order-none`), touch targets >= 44px
 * zero mutation methods (`apiClient.get` only), zero CRM models, zero contacted state tracking, zero churn scoring
 
+## F.29A Program Day Structure Foundation
+* Program System v2 introduces `training_program_days` entity to structure flat exercises into modular program days/sessions
+* zero disruption to existing programs or flat exercises; `program_exercises.program_day_id` is nullable with `ON DELETE SET NULL`
+* migration `043_add_training_program_days.sql` adds `training_program_days` table and `program_day_id` column with index
+* `database/fresh-install.sql` and `DEPLOYMENT_PHP_MYSQL.md` aligned with migration 043 schema/history parity
+* dedicated controller `TrainerProgramDayController.php` provides ownership-safe day CRUD operations
+* `GET /api/trainer/training-programs/{programId}/days`: returns chronological day list with program and member ownership verification
+* `POST /api/trainer/training-programs/{programId}/days`: creates day with title (1-160), sort_order, notes (max 2000), parent program lock `FOR UPDATE`, and UUID v4
+* `PATCH /api/trainer/program-days/{dayId}`: updates day attributes with ownership lock `FOR UPDATE` and idempotent commit
+* `DELETE /api/trainer/program-days/{dayId}`: soft-deletes day and safely unassigns existing exercises (`program_day_id = NULL`) within single transaction
+* RBAC strictly restricted to `trainer` role with session `admin_id -> trainers.admin_id` resolution
+* transaction safety: strict `beginTransaction -> FOR UPDATE lock -> mutation -> commit -> audit log` ordering with rollback guards
+* read/write operations completely isolated from calendar sessions/appointments (program structure semantic only)
+* zero UI refactoring or member portal mutation in F.29A; backend foundation and validation contract only
+
+
 
 
 

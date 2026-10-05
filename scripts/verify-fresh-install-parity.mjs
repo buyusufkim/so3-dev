@@ -439,14 +439,14 @@ console.log("\n=== 10. Simulation Self-Tests for Drift & Parity Checks ===");
   assert(!isDocValid, "Simulation 5: Stale migration range in documentation correctly detected as violation");
 }
 
-// 10.6 Simulation: Future-safety check: hypothetical 043 migration with current header fails automatically
+// 10.6 Simulation: Future-safety check: hypothetical next migration with current header fails automatically
 {
-  const hypotheticalLatestNum = '043';
+  const hypotheticalLatestNum = String(parseInt(latestNum, 10) + 1).padStart(3, '0');
   const currentHeaderContent = `Generated from migrations ${firstNum}-${latestNum}`;
   const m = currentHeaderContent.match(/Generated from migrations\s+(\d+)[–-](\d+)/i);
   const hEnd = m ? m[2] : null;
   const isAligned = hEnd === hypotheticalLatestNum;
-  assert(!isAligned, "Simulation 6: Hypothetical 042 migration with current header correctly detected as stale violation");
+  assert(!isAligned, `Simulation 6: Hypothetical ${hypotheticalLatestNum} migration with current header correctly detected as stale violation`);
 }
 
 console.log("\n=======================================================");
