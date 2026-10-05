@@ -533,6 +533,9 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * `DELETE /api/trainer/program-days/{dayId}`: soft-deletes day and safely unassigns existing exercises (`program_day_id = NULL`) within single transaction
 * RBAC strictly restricted to `trainer` role with session `admin_id -> trainers.admin_id` resolution
 * transaction safety: strict `beginTransaction -> FOR UPDATE lock -> mutation -> commit -> audit log` ordering with rollback guards
+* `TrainerProgramExerciseController` extends JSON allowlist, index projection, create, and update with optional `program_day_id`
+* same-program and active day validation (`d.program_id = programId AND d.deleted_at IS NULL FOR UPDATE`) ensures zero cross-program leakage
+* frontend TypeScript contract (`types.ts`) extended with `TrainerProgramDay` types, guards, and `program_day_id: number | null` on exercises
 * read/write operations completely isolated from calendar sessions/appointments (program structure semantic only)
 * zero UI refactoring or member portal mutation in F.29A; backend foundation and validation contract only
 

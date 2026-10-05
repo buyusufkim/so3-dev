@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import ts from 'typescript';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,11 +9,13 @@ const rootDir = path.resolve(__dirname, '..');
 
 const indexPath = path.join(rootDir, 'api', 'index.php');
 const controllerPath = path.join(rootDir, 'api', 'controllers', 'TrainerProgramDayController.php');
+const exerciseControllerPath = path.join(rootDir, 'api', 'controllers', 'TrainerProgramExerciseController.php');
 const migrationPath = path.join(rootDir, 'database', 'migrations', '043_add_training_program_days.sql');
 const freshInstallPath = path.join(rootDir, 'database', 'fresh-install.sql');
 const deploymentDocPath = path.join(rootDir, 'DEPLOYMENT_PHP_MYSQL.md');
 const decisionsPath = path.join(rootDir, 'DECISIONS.md');
 const pkgPath = path.join(rootDir, 'package.json');
+const typesPath = path.join(rootDir, 'src', 'admin', 'pages', 'trainer-training-programs', 'types.ts');
 
 let hasErrors = false;
 let assertionCount = 0;
@@ -308,7 +311,206 @@ if (controllerExists) {
     );
 }
 
-// 13. Invariant 13: DECISIONS.md documentation
+// 13. Invariant 13: Exercise-Day Contract in TrainerProgramExerciseController
+const exerciseControllerExists = fs.existsSync(exerciseControllerPath);
+assert(exerciseControllerExists, 'Invariant 13.1: TrainerProgramExerciseController.php exists');
+
+if (exerciseControllerExists) {
+    const exSource = fs.readFileSync(exerciseControllerPath, 'utf8');
+
+    const exMethods = {
+        getJsonPayload: extractMethod(exSource, 'getJsonPayload'),
+        index: extractMethod(exSource, 'index'),
+        create: extractMethod(exSource, 'create'),
+        update: extractMethod(exSource, 'update')
+    };
+
+    // 13.2 Allowlist includes program_day_id
+    const exAllowlistValid = exMethods.getJsonPayload &&
+        exMethods.getJsonPayload.includes("'program_day_id'") &&
+        exMethods.getJsonPayload.includes("$allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order', 'program_day_id'];");
+
+    assert(
+        Boolean(exAllowlistValid),
+        'Invariant 13.2: Exercise JSON allowlist strictly includes program_day_id'
+    );
+
+    // 13.3 Index SELECT & nullable projection with flat ordering
+    const exIndexValid = exMethods.index &&
+        exMethods.index.includes("pe.program_day_id") &&
+        exMethods.index.includes("'program_day_id' => $row['program_day_id'] !== null ? (int)$row['program_day_id'] : null") &&
+        exMethods.index.includes("ORDER BY pe.sort_order ASC, pe.id ASC");
+
+    assert(
+        Boolean(exIndexValid),
+        'Invariant 13.3: Exercise index selects pe.program_day_id, projects nullable integer, and maintains flat ordering sort_order ASC, id ASC'
+    );
+
+    // 13.4 Create: optional, null/missing accepted, same-program check with FOR UPDATE, insert column
+    const exCreateValid = exMethods.create &&
+        exMethods.create.includes("array_key_exists('program_day_id', $val) ? $val['program_day_id'] : null") &&
+        exMethods.create.includes("!is_int($program_day_id) || $program_day_id < 1") &&
+        exMethods.create.includes("SELECT d.id\n                    FROM training_program_days d\n                    WHERE d.id = ?\n                      AND d.program_id = ?\n                      AND d.deleted_at IS NULL\n                    FOR UPDATE") &&
+        exMethods.create.includes("Program günü bu programa ait değil veya kullanılamıyor.") &&
+        exMethods.create.includes("INSERT INTO program_exercises \n                (program_id, program_day_id, exercise_name") &&
+        exMethods.create.indexOf("$this->db->beginTransaction();") < exMethods.create.indexOf("SELECT d.id");
+
+    assert(
+        Boolean(exCreateValid),
+        'Invariant 13.4: Exercise create validates optional program_day_id, rejects cross-program and deleted days with FOR UPDATE in transaction'
+    );
+
+    // 13.5 Update: optional, null clears, same-program check with FOR UPDATE, audit changed_fields
+    const exUpdateValid = exMethods.update &&
+        exMethods.update.includes("pe.program_day_id") &&
+        exMethods.update.includes("array_key_exists('program_day_id', $val)") &&
+        exMethods.update.includes("!is_int($target_day_id) || $target_day_id < 1") &&
+        exMethods.update.includes("SELECT d.id\n                        FROM training_program_days d\n                        WHERE d.id = ?\n                          AND d.program_id = ?\n                          AND d.deleted_at IS NULL\n                        FOR UPDATE") &&
+        exMethods.update.includes("$updates[] = \"program_day_id = ?\";") &&
+        exMethods.update.includes("$changedFields[] = 'program_day_id';") &&
+        exMethods.update.indexOf("$this->db->beginTransaction();") < exMethods.update.indexOf("SELECT d.id");
+
+    assert(
+        Boolean(exUpdateValid),
+        'Invariant 13.5: Exercise update validates target program_day_id, clears on null, rejects cross-program with FOR UPDATE, and audits changes'
+    );
+}
+
+// 14. Invariant 14: Algorithmic Fixture Simulations
+function simulateExerciseDayValidation({
+    mode,
+    payload,
+    currentProgramId = 10,
+    currentProgramDayId = null,
+    dayDb = [
+        { id: 101, program_id: 10, deleted_at: null },
+        { id: 102, program_id: 11, deleted_at: null },
+        { id: 103, program_id: 10, deleted_at: '2026-10-01 12:00:00' }
+    ]
+}) {
+    if ('program_day_id' in payload) {
+        const val = payload.program_day_id;
+        if (val !== null) {
+            if (typeof val !== 'number' || !Number.isInteger(val) || val < 1) {
+                return { success: false, code: 422, error: 'INVALID_PRIMITIVE' };
+            }
+            const day = dayDb.find(d => d.id === val);
+            if (!day || day.program_id !== currentProgramId || day.deleted_at !== null) {
+                return { success: false, code: 422, error: 'CROSS_OR_DELETED_DAY' };
+            }
+            return { success: true, program_day_id: val };
+        } else {
+            return { success: true, program_day_id: null };
+        }
+    } else {
+        if (mode === 'create') {
+            return { success: true, program_day_id: null };
+        } else {
+            return { success: true, program_day_id: currentProgramDayId };
+        }
+    }
+}
+
+const sim1 = simulateExerciseDayValidation({ mode: 'create', payload: {} });
+assert(sim1.success && sim1.program_day_id === null, 'Invariant 14.1: Algorithmic fixture: create legacy (missing program_day_id) -> accepted as null');
+
+const sim2 = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: null } });
+assert(sim2.success && sim2.program_day_id === null, 'Invariant 14.2: Algorithmic fixture: create unassigned (program_day_id = null) -> accepted');
+
+const sim3 = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: 101 } });
+assert(sim3.success && sim3.program_day_id === 101, 'Invariant 14.3: Algorithmic fixture: create same program active day -> accepted');
+
+const sim4 = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: 102 } });
+assert(!sim4.success && sim4.code === 422, 'Invariant 14.4: Algorithmic fixture: create cross-program day -> rejected 422');
+
+const sim5 = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: 103 } });
+assert(!sim5.success && sim5.code === 422, 'Invariant 14.5: Algorithmic fixture: create deleted day -> rejected 422');
+
+const sim6 = simulateExerciseDayValidation({ mode: 'patch', payload: {}, currentProgramDayId: 101 });
+assert(sim6.success && sim6.program_day_id === 101, 'Invariant 14.6: Algorithmic fixture: patch absent -> existing association preserved');
+
+const sim7 = simulateExerciseDayValidation({ mode: 'patch', payload: { program_day_id: null }, currentProgramDayId: 101 });
+assert(sim7.success && sim7.program_day_id === null, 'Invariant 14.7: Algorithmic fixture: patch null -> unassigned to null');
+
+const sim8_0 = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: 0 } });
+const sim8_neg = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: -1 } });
+const sim8_float = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: 1.5 } });
+const sim8_str = simulateExerciseDayValidation({ mode: 'create', payload: { program_day_id: "1" } });
+assert(!sim8_0.success && !sim8_neg.success && !sim8_float.success && !sim8_str.success, 'Invariant 14.8: Algorithmic fixture: invalid primitives (0, -1, 1.5, "1") -> rejected 422');
+
+// 15. Invariant 15: TypeScript Type Contract & Type Guards
+const typesSource = fs.readFileSync(typesPath, 'utf8');
+
+assert(
+    typesSource.includes("export interface TrainerProgramDay") &&
+    typesSource.includes("export interface TrainerProgramDayCreateResponse") &&
+    typesSource.includes("program_day_id: number | null;") &&
+    typesSource.includes("export function isTrainerProgramDay") &&
+    typesSource.includes("export function isTrainerProgramDayArray") &&
+    typesSource.includes("export function isTrainerProgramDayCreateResponse") &&
+    typesSource.includes("export function isTrainerProgramExercise"),
+    'Invariant 15.1: types.ts defines TrainerProgramDay interfaces, exercise program_day_id, and runtime type guards'
+);
+
+// Transpile and load validators
+const transpiledTypes = ts.transpileModule(typesSource, {
+    compilerOptions: { module: ts.ModuleKind.ESNext }
+});
+const typesB64 = Buffer.from(transpiledTypes.outputText).toString('base64');
+const {
+    isTrainerProgramDay,
+    isTrainerProgramDayArray,
+    isTrainerProgramDayCreateResponse,
+    isTrainerProgramExercise
+} = await import(`data:text/javascript;base64,${typesB64}`);
+
+const baseExercise = {
+    id: 1,
+    program_id: 10,
+    program_day_id: null,
+    exercise_name: 'Bench Press',
+    sets: 3,
+    repetitions: '10',
+    duration_seconds: null,
+    rest_seconds: 60,
+    instructions: null,
+    sort_order: 1,
+    created_at: '2026-10-01 10:00:00',
+    updated_at: '2026-10-01 10:00:00'
+};
+
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: null }) === true, 'Invariant 15.2: isTrainerProgramExercise accepts program_day_id: null');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: 7 }) === true, 'Invariant 15.3: isTrainerProgramExercise accepts program_day_id: 7 (positive int)');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: 0 }) === false, 'Invariant 15.4: isTrainerProgramExercise rejects program_day_id: 0');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: -1 }) === false, 'Invariant 15.5: isTrainerProgramExercise rejects program_day_id: -1');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: 1.5 }) === false, 'Invariant 15.6: isTrainerProgramExercise rejects program_day_id: 1.5');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: "7" }) === false, 'Invariant 15.7: isTrainerProgramExercise rejects program_day_id: "7"');
+assert(isTrainerProgramExercise({ ...baseExercise, program_day_id: undefined }) === false, 'Invariant 15.8: isTrainerProgramExercise rejects program_day_id: undefined');
+
+const baseDay = {
+    id: 1,
+    uuid: '11111111-2222-3333-4444-555555555555',
+    program_id: 10,
+    title: 'Göğüs ve Kol',
+    sort_order: 0,
+    notes: 'Isınma dahil',
+    created_at: '2026-10-01 10:00:00',
+    updated_at: '2026-10-01 10:00:00'
+};
+
+assert(isTrainerProgramDay(baseDay) === true, 'Invariant 15.9: isTrainerProgramDay accepts valid day entity');
+assert(isTrainerProgramDay({ ...baseDay, notes: null }) === true, 'Invariant 15.10: isTrainerProgramDay accepts notes: null');
+assert(isTrainerProgramDay({ ...baseDay, id: 0 }) === false, 'Invariant 15.11: isTrainerProgramDay rejects id: 0');
+assert(isTrainerProgramDay({ ...baseDay, title: '   ' }) === false, 'Invariant 15.12: isTrainerProgramDay rejects whitespace title');
+assert(isTrainerProgramDay({ ...baseDay, sort_order: -1 }) === false, 'Invariant 15.13: isTrainerProgramDay rejects negative sort_order');
+assert(isTrainerProgramDayArray([baseDay]) === true, 'Invariant 15.14: isTrainerProgramDayArray accepts array of days');
+assert(isTrainerProgramDayArray([baseDay, { ...baseDay, id: 0 }]) === false, 'Invariant 15.15: isTrainerProgramDayArray rejects array with invalid day');
+
+assert(isTrainerProgramDayCreateResponse({ id: 1, uuid: '11111111-2222-3333-4444-555555555555' }) === true, 'Invariant 15.16: isTrainerProgramDayCreateResponse accepts valid response');
+assert(isTrainerProgramDayCreateResponse({ id: 0, uuid: '11111111-2222-3333-4444-555555555555' }) === false, 'Invariant 15.17: isTrainerProgramDayCreateResponse rejects id: 0');
+assert(isTrainerProgramDayCreateResponse({ id: 1, uuid: '' }) === false, 'Invariant 15.18: isTrainerProgramDayCreateResponse rejects empty uuid');
+
+// 16. Invariant 16: DECISIONS.md documentation
 const decisionsContent = fs.readFileSync(decisionsPath, 'utf8');
 const decisionsValid = decisionsContent.includes('## F.29A Program Day Structure Foundation') &&
     decisionsContent.includes('training_program_days') &&
@@ -317,16 +519,16 @@ const decisionsValid = decisionsContent.includes('## F.29A Program Day Structure
 
 assert(
     Boolean(decisionsValid),
-    'Invariant 13: DECISIONS.md contains F.29A Program Day Structure Foundation documentation'
+    'Invariant 16: DECISIONS.md contains F.29A Program Day Structure Foundation documentation'
 );
 
-// 14. Invariant 14: package.json script registration
+// 17. Invariant 17: package.json script registration
 const pkgContent = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const pkgValid = Boolean(pkgContent.scripts && pkgContent.scripts['verify:trainer-program-days'] === 'node scripts/verify-trainer-program-days.mjs');
 
 assert(
     Boolean(pkgValid),
-    'Invariant 14: package.json registers verify:trainer-program-days script'
+    'Invariant 17: package.json registers verify:trainer-program-days script'
 );
 
 console.log(`\n=======================================================`);
@@ -339,6 +541,6 @@ if (hasErrors) {
     console.error('\n❌ F.29A Trainer Program Days Foundation verification FAILED.');
     process.exit(1);
 } else {
-    console.log('\n✅ SUCCESS: All F.29A Trainer Program Days Foundation invariants verified.');
+    console.log('\n✅ SUCCESS: All F.29A Trainer Program Days Foundation & Exercise-Day Contract invariants verified.');
     process.exit(0);
 }

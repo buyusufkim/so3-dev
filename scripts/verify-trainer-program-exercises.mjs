@@ -263,7 +263,7 @@ function verify() {
         jsonParser.includes("json_last_error() !== JSON_ERROR_NONE") &&
         jsonParser.includes("!is_object($isObj)") &&
         jsonParser.includes("Response::error('JSON bir obje olmalıdır.', 'BAD_REQUEST', 400);") &&
-        jsonParser.includes("$allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];") &&
+        jsonParser.includes("$allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order', 'program_day_id'];") &&
         jsonParser.includes("foreach (array_keys($data) as $key)") &&
         jsonParser.includes("!in_array($key, $allowlist, true)") &&
         jsonParser.includes("VALIDATION_ERROR', 422);") &&

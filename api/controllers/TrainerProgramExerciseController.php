@@ -94,7 +94,7 @@ class TrainerProgramExerciseController {
 
         $data = json_decode($raw, true);
 
-        $allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
+        $allowlist = ['exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order', 'program_day_id'];
         foreach (array_keys($data) as $key) {
             if (!in_array($key, $allowlist, true)) {
                 Response::error("Geçersiz alan: $key", 'VALIDATION_ERROR', 422);
@@ -133,7 +133,7 @@ class TrainerProgramExerciseController {
             $stmt = $this->db->prepare("
                 SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, 
                        pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order, 
-                       pe.created_at, pe.updated_at
+                       pe.program_day_id, pe.created_at, pe.updated_at
                 FROM program_exercises pe
                 JOIN training_programs tp ON pe.program_id = tp.id
                 JOIN members m ON tp.member_id = m.id
@@ -157,6 +157,7 @@ class TrainerProgramExerciseController {
                 $items[] = [
                     'id' => (int)$row['id'],
                     'program_id' => (int)$row['program_id'],
+                    'program_day_id' => $row['program_day_id'] !== null ? (int)$row['program_day_id'] : null,
                     'exercise_name' => $row['exercise_name'],
                     'sets' => $row['sets'] !== null ? (int)$row['sets'] : null,
                     'repetitions' => $row['repetitions'],
@@ -236,6 +237,13 @@ class TrainerProgramExerciseController {
             Response::error("sort_order 0 veya daha büyük tam sayı olmalıdır.", 'VALIDATION_ERROR', 422);
         }
 
+        $program_day_id = array_key_exists('program_day_id', $val) ? $val['program_day_id'] : null;
+        if ($program_day_id !== null) {
+            if (!is_int($program_day_id) || $program_day_id < 1) {
+                Response::error("program_day_id geçersiz.", 'VALIDATION_ERROR', 422);
+            }
+        }
+
         try {
             $this->db->beginTransaction();
             
@@ -263,13 +271,32 @@ class TrainerProgramExerciseController {
                 Response::error("Program bulunamadı.", 'NOT_FOUND', 404);
             }
 
+            if ($program_day_id !== null) {
+                $dayStmt = $this->db->prepare("
+                    SELECT d.id
+                    FROM training_program_days d
+                    WHERE d.id = ?
+                      AND d.program_id = ?
+                      AND d.deleted_at IS NULL
+                    FOR UPDATE
+                ");
+                $dayStmt->bindValue(1, $program_day_id, \PDO::PARAM_INT);
+                $dayStmt->bindValue(2, $programId, \PDO::PARAM_INT);
+                $dayStmt->execute();
+                if (!$dayStmt->fetch()) {
+                    if ($this->db->inTransaction()) { $this->db->rollBack(); }
+                    Response::error("Program günü bu programa ait değil veya kullanılamıyor.", 'VALIDATION_ERROR', 422);
+                }
+            }
+
             $stmt = $this->db->prepare("
                 INSERT INTO program_exercises 
-                (program_id, exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (program_id, program_day_id, exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $programId, 
+                $program_day_id,
                 $val['exercise_name'], 
                 $sets, 
                 $repetitions, 
@@ -323,7 +350,7 @@ class TrainerProgramExerciseController {
             
             $stmt = $this->db->prepare("
                 SELECT pe.id, pe.program_id, pe.exercise_name, pe.sets, pe.repetitions, 
-                       pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order
+                       pe.duration_seconds, pe.rest_seconds, pe.instructions, pe.sort_order, pe.program_day_id
                 FROM program_exercises pe
                 JOIN training_programs tp ON pe.program_id = tp.id
                 JOIN members m ON tp.member_id = m.id
@@ -346,6 +373,7 @@ class TrainerProgramExerciseController {
             }
             
             $programId = (int)$currentExercise['program_id'];
+            $curr_program_day_id = $currentExercise['program_day_id'] !== null ? (int)$currentExercise['program_day_id'] : null;
 
             $curr_exercise_name = $currentExercise['exercise_name'];
             $curr_sets = $currentExercise['sets'] !== null ? (int)$currentExercise['sets'] : null;
@@ -464,6 +492,38 @@ class TrainerProgramExerciseController {
                     $updates[] = "sort_order = ?";
                     $params[] = $sort_order;
                     $changedFields[] = 'sort_order';
+                }
+            }
+
+            if (array_key_exists('program_day_id', $val)) {
+                $target_day_id = $val['program_day_id'];
+                if ($target_day_id !== null) {
+                    if (!is_int($target_day_id) || $target_day_id < 1) {
+                        if ($this->db->inTransaction()) { $this->db->rollBack(); }
+                        Response::error("program_day_id geçersiz.", 'VALIDATION_ERROR', 422);
+                    }
+
+                    $dayStmt = $this->db->prepare("
+                        SELECT d.id
+                        FROM training_program_days d
+                        WHERE d.id = ?
+                          AND d.program_id = ?
+                          AND d.deleted_at IS NULL
+                        FOR UPDATE
+                    ");
+                    $dayStmt->bindValue(1, $target_day_id, \PDO::PARAM_INT);
+                    $dayStmt->bindValue(2, $programId, \PDO::PARAM_INT);
+                    $dayStmt->execute();
+                    if (!$dayStmt->fetch()) {
+                        if ($this->db->inTransaction()) { $this->db->rollBack(); }
+                        Response::error("Program günü bu programa ait değil veya kullanılamıyor.", 'VALIDATION_ERROR', 422);
+                    }
+                }
+
+                if ($target_day_id !== $curr_program_day_id) {
+                    $updates[] = "program_day_id = ?";
+                    $params[] = $target_day_id;
+                    $changedFields[] = 'program_day_id';
                 }
             }
 

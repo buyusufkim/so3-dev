@@ -48,9 +48,26 @@ export interface TrainerTrainingProgramCreateResponse {
   uuid: string;
 }
 
+export interface TrainerProgramDay {
+  id: number;
+  uuid: string;
+  program_id: number;
+  title: string;
+  sort_order: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainerProgramDayCreateResponse {
+  id: number;
+  uuid: string;
+}
+
 export interface TrainerProgramExercise {
   id: number;
   program_id: number;
+  program_day_id: number | null;
   exercise_name: string;
   sets: number | null;
   repetitions: string | null;
@@ -166,10 +183,41 @@ export function isSuccessResponse(res: unknown): res is SuccessResponse {
   return true;
 }
 
+const isNonEmptyString = (val: unknown): val is string => {
+  return typeof val === 'string' && val.trim().length > 0;
+};
+
+export function isTrainerProgramDay(val: unknown): val is TrainerProgramDay {
+  if (!isObject(val)) return false;
+  if (!isPosInt(val.id)) return false;
+  if (!isNonEmptyString(val.uuid)) return false;
+  if (!isPosInt(val.program_id)) return false;
+  if (!isNonEmptyString(val.title)) return false;
+  if (!isNonNegInt(val.sort_order)) return false;
+  if (!isStringOrNull(val.notes)) return false;
+  if (!isNonEmptyString(val.created_at)) return false;
+  if (!isNonEmptyString(val.updated_at)) return false;
+  return true;
+}
+
+export function isTrainerProgramDayArray(val: unknown): val is TrainerProgramDay[] {
+  if (!Array.isArray(val)) return false;
+  return val.every(isTrainerProgramDay);
+}
+
+export function isTrainerProgramDayCreateResponse(val: unknown): val is TrainerProgramDayCreateResponse {
+  if (!isObject(val)) return false;
+  if (!isPosInt(val.id)) return false;
+  if (!isNonEmptyString(val.uuid)) return false;
+  return true;
+}
+
 export function isTrainerProgramExercise(val: unknown): val is TrainerProgramExercise {
   if (!isObject(val)) return false;
   if (!isPosInt(val.id)) return false;
   if (!isPosInt(val.program_id)) return false;
+  if (!('program_day_id' in val)) return false;
+  if (val.program_day_id !== null && !isPosInt(val.program_day_id)) return false;
   if (!isString(val.exercise_name)) return false;
   if (val.sets !== null && !isPosInt(val.sets)) return false;
   if (!isStringOrNull(val.repetitions)) return false;
