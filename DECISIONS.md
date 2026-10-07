@@ -554,6 +554,8 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * single canonical day list flow between parent `TrainerTrainingProgramEditor`, `TrainerProgramDaysPanel`, and `TrainerProgramExercisesPanel`
 * when a day is deleted, UI notifies trainer that exercises are moved to "Gün Atanmamış", and exercises list automatically refreshes
 * real-time exercise counts reflected on day cards in `TrainerProgramDaysPanel`
+* server-authoritative day ordering: `programDays` are rendered directly in canonical API order (`sort_order ASC, id ASC`) with zero client-side `.sort()` or reordering
+* touch targets: all interactive actions including day-group quick-add ("Bu Güne Egzersiz Ekle", "Atanmamış Egzersiz Ekle") strictly enforce `min-h-[44px]`
 * mobile-first design with touch targets >= 44px, responsive card/table views, and Turkish language UI
 * zero schema changes, zero new backend endpoints; utilizes F.29A REST endpoints
 

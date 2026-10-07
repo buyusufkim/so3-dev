@@ -117,9 +117,7 @@ export function TrainerProgramExercisesPanel({
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`, {
-        signal: controller.signal
-      });
+      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`);
 
       if (!isMountedRef.current || currentGen !== requestGenRef.current) return;
 
@@ -370,17 +368,16 @@ export function TrainerProgramExercisesPanel({
     return <div id="trainer-exercises-loading" className="text-white/50 text-sm py-4">Egzersizler yükleniyor...</div>;
   }
 
-  // Sorted program days
-  const sortedDays = [...programDays].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  // Program days in canonical server-authoritative order
   const unassignedExercises = exercises.filter(
     (ex) => ex.program_day_id === null || !programDays.some((d) => d.id === ex.program_day_id)
   );
 
-  const renderExerciseItems = (list: TrainerProgramExercise[]) => (
+  const renderExerciseItems = (exercises: TrainerProgramExercise[]) => (
     <>
       {/* Mobile Cards (< lg) */}
       <div className="lg:hidden divide-y divide-white/10">
-        {list.map((ex) => (
+        {exercises.map((ex) => (
           <div key={ex.id} className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2.5 min-w-0">
@@ -459,7 +456,7 @@ export function TrainerProgramExercisesPanel({
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
-            {list.map((ex) => (
+            {exercises.map((ex) => (
               <React.Fragment key={ex.id}>
                 <tr id={`trainer-exercise-row-${ex.id}`} className="hover:bg-white/5 transition-colors">
                   <td className="px-4 py-3 text-white/70">{ex.sort_order}</td>
@@ -540,10 +537,10 @@ export function TrainerProgramExercisesPanel({
         <div id="trainer-exercises-empty" className="text-center py-8 text-white/50 border border-white/10 rounded-xl bg-[#121212]">
           Henüz egzersiz eklenmemiş.
         </div>
-      ) : sortedDays.length > 0 ? (
+      ) : programDays.length > 0 ? (
         /* Grouped Presentation by Program Day */
         <div id="trainer-exercises-table-container" className="space-y-5">
-          {sortedDays.map((day) => {
+          {programDays.map((day) => {
             const dayExercises = exercises.filter((ex) => ex.program_day_id === day.id);
             return (
               <div
@@ -572,7 +569,7 @@ export function TrainerProgramExercisesPanel({
                     id={`btn-add-exercise-day-${day.id}`}
                     type="button"
                     onClick={() => openNewModal(day.id)}
-                    className="w-full sm:w-auto min-h-[36px] flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
+                    className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Bu Güne Egzersiz Ekle
@@ -613,7 +610,7 @@ export function TrainerProgramExercisesPanel({
                 <button
                   type="button"
                   onClick={() => openNewModal(null)}
-                  className="w-full sm:w-auto min-h-[36px] flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
+                  className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Atanmamış Egzersiz Ekle
@@ -691,7 +688,7 @@ export function TrainerProgramExercisesPanel({
                     className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
                   >
                     <option value="">Gün Atanmamış</option>
-                    {sortedDays.map((day) => (
+                    {programDays.map((day) => (
                       <option key={day.id} value={day.id.toString()}>
                         #{day.sort_order} - {day.title}
                       </option>

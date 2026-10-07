@@ -106,77 +106,119 @@ assert(
     'Invariant 9.1: TrainerProgramExercisesPanel accepts programDays, refreshKey, and onExercisesChange props'
 );
 
-// 10. TrainerProgramExercisesPanel - Day Selector in Form Modal
+// 10. Server-authoritative day ordering (Zero client-side sorting)
+assert(
+    !exercisesPanelSource.includes('.sort(') &&
+    !exercisesPanelSource.includes('toSorted(') &&
+    !exercisesPanelSource.includes('localeCompare('),
+    'Invariant 10.1: TrainerProgramExercisesPanel strictly forbids client-side day reordering (.sort, toSorted, localeCompare)'
+);
+
+assert(
+    exercisesPanelSource.includes('programDays.map') &&
+    exercisesPanelSource.includes('exercises.filter('),
+    'Invariant 10.2: programDays are rendered in canonical API order and exercise grouping uses exercises.filter(...) without reordering'
+);
+
+// 11. TrainerProgramExercisesPanel - Day Selector in Form Modal
 assert(
     exercisesPanelSource.includes('id="exercise-day-select"') &&
     exercisesPanelSource.includes('Gün Atanmamış') &&
     exercisesPanelSource.includes('Program Günü'),
-    'Invariant 10.1: TrainerProgramExercisesPanel form modal renders exercise-day-select with Gün Atanmamış option'
+    'Invariant 11.1: TrainerProgramExercisesPanel form modal renders exercise-day-select with Gün Atanmamış option'
 );
 
-// 11. TrainerProgramExercisesPanel - Program Day Payload & Validation
+// 12. TrainerProgramExercisesPanel - Program Day Payload & Validation
 assert(
     exercisesPanelSource.includes('payload.program_day_id') &&
     exercisesPanelSource.includes('Seçilen program günü bu programa ait değil.') &&
     exercisesPanelSource.includes('Geçersiz program günü seçimi.'),
-    'Invariant 11.1: TrainerProgramExercisesPanel validates program day assignment and populates program_day_id in payload'
+    'Invariant 12.1: TrainerProgramExercisesPanel validates program day assignment and populates program_day_id in payload'
 );
 
-// 12. TrainerProgramExercisesPanel - Grouped Presentation by Day
+// 13. TrainerProgramExercisesPanel - Grouped Presentation by Day
 assert(
     exercisesPanelSource.includes('trainer-day-exercise-group-') &&
     exercisesPanelSource.includes('btn-add-exercise-day-') &&
     exercisesPanelSource.includes('Bu güne henüz egzersiz atanmamış.'),
-    'Invariant 12.1: TrainerProgramExercisesPanel groups exercises by day with day header, add exercise button, and empty state'
+    'Invariant 13.1: TrainerProgramExercisesPanel groups exercises by day with day header, add exercise button, and empty state'
 );
 
-// 13. TrainerProgramExercisesPanel - Unassigned Exercises Section
+// 14. TrainerProgramExercisesPanel - Unassigned Exercises Section
 assert(
     exercisesPanelSource.includes('trainer-unassigned-exercises-group') &&
     exercisesPanelSource.includes('Gün Atanmamış Egzersizler'),
-    'Invariant 13.1: TrainerProgramExercisesPanel renders dedicated section for unassigned / legacy exercises'
+    'Invariant 14.1: TrainerProgramExercisesPanel renders dedicated section for unassigned / legacy exercises'
 );
 
-// 14. TrainerProgramExercisesPanel - Backward Compatibility
+// 15. TrainerProgramExercisesPanel - Backward Compatibility
 assert(
     exercisesPanelSource.includes('trainer-exercises-table-container') &&
     exercisesPanelSource.includes('trainer-exercises-empty') &&
     exercisesPanelSource.includes('Henüz egzersiz eklenmemiş.'),
-    'Invariant 14.1: TrainerProgramExercisesPanel preserves flat presentation and empty state when zero days exist'
+    'Invariant 15.1: TrainerProgramExercisesPanel preserves flat presentation and empty state when zero days exist'
 );
 
-// 15. TrainerTrainingProgramEditor - Integration & Shared Canonical Flow
+// 16. TrainerTrainingProgramEditor - Integration & Shared Canonical Flow
 assert(
     editorSource.includes('<TrainerProgramDaysPanel') &&
     editorSource.includes('<TrainerProgramExercisesPanel') &&
     editorSource.includes('onDaysChange={handleDaysChange}') &&
     editorSource.includes('onDayDeleted={handleDayDeleted}') &&
     editorSource.includes('programDays={programDays}'),
-    'Invariant 15.1: TrainerTrainingProgramEditor embeds both panels with shared canonical state flow'
+    'Invariant 16.1: TrainerTrainingProgramEditor embeds both panels with shared canonical state flow'
 );
 
-// 16. Touch target accessibility (min-h-[44px] or min-h-[36px]/min-w-[44px])
+// 17. Touch target compliance: minimum 44px on all interactive controls
+assert(
+    !exercisesPanelSource.includes('min-h-[36px]'),
+    'Invariant 17.1: TrainerProgramExercisesPanel contains zero non-compliant min-h-[36px] touch targets'
+);
+
+function getButtonClassAround(source, marker) {
+    const idx = source.indexOf(marker);
+    if (idx === -1) return null;
+    const btnStart = source.lastIndexOf('<button', idx);
+    const btnEnd = source.indexOf('</button>', idx);
+    if (btnStart === -1 || btnEnd === -1) return null;
+    const block = source.slice(btnStart, btnEnd);
+    const match = block.match(/className="([^"]*)"/);
+    return match ? match[1] : null;
+}
+
+const dayAddBtnClass = getButtonClassAround(exercisesPanelSource, 'btn-add-exercise-day-');
+assert(
+    Boolean(dayAddBtnClass && dayAddBtnClass.includes('min-h-[44px]')),
+    'Invariant 17.2: btn-add-exercise-day- quick-add action explicitly enforces min-h-[44px]'
+);
+
+const unassignedBtnClass = getButtonClassAround(exercisesPanelSource, 'Atanmamış Egzersiz Ekle');
+assert(
+    Boolean(unassignedBtnClass && unassignedBtnClass.includes('min-h-[44px]')),
+    'Invariant 17.3: Atanmamış Egzersiz Ekle action explicitly enforces min-h-[44px]'
+);
+
 assert(
     daysPanelSource.includes('min-h-[44px]') &&
     exercisesPanelSource.includes('min-h-[44px]'),
-    'Invariant 16.1: Mobile touch target compliance (min-h-[44px]) enforced on action buttons'
+    'Invariant 17.4: Mobile touch target compliance (min-h-[44px]) enforced on action buttons'
 );
 
-// 17. DECISIONS.md documentation
+// 18. DECISIONS.md documentation
 const decisionsContent = fs.readFileSync(decisionsPath, 'utf8');
 assert(
     decisionsContent.includes('## F.29B Program Day Management & Exercise Assignment UI') &&
     decisionsContent.includes('TrainerProgramDaysPanel') &&
     decisionsContent.includes('exercise-day-select') &&
     decisionsContent.includes('Gün Atanmamış Egzersizler'),
-    'Invariant 17.1: DECISIONS.md documents F.29B Program Day Management & Exercise Assignment UI'
+    'Invariant 18.1: DECISIONS.md documents F.29B Program Day Management & Exercise Assignment UI'
 );
 
-// 18. package.json script registration
+// 19. package.json script registration
 const pkgContent = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 assert(
     Boolean(pkgContent.scripts && pkgContent.scripts['verify:trainer-program-days-ui'] === 'node scripts/verify-trainer-program-days-ui.mjs'),
-    'Invariant 18.1: package.json registers verify:trainer-program-days-ui'
+    'Invariant 19.1: package.json registers verify:trainer-program-days-ui'
 );
 
 console.log(`\n=======================================================`);
