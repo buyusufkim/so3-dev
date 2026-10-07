@@ -138,7 +138,7 @@ checkInvariant("Program Endpoint Contract Exact", () => {
 
 // 6. Exercise Endpoint Contract Exact
 checkInvariant("Exercise Endpoint Contract Exact", () => {
-    if (!exercisesSrc.includes("apiClient.get(`/api/trainer/training-programs/${programId}/exercises`)")) {
+    if (!exercisesSrc.includes("apiClient.get(`/api/trainer/training-programs/${programId}/exercises`")) {
         throw new Error("Missing exercises list GET endpoint contract");
     }
     if (!exercisesSrc.includes("apiClient.post(`/api/trainer/training-programs/${programId}/exercises`, payload)")) {

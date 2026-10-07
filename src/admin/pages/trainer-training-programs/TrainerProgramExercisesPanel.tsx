@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Pen, Trash2, Plus, X, Calendar, Dumbbell } from "lucide-react";
+import { Pen, Trash2, Plus, X, Calendar, Dumbbell, ChevronDown, ChevronUp } from "lucide-react";
 import { apiClient, ApiError } from "../../api/client";
 import {
   TrainerProgramDay,
@@ -77,6 +77,14 @@ export function TrainerProgramExercisesPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // F.29C - Collapsible day groups (Session-only component state, default expanded)
+  const [collapsedDayIds, setCollapsedDayIds] = useState<Record<number, boolean>>({});
+
+  // F.29C - Quick move per-exercise state
+  const [selectedMoveDays, setSelectedMoveDays] = useState<Record<number, string>>({});
+  const [movingExerciseId, setMovingExerciseId] = useState<number | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -117,12 +125,9 @@ export function TrainerProgramExercisesPanel({
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(
-        `/api/trainer/training-programs/${programId}/exercises`,
-        {
-          signal: controller.signal
-        }
-      );
+      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`, {
+        signal: controller.signal
+      });
 
       if (!isMountedRef.current || currentGen !== requestGenRef.current) return;
 
@@ -158,6 +163,73 @@ export function TrainerProgramExercisesPanel({
     };
   }, [programId, refreshKey, fetchExercises]);
 
+  // F.29C - Collapsible toggle helpers (default expanded)
+  const isDayCollapsed = (dayId: number): boolean => Boolean(collapsedDayIds[dayId]);
+
+  const toggleDayCollapse = (dayId: number) => {
+    setCollapsedDayIds((prev) => ({
+      ...prev,
+      [dayId]: !prev[dayId]
+    }));
+  };
+
+  // F.29C - Quick move helpers
+  const getTargetDayValue = (ex: TrainerProgramExercise): string => {
+    if (selectedMoveDays[ex.id] !== undefined) {
+      return selectedMoveDays[ex.id];
+    }
+    return ex.program_day_id !== null ? String(ex.program_day_id) : "";
+  };
+
+  const handleDaySelectChange = (exerciseId: number, value: string) => {
+    setSelectedMoveDays((prev) => ({
+      ...prev,
+      [exerciseId]: value
+    }));
+  };
+
+  const handleQuickMove = async (exercise: TrainerProgramExercise, targetVal: string) => {
+    const targetProgramDayId = targetVal === "" ? null : parseInt(targetVal, 10);
+
+    // No-op protection: if selected equals current, do not send PATCH
+    if (targetProgramDayId === exercise.program_day_id) {
+      return;
+    }
+
+    // Busy isolation: prevent concurrent move requests on the same exercise
+    if (movingExerciseId === exercise.id) {
+      return;
+    }
+
+    setMovingExerciseId(exercise.id);
+    setMoveError(null);
+
+    try {
+      // Mutation payload ONLY contains program_day_id
+      const res = await apiClient.patch(`/api/trainer/program-exercises/${exercise.id}`, {
+        program_day_id: targetProgramDayId
+      });
+
+      if (!isSuccessResponse(res) || !res.success) {
+        throw new ContractValidationError("Egzersiz taşıma işlemi yanıtı doğrulanamadı.");
+      }
+
+      // Clear local selection for this exercise
+      setSelectedMoveDays((prev) => {
+        const next = { ...prev };
+        delete next[exercise.id];
+        return next;
+      });
+
+      // Canonical refresh after move
+      await fetchExercises();
+    } catch (err: unknown) {
+      setMoveError(getErrorMessage(err));
+    } finally {
+      setMovingExerciseId(null);
+    }
+  };
+
   const resetForm = () => {
     setFormData(DEFAULT_FORM_DATA);
     setInitialSnapshot(DEFAULT_FORM_DATA);
@@ -166,181 +238,196 @@ export function TrainerProgramExercisesPanel({
     setIsModalOpen(false);
   };
 
-  const openNewModal = (presetDayId?: number | null) => {
-    setEditingId(null);
-    const nextSort = exercises.length > 0 ? Math.max(...exercises.map((e) => e.sort_order)) + 1 : 0;
-    const initial: ExerciseFormData = {
-      exerciseName: "",
-      sets: "",
-      repetitions: "",
-      durationSeconds: "",
-      restSeconds: "",
-      instructions: "",
-      sortOrder: nextSort.toString(),
-      programDayId: presetDayId ? presetDayId.toString() : ""
-    };
-    setFormData(initial);
-    setInitialSnapshot(initial);
-    setFormError(null);
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (ex: TrainerProgramExercise) => {
-    setEditingId(ex.id);
-    const initial: ExerciseFormData = {
-      exerciseName: ex.exercise_name,
-      sets: ex.sets === null ? "" : ex.sets.toString(),
-      repetitions: ex.repetitions === null ? "" : ex.repetitions,
-      durationSeconds: ex.duration_seconds === null ? "" : ex.duration_seconds.toString(),
-      restSeconds: ex.rest_seconds === null ? "" : ex.rest_seconds.toString(),
-      instructions: ex.instructions === null ? "" : ex.instructions,
-      sortOrder: ex.sort_order.toString(),
-      programDayId: ex.program_day_id !== null && ex.program_day_id !== undefined ? ex.program_day_id.toString() : ""
-    };
-    setFormData(initial);
-    setInitialSnapshot(initial);
-    setFormError(null);
-    setIsModalOpen(true);
-  };
-
   const handleCloseModal = () => {
-    if (isDirty && !window.confirm("Kaydedilmemiş değişiklikler var. Kapatmak istediğinize emin misiniz?")) {
-      return;
+    if (isDirty) {
+      if (!window.confirm("Kaydedilmemiş değişiklikler var. Kapatmak istediğinize emin misiniz?")) {
+        return;
+      }
     }
     resetForm();
   };
 
-  const handleFieldChange = <K extends keyof ExerciseFormData>(field: K, value: ExerciseFormData[K]) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const openNewModal = (defaultProgramDayId: number | null = null) => {
+    const data: ExerciseFormData = {
+      ...DEFAULT_FORM_DATA,
+      programDayId: defaultProgramDayId !== null ? String(defaultProgramDayId) : ""
+    };
+    setFormData(data);
+    setInitialSnapshot(data);
     setFormError(null);
+    setEditingId(null);
+    setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formSaving || isSubmitting.current) return;
-
-    setFormError(null);
-
-    const trimmedName = formData.exerciseName.trim();
-    const nameLen = Array.from(trimmedName).length;
-    if (nameLen < 1 || nameLen > 160) {
-      setFormError("Egzersiz adı 1-160 karakter arasında olmalıdır.");
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      exercise_name: trimmedName
+  const openEditModal = (ex: TrainerProgramExercise) => {
+    const data: ExerciseFormData = {
+      exerciseName: ex.exercise_name,
+      sets: ex.sets !== null && ex.sets !== undefined ? String(ex.sets) : "",
+      repetitions: ex.repetitions || "",
+      durationSeconds: ex.duration_seconds !== null && ex.duration_seconds !== undefined ? String(ex.duration_seconds) : "",
+      restSeconds: ex.rest_seconds !== null && ex.rest_seconds !== undefined ? String(ex.rest_seconds) : "",
+      instructions: ex.instructions || "",
+      sortOrder: String(ex.sort_order),
+      programDayId: ex.program_day_id !== null && ex.program_day_id !== undefined ? String(ex.program_day_id) : ""
     };
+    setFormData(data);
+    setInitialSnapshot(data);
+    setFormError(null);
+    setEditingId(ex.id);
+    setIsModalOpen(true);
+  };
 
-    // Day validation & assignment
-    if (formData.programDayId !== "") {
-      if (!/^[1-9]\d*$/.test(formData.programDayId)) {
-        setFormError("Geçersiz program günü seçimi.");
-        return;
-      }
-      const dayIdNum = parseInt(formData.programDayId, 10);
-      if (programDays.length > 0 && !programDays.some((d) => d.id === dayIdNum)) {
-        setFormError("Seçilen program günü bu programa ait değil.");
-        return;
-      }
-      payload.program_day_id = dayIdNum;
-    } else {
-      payload.program_day_id = null;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const validateForm = (): string | null => {
+    const name = formData.exerciseName.trim();
+    if (!name) {
+      return "Egzersiz adı zorunludur.";
+    }
+    if (name.length > 160) {
+      return "Egzersiz adı en fazla 160 karakter olabilir.";
     }
 
-    if (formData.sets !== "") {
-      if (!/^[1-9]\d*$/.test(formData.sets)) {
-        setFormError("Set geçerli bir pozitif tam sayı olmalıdır.");
-        return;
+    if (formData.sets.trim() !== "") {
+      const setsNum = Number(formData.sets);
+      if (!Number.isInteger(setsNum) || setsNum < 1 || setsNum > 65535) {
+        return "Set sayısı 1 ile 65535 arasında bir tam sayı olmalıdır.";
       }
-      const setsNum = parseInt(formData.sets, 10);
-      if (setsNum < 1 || setsNum > 65535) {
-        setFormError("Set 1-65535 arasında olmalıdır.");
-        return;
-      }
-      payload.sets = setsNum;
-    } else {
-      payload.sets = null;
     }
 
-    if (formData.repetitions !== "") {
-      if (Array.from(formData.repetitions).length > 40) {
-        setFormError("Tekrar en fazla 40 karakter olabilir.");
-        return;
+    if (formData.repetitions.trim() !== "") {
+      if (formData.repetitions.length > 40) {
+        return "Tekrar alanı en fazla 40 karakter olabilir.";
       }
-      payload.repetitions = formData.repetitions;
-    } else {
-      payload.repetitions = null;
     }
 
-    if (formData.durationSeconds !== "") {
-      if (!/^[1-9]\d*$/.test(formData.durationSeconds)) {
-        setFormError("Süre geçerli bir pozitif tam sayı olmalıdır.");
-        return;
+    if (formData.durationSeconds.trim() !== "") {
+      const durNum = Number(formData.durationSeconds);
+      if (!Number.isInteger(durNum) || durNum < 1 || durNum > 4294967295) {
+        return "Süre 1 ile 4294967295 arasında pozitif bir tam sayı olmalıdır.";
       }
-      const durNum = parseInt(formData.durationSeconds, 10);
-      if (durNum < 1 || durNum > 4294967295) {
-        setFormError("Süre 1-4294967295 arasında olmalıdır.");
-        return;
-      }
-      payload.duration_seconds = durNum;
-    } else {
-      payload.duration_seconds = null;
     }
 
-    if (formData.restSeconds !== "") {
-      if (!/^(0|[1-9]\d*)$/.test(formData.restSeconds)) {
-        setFormError("Dinlenme geçerli bir negatif olmayan tam sayı olmalıdır.");
-        return;
+    if (formData.restSeconds.trim() !== "") {
+      const restNum = Number(formData.restSeconds);
+      if (!Number.isInteger(restNum) || restNum < 0 || restNum > 65535) {
+        return "Dinlenme süresi 0 ile 65535 arasında bir tam sayı olmalıdır.";
       }
-      const restNum = parseInt(formData.restSeconds, 10);
-      if (restNum < 0 || restNum > 65535) {
-        setFormError("Dinlenme 0-65535 arasında olmalıdır.");
-        return;
-      }
-      payload.rest_seconds = restNum;
-    } else {
-      payload.rest_seconds = null;
     }
 
-    if (formData.instructions !== "") {
-      if (Array.from(formData.instructions).length > 1000) {
-        setFormError("Talimat en fazla 1000 karakter olabilir.");
-        return;
-      }
-      payload.instructions = formData.instructions;
-    } else {
-      payload.instructions = null;
+    if (formData.instructions.length > 1000) {
+      return "Talimatlar en fazla 1000 karakter olabilir.";
     }
 
-    if (!/^(0|[1-9]\d*)$/.test(formData.sortOrder)) {
-      setFormError("Sıra geçerli bir tam sayı olmalıdır.");
+    if (formData.sortOrder.trim() !== "") {
+      const sortNum = Number(formData.sortOrder);
+      if (!Number.isInteger(sortNum) || sortNum < 0 || sortNum > 2147483647) {
+        return "Sıra 0 veya daha büyük bir tam sayı olmalıdır.";
+      }
+    }
+
+    if (formData.programDayId.trim() !== "") {
+      const dayNum = Number(formData.programDayId);
+      if (!Number.isInteger(dayNum) || dayNum <= 0) {
+        return "Geçersiz program günü seçimi.";
+      }
+      if (!programDays.some((d) => d.id === dayNum)) {
+        return "Seçilen program günü bu programa ait değil.";
+      }
+    }
+
+    return null;
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting.current) return;
+
+    const validationMsg = validateForm();
+    if (validationMsg) {
+      setFormError(validationMsg);
       return;
     }
-    const soNum = parseInt(formData.sortOrder, 10);
-    if (soNum < 0 || soNum > 2147483647) {
-      setFormError("Sıra 0-2147483647 arasında olmalıdır.");
-      return;
-    }
-    payload.sort_order = soNum;
 
     isSubmitting.current = true;
     setFormSaving(true);
+    setFormError(null);
+
+    const payload: {
+      exercise_name?: string;
+      sets?: number | null;
+      repetitions?: string | null;
+      duration_seconds?: number | null;
+      rest_seconds?: number | null;
+      instructions?: string | null;
+      sort_order?: number;
+      program_day_id?: number | null;
+    } = {};
+
+    if (!editingId) {
+      payload.exercise_name = formData.exerciseName.trim();
+      payload.sets = formData.sets.trim() === "" ? null : parseInt(formData.sets, 10);
+      payload.repetitions = formData.repetitions.trim() === "" ? null : formData.repetitions.trim();
+      payload.duration_seconds = formData.durationSeconds.trim() === "" ? null : parseInt(formData.durationSeconds, 10);
+      payload.rest_seconds = formData.restSeconds.trim() === "" ? null : parseInt(formData.restSeconds, 10);
+      payload.instructions = formData.instructions.trim() === "" ? null : formData.instructions.trim();
+      payload.sort_order = formData.sortOrder.trim() === "" ? 0 : parseInt(formData.sortOrder, 10);
+      payload.program_day_id = formData.programDayId.trim() === "" ? null : parseInt(formData.programDayId, 10);
+    } else {
+      if (formData.exerciseName !== initialSnapshot.exerciseName) {
+        payload.exercise_name = formData.exerciseName.trim();
+      }
+      if (formData.sets !== initialSnapshot.sets) {
+        payload.sets = formData.sets.trim() === "" ? null : parseInt(formData.sets, 10);
+      }
+      if (formData.repetitions !== initialSnapshot.repetitions) {
+        payload.repetitions = formData.repetitions.trim() === "" ? null : formData.repetitions.trim();
+      }
+      if (formData.durationSeconds !== initialSnapshot.durationSeconds) {
+        payload.duration_seconds = formData.durationSeconds.trim() === "" ? null : parseInt(formData.durationSeconds, 10);
+      }
+      if (formData.restSeconds !== initialSnapshot.restSeconds) {
+        payload.rest_seconds = formData.restSeconds.trim() === "" ? null : parseInt(formData.restSeconds, 10);
+      }
+      if (formData.instructions !== initialSnapshot.instructions) {
+        payload.instructions = formData.instructions.trim() === "" ? null : formData.instructions.trim();
+      }
+      if (formData.sortOrder !== initialSnapshot.sortOrder) {
+        payload.sort_order = formData.sortOrder.trim() === "" ? 0 : parseInt(formData.sortOrder, 10);
+      }
+      if (formData.programDayId !== initialSnapshot.programDayId) {
+        payload.program_day_id = formData.programDayId.trim() === "" ? null : parseInt(formData.programDayId, 10);
+      }
+
+      if (Object.keys(payload).length === 0) {
+        resetForm();
+        isSubmitting.current = false;
+        setFormSaving(false);
+        return;
+      }
+    }
 
     try {
       if (editingId) {
         const res = await apiClient.patch(`/api/trainer/program-exercises/${editingId}`, payload);
         if (!isSuccessResponse(res) || !res.success) {
-          throw new ContractValidationError("Egzersiz işlemi yanıtı doğrulanamadı.");
+          throw new ContractValidationError("Egzersiz güncelleme yanıtı doğrulanamadı.");
         }
       } else {
         const res = await apiClient.post(`/api/trainer/training-programs/${programId}/exercises`, payload);
         if (!isTrainerProgramExerciseCreateResponse(res)) {
-          throw new ContractValidationError("Egzersiz işlemi yanıtı doğrulanamadı.");
+          throw new ContractValidationError("Egzersiz oluşturma yanıtı doğrulanamadı.");
         }
       }
-      await fetchExercises();
+
       resetForm();
+      await fetchExercises();
     } catch (err: unknown) {
       setFormError(getErrorMessage(err));
     } finally {
@@ -378,72 +465,119 @@ export function TrainerProgramExercisesPanel({
     (ex) => ex.program_day_id === null || !programDays.some((d) => d.id === ex.program_day_id)
   );
 
+  const dayCount = programDays.length;
+  const exerciseCount = exercises.length;
+  const unassignedCount = unassignedExercises.length;
+
   const renderExerciseItems = (exercises: TrainerProgramExercise[]) => (
     <>
       {/* Mobile Cards (< lg) */}
       <div className="lg:hidden divide-y divide-white/10">
-        {exercises.map((ex) => (
-          <div key={ex.id} className="p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5 min-w-0">
-                <span className="shrink-0 px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
-                  #{ex.sort_order}
-                </span>
-                <h4 className="font-semibold text-white text-base leading-snug">
-                  {ex.exercise_name}
-                </h4>
+        {exercises.map((ex) => {
+          const targetDayVal = getTargetDayValue(ex);
+          const isNoOp = (targetDayVal === "" ? null : Number(targetDayVal)) === ex.program_day_id;
+          const isBusy = movingExerciseId === ex.id;
+
+          return (
+            <div key={ex.id} id={`trainer-exercise-row-${ex.id}`} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span className="shrink-0 px-2 py-0.5 rounded bg-white/5 text-white/60 text-xs font-mono font-medium border border-white/10">
+                    #{ex.sort_order}
+                  </span>
+                  <h4 className="font-semibold text-white text-base leading-snug">
+                    {ex.exercise_name}
+                  </h4>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase font-medium">Set</span>
+                  <span className="mt-0.5 block text-white/80 font-medium">{ex.sets ?? "-"}</span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase font-medium">Tekrar</span>
+                  <span className="mt-0.5 block text-white/80 font-medium">{ex.repetitions ?? "-"}</span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase font-medium">Süre</span>
+                  <span className="mt-0.5 block text-white/80 font-medium">{ex.duration_seconds ? `${ex.duration_seconds} sn` : "-"}</span>
+                </div>
+                <div>
+                  <span className="text-white/40 block text-[10px] uppercase font-medium">Dinlenme</span>
+                  <span className="mt-0.5 block text-white/80 font-medium">{ex.rest_seconds !== null && ex.rest_seconds !== undefined ? `${ex.rest_seconds} sn` : "-"}</span>
+                </div>
+              </div>
+
+              {ex.instructions && (
+                <div className="text-xs text-white/60 bg-white/[0.01] p-2.5 rounded-lg border border-white/5">
+                  <span className="font-semibold text-white/80">Talimat: </span>
+                  <span>{ex.instructions}</span>
+                </div>
+              )}
+
+              {/* F.29C Quick Exercise Day Move */}
+              {programDays.length > 0 && (
+                <div className="bg-white/[0.02] p-2.5 rounded-lg border border-white/5 space-y-1.5">
+                  <label htmlFor={`mobile-quick-move-${ex.id}`} className="text-xs text-white/60 block font-medium">
+                    Güne Taşı
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      id={`mobile-quick-move-${ex.id}`}
+                      value={targetDayVal}
+                      onChange={(e) => handleDaySelectChange(ex.id, e.target.value)}
+                      disabled={isBusy}
+                      className="flex-1 min-h-[44px] bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30"
+                      aria-label="Güne Taşı"
+                    >
+                      <option value="">Gün Atanmamış</option>
+                      {programDays.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          #{d.sort_order} {d.title}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      id={`btn-quick-move-${ex.id}`}
+                      onClick={() => handleQuickMove(ex, targetDayVal)}
+                      disabled={isBusy || isNoOp}
+                      className="min-h-[44px] px-3.5 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {isBusy ? "Taşınıyor..." : "Taşı"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  id={`btn-edit-exercise-mobile-${ex.id}`}
+                  onClick={() => openEditModal(ex)}
+                  className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition"
+                  aria-label="Egzersizi Düzenle"
+                >
+                  <Pen className="w-3.5 h-3.5" />
+                  Düzenle
+                </button>
+                <button
+                  type="button"
+                  id={`btn-delete-exercise-mobile-${ex.id}`}
+                  onClick={() => handleDelete(ex.id)}
+                  disabled={deletingId === ex.id}
+                  className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                  aria-label="Egzersizi Sil"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Sil
+                </button>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.02] p-2.5 rounded-lg border border-white/5">
-              <div>
-                <span className="text-white/40 block text-[10px] uppercase font-medium">Set</span>
-                <span className="mt-0.5 block text-white/80 font-medium">{ex.sets ?? "-"}</span>
-              </div>
-              <div>
-                <span className="text-white/40 block text-[10px] uppercase font-medium">Tekrar</span>
-                <span className="mt-0.5 block text-white/80 font-medium">{ex.repetitions ?? "-"}</span>
-              </div>
-              <div>
-                <span className="text-white/40 block text-[10px] uppercase font-medium">Süre</span>
-                <span className="mt-0.5 block text-white/80 font-medium">{ex.duration_seconds ? `${ex.duration_seconds} sn` : "-"}</span>
-              </div>
-              <div>
-                <span className="text-white/40 block text-[10px] uppercase font-medium">Dinlenme</span>
-                <span className="mt-0.5 block text-white/80 font-medium">{ex.rest_seconds !== null && ex.rest_seconds !== undefined ? `${ex.rest_seconds} sn` : "-"}</span>
-              </div>
-            </div>
-
-            {ex.instructions && (
-              <div className="text-xs text-white/60 bg-white/[0.01] p-2.5 rounded-lg border border-white/5">
-                <span className="font-semibold text-white/80">Talimat: </span>
-                <span>{ex.instructions}</span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => openEditModal(ex)}
-                className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-medium transition"
-                aria-label="Egzersizi Düzenle"
-              >
-                <Pen className="w-3.5 h-3.5" />
-                Düzenle
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(ex.id)}
-                disabled={deletingId === ex.id}
-                className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-medium transition disabled:opacity-50"
-                aria-label="Egzersizi Sil"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Sil
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Desktop Table (>= lg) */}
@@ -457,52 +591,91 @@ export function TrainerProgramExercisesPanel({
               <th className="px-4 py-3 font-medium text-white/70">Tekrar</th>
               <th className="px-4 py-3 font-medium text-white/70">Süre (sn)</th>
               <th className="px-4 py-3 font-medium text-white/70">Dinlenme (sn)</th>
+              {programDays.length > 0 && (
+                <th className="px-4 py-3 font-medium text-white/70">Güne Taşı</th>
+              )}
               <th className="px-4 py-3 font-medium text-white/70 text-right">İşlemler</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
-            {exercises.map((ex) => (
-              <React.Fragment key={ex.id}>
-                <tr id={`trainer-exercise-row-${ex.id}`} className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-white/70">{ex.sort_order}</td>
-                  <td className="px-4 py-3 font-medium">{ex.exercise_name}</td>
-                  <td className="px-4 py-3 text-white/70">{ex.sets ?? "-"}</td>
-                  <td className="px-4 py-3 text-white/70">{ex.repetitions ?? "-"}</td>
-                  <td className="px-4 py-3 text-white/70">{ex.duration_seconds ?? "-"}</td>
-                  <td className="px-4 py-3 text-white/70">{ex.rest_seconds ?? "-"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        id={`btn-edit-exercise-${ex.id}`}
-                        type="button"
-                        onClick={() => openEditModal(ex)}
-                        className="p-2 hover:bg-white/10 rounded-lg transition text-white/70 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        title="Düzenle"
-                      >
-                        <Pen className="w-4 h-4" />
-                      </button>
-                      <button
-                        id={`btn-delete-exercise-${ex.id}`}
-                        type="button"
-                        onClick={() => handleDelete(ex.id)}
-                        disabled={deletingId === ex.id}
-                        className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-500/70 hover:text-red-500 disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        title="Sil"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                {ex.instructions && (
-                  <tr id={`trainer-exercise-instructions-${ex.id}`} className="bg-white/[0.02]">
-                    <td colSpan={7} className="px-4 py-2 text-xs text-white/50">
-                      <span className="font-semibold text-white/70">Talimat:</span> {ex.instructions}
+            {exercises.map((ex) => {
+              const targetDayVal = getTargetDayValue(ex);
+              const isNoOp = (targetDayVal === "" ? null : Number(targetDayVal)) === ex.program_day_id;
+              const isBusy = movingExerciseId === ex.id;
+
+              return (
+                <React.Fragment key={ex.id}>
+                  <tr id={`trainer-exercise-row-${ex.id}`} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3 text-white/70">{ex.sort_order}</td>
+                    <td className="px-4 py-3 font-medium">{ex.exercise_name}</td>
+                    <td className="px-4 py-3 text-white/70">{ex.sets ?? "-"}</td>
+                    <td className="px-4 py-3 text-white/70">{ex.repetitions ?? "-"}</td>
+                    <td className="px-4 py-3 text-white/70">{ex.duration_seconds ?? "-"}</td>
+                    <td className="px-4 py-3 text-white/70">{ex.rest_seconds ?? "-"}</td>
+                    {programDays.length > 0 && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-[200px]">
+                          <select
+                            id={`desktop-quick-move-${ex.id}`}
+                            value={targetDayVal}
+                            onChange={(e) => handleDaySelectChange(ex.id, e.target.value)}
+                            disabled={isBusy}
+                            className="min-h-[44px] bg-[#1a1a1a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white/30 max-w-[150px]"
+                            aria-label="Güne Taşı"
+                          >
+                            <option value="">Gün Atanmamış</option>
+                            {programDays.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                #{d.sort_order} {d.title}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            id={`desktop-btn-quick-move-${ex.id}`}
+                            onClick={() => handleQuickMove(ex, targetDayVal)}
+                            disabled={isBusy || isNoOp}
+                            className="min-h-[44px] px-3 py-1.5 bg-white/10 hover:bg-white/15 text-white rounded-lg text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {isBusy ? "..." : "Taşı"}
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          id={`btn-edit-exercise-${ex.id}`}
+                          type="button"
+                          onClick={() => openEditModal(ex)}
+                          className="p-2 hover:bg-white/10 rounded-lg transition text-white/70 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          title="Düzenle"
+                        >
+                          <Pen className="w-4 h-4" />
+                        </button>
+                        <button
+                          id={`btn-delete-exercise-${ex.id}`}
+                          type="button"
+                          onClick={() => handleDelete(ex.id)}
+                          disabled={deletingId === ex.id}
+                          className="p-2 hover:bg-red-500/10 rounded-lg transition text-red-500/70 hover:text-red-500 disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+                  {ex.instructions && (
+                    <tr id={`trainer-exercise-instructions-${ex.id}`} className="bg-white/[0.02]">
+                      <td colSpan={programDays.length > 0 ? 8 : 7} className="px-4 py-2 text-xs text-white/50">
+                        <span className="font-semibold text-white/70">Talimat:</span> {ex.instructions}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -532,9 +705,37 @@ export function TrainerProgramExercisesPanel({
         </button>
       </div>
 
+      {/* Program Structure Summary (F.29C - compact count-only summary) */}
+      {programDays.length > 0 && (
+        <div
+          id="trainer-program-structure-summary"
+          className="bg-[#121212] border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-xs sm:text-sm text-white/70"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white">
+              {dayCount} program günü
+            </span>
+            <span className="text-white/30">•</span>
+            <span className="font-semibold text-white">
+              {exerciseCount} egzersiz
+            </span>
+            <span className="text-white/30">•</span>
+            <span className="font-semibold text-amber-400">
+              {unassignedCount} atanmamış
+            </span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div id="trainer-exercises-error" className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm">
           {error}
+        </div>
+      )}
+
+      {moveError && (
+        <div id="trainer-move-exercise-error" className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm">
+          {moveError}
         </div>
       )}
 
@@ -547,6 +748,8 @@ export function TrainerProgramExercisesPanel({
         <div id="trainer-exercises-table-container" className="space-y-5">
           {programDays.map((day) => {
             const dayExercises = exercises.filter((ex) => ex.program_day_id === day.id);
+            const isCollapsed = isDayCollapsed(day.id);
+
             return (
               <div
                 key={day.id}
@@ -570,24 +773,54 @@ export function TrainerProgramExercisesPanel({
                       <p className="text-xs text-white/50">{day.notes}</p>
                     )}
                   </div>
-                  <button
-                    id={`btn-add-exercise-day-${day.id}`}
-                    type="button"
-                    onClick={() => openNewModal(day.id)}
-                    className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Bu Güne Egzersiz Ekle
-                  </button>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* F.29C Collapsible toggle */}
+                    <button
+                      type="button"
+                      id={`btn-toggle-day-collapse-${day.id}`}
+                      onClick={() => toggleDayCollapse(day.id)}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`trainer-day-exercises-${day.id}`}
+                      className="flex-1 sm:flex-none min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-xs font-medium rounded-lg transition shrink-0"
+                    >
+                      {isCollapsed ? (
+                        <>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                          Göster
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp className="w-3.5 h-3.5" />
+                          Daralt
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      id={`btn-add-exercise-day-${day.id}`}
+                      type="button"
+                      onClick={() => openNewModal(day.id)}
+                      className="flex-1 sm:flex-none min-h-[44px] flex items-center justify-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg transition shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Bu Güne Egzersiz Ekle
+                    </button>
+                  </div>
                 </div>
 
-                {dayExercises.length === 0 ? (
-                  <div className="p-6 text-center text-white/40 text-sm">
-                    Bu güne henüz egzersiz atanmamış.
-                  </div>
-                ) : (
-                  renderExerciseItems(dayExercises)
-                )}
+                <div
+                  id={`trainer-day-exercises-${day.id}`}
+                  className={isCollapsed ? "hidden" : undefined}
+                >
+                  {dayExercises.length === 0 ? (
+                    <div className="p-6 text-center text-white/40 text-sm">
+                      Bu güne henüz egzersiz atanmamış.
+                    </div>
+                  ) : (
+                    renderExerciseItems(dayExercises)
+                  )}
+                </div>
               </div>
             );
           })}
@@ -652,156 +885,193 @@ export function TrainerProgramExercisesPanel({
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="p-2 -mr-2 text-white/50 hover:text-white rounded-lg transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="text-white/50 hover:text-white p-2 rounded-lg hover:bg-white/5 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Kapat"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {formError && (
-                <div id="trainer-exercise-form-error" className="mb-4 bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-lg text-sm">
+                <div id="trainer-exercise-form-error" className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs sm:text-sm">
                   {formError}
                 </div>
               )}
 
-              <form id="trainer-exercise-form" onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Egzersiz Adı *</label>
-                  <input
-                    id="exercise-name-input"
-                    type="text"
-                    required
-                    value={formData.exerciseName}
-                    onChange={(e) => handleFieldChange("exerciseName", e.target.value)}
-                    placeholder="Örn: Barbell Squat"
-                    className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                  />
-                </div>
+              {/* Exercise Name */}
+              <div>
+                <label htmlFor="exercise-name-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                  Egzersiz Adı <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="exercise-name-input"
+                  name="exerciseName"
+                  type="text"
+                  required
+                  maxLength={160}
+                  value={formData.exerciseName}
+                  onChange={handleInputChange}
+                  placeholder="Örn: Barbell Bench Press"
+                  className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                />
+              </div>
 
-                {/* Program Day Selector */}
-                <div className="space-y-2">
-                  <label htmlFor="exercise-day-select" className="text-sm font-medium flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-white/60" />
+              {/* Program Day Selection */}
+              {programDays.length > 0 && (
+                <div>
+                  <label htmlFor="exercise-day-select" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-white/50" />
                     Program Günü
                   </label>
                   <select
                     id="exercise-day-select"
+                    name="programDayId"
                     value={formData.programDayId}
-                    onChange={(e) => handleFieldChange("programDayId", e.target.value)}
-                    className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
+                    onChange={handleInputChange}
+                    className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-white/30"
                   >
                     <option value="">Gün Atanmamış</option>
-                    {programDays.map((day) => (
-                      <option key={day.id} value={day.id.toString()}>
-                        #{day.sort_order} - {day.title}
+                    {programDays.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        #{d.sort_order} {d.title}
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-white/50">
-                    Egzersizi belirli bir güne bağlayabilir veya atanmamış bırakabilirsiniz.
+                  <p className="text-xs text-white/40 mt-1">
+                    Egzersizi belirli bir program gününe atayabilir veya atanmamış bırakabilirsiniz.
                   </p>
                 </div>
+              )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Set</label>
-                    <input
-                      id="exercise-sets-input"
-                      type="text"
-                      value={formData.sets}
-                      onChange={(e) => handleFieldChange("sets", e.target.value)}
-                      placeholder="Örn: 3"
-                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Tekrar</label>
-                    <input
-                      id="exercise-repetitions-input"
-                      type="text"
-                      value={formData.repetitions}
-                      onChange={(e) => handleFieldChange("repetitions", e.target.value)}
-                      placeholder="Örn: 10-12"
-                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Süre (saniye)</label>
-                    <input
-                      id="exercise-duration-input"
-                      type="text"
-                      value={formData.durationSeconds}
-                      onChange={(e) => handleFieldChange("durationSeconds", e.target.value)}
-                      placeholder="Örn: 60"
-                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Dinlenme (saniye)</label>
-                    <input
-                      id="exercise-rest-input"
-                      type="text"
-                      value={formData.restSeconds}
-                      onChange={(e) => handleFieldChange("restSeconds", e.target.value)}
-                      placeholder="Örn: 30"
-                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Sıra *</label>
-                    <input
-                      id="exercise-sort-order-input"
-                      type="text"
-                      required
-                      value={formData.sortOrder}
-                      onChange={(e) => handleFieldChange("sortOrder", e.target.value)}
-                      className="w-full min-h-[44px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Talimat</label>
-                  <textarea
-                    id="exercise-instructions-input"
-                    rows={3}
-                    value={formData.instructions}
-                    onChange={(e) => handleFieldChange("instructions", e.target.value)}
-                    className="w-full min-h-[80px] bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-white/30 transition-colors resize-none"
-                    placeholder="Egzersiz hakkında notlar..."
+              {/* Sets & Repetitions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="exercise-sets-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                    Set Sayısı
+                  </label>
+                  <input
+                    id="exercise-sets-input"
+                    name="sets"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={formData.sets}
+                    onChange={handleInputChange}
+                    placeholder="Örn: 4"
+                    className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 font-mono"
                   />
                 </div>
-              </form>
-            </div>
+                <div>
+                  <label htmlFor="exercise-reps-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                    Tekrar Sayısı / Bilgisi
+                  </label>
+                  <input
+                    id="exercise-reps-input"
+                    name="repetitions"
+                    type="text"
+                    maxLength={40}
+                    value={formData.repetitions}
+                    onChange={handleInputChange}
+                    placeholder="Örn: 10-12 veya Tükeniş"
+                    className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                  />
+                </div>
+              </div>
 
-            <div className="p-4 sm:p-6 border-t border-white/10 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
-              <button
-                id="btn-cancel-exercise"
-                type="button"
-                onClick={handleCloseModal}
-                disabled={formSaving}
-                className="w-full sm:w-auto min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center justify-center"
-              >
-                İptal
-              </button>
-              <button
-                id="btn-save-exercise"
-                type="submit"
-                form="trainer-exercise-form"
-                disabled={formSaving}
-                className="w-full sm:w-auto min-h-[44px] px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition disabled:opacity-50 flex items-center justify-center shadow-sm"
-              >
-                {formSaving ? "Kaydediliyor..." : "Kaydet"}
-              </button>
-            </div>
+              {/* Duration & Rest Seconds */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="exercise-duration-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                    Süre (saniye)
+                  </label>
+                  <input
+                    id="exercise-duration-input"
+                    name="durationSeconds"
+                    type="number"
+                    min={1}
+                    max={4294967295}
+                    value={formData.durationSeconds}
+                    onChange={handleInputChange}
+                    placeholder="Örn: 60"
+                    className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 font-mono"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="exercise-rest-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                    Dinlenme (saniye)
+                  </label>
+                  <input
+                    id="exercise-rest-input"
+                    name="restSeconds"
+                    type="number"
+                    min={0}
+                    max={65535}
+                    value={formData.restSeconds}
+                    onChange={handleInputChange}
+                    placeholder="Örn: 90"
+                    className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Sort Order */}
+              <div>
+                <label htmlFor="exercise-sort-order-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                  Sıralama (Sort Order)
+                </label>
+                <input
+                  id="exercise-sort-order-input"
+                  name="sortOrder"
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  value={formData.sortOrder}
+                  onChange={handleInputChange}
+                  placeholder="0"
+                  className="w-full min-h-[44px] bg-[#121212] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 font-mono"
+                />
+              </div>
+
+              {/* Instructions */}
+              <div>
+                <label htmlFor="exercise-instructions-input" className="block text-xs sm:text-sm font-medium text-white/70 mb-1.5">
+                  Talimatlar / Notlar (en fazla 1000 karakter)
+                </label>
+                <textarea
+                  id="exercise-instructions-input"
+                  name="instructions"
+                  maxLength={1000}
+                  rows={3}
+                  value={formData.instructions}
+                  onChange={handleInputChange}
+                  placeholder="Egzersiz uygulanışına dair teknik ipuçları veya notlar..."
+                  className="w-full bg-[#121212] border border-white/10 rounded-xl p-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 resize-none min-h-[80px]"
+                />
+                <div className="text-right text-[11px] text-white/40 mt-1">
+                  {formData.instructions.length}/1000
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="min-h-[44px] px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-xl transition"
+                >
+                  İptal
+                </button>
+                <button
+                  id="btn-save-exercise"
+                  type="submit"
+                  disabled={formSaving || (editingId !== null && !isDirty)}
+                  className="min-h-[44px] px-5 py-2 bg-white text-black text-sm font-medium rounded-xl hover:bg-white/90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {formSaving ? "Kaydediliyor..." : editingId ? "Değişiklikleri Kaydet" : "Egzersiz Ekle"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

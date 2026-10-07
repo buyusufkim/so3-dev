@@ -559,6 +559,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * mobile-first design with touch targets >= 44px, responsive card/table views, and Turkish language UI
 * zero schema changes, zero new backend endpoints; utilizes F.29A REST endpoints
 
+## F.29C Program Editor v2 Workflow Polish
+* Program Editor v2 workflow polish introduces collapsible day sections, compact structure summary, and quick exercise day move
+* collapsible program day groups default to expanded; collapse state is session-only in component memory with zero localStorage/sessionStorage persistence
+* day toggle controls enforce accessibility via `aria-expanded`, deterministic `aria-controls`, visible `Daralt`/`Göster` text, and min-h-[44px] mobile touch targets
+* compact program structure summary displays validated counts only (`program günü`, `egzersiz`, `atanmamış`) with zero progress scores, completion percentages, or gamification
+* quick exercise day move (`Güne Taşı`) uses explicit select + Taşı interaction with canonical API day ordering and min-h-[44px] touch targets
+* quick move mutations execute via canonical PATCH `/api/trainer/program-exercises/{exerciseId}` with strict single-field payload `{ program_day_id }`
+* same-day moves are guarded with no-op checks, bypassing redundant API requests
+* moves trigger canonical `fetchExercises()` refetch; strictly zero local optimistic array splicing as source of truth
+* per-exercise busy state isolates mutation loading per row without locking the global editor
+* zero client-side sorting, zero drag/drop libraries, zero backend/schema modifications
+
 
 
 
