@@ -98,12 +98,31 @@ assert(
     'Invariant 8.1: TrainerProgramDaysPanel supports onDaysChange, onDayDeleted callbacks, and displays exercise counts'
 );
 
-// 9. TrainerProgramExercisesPanel - Props
+// 9. TrainerProgramExercisesPanel - Props & Race Safety
 assert(
     exercisesPanelSource.includes('programDays') &&
     exercisesPanelSource.includes('refreshKey') &&
     exercisesPanelSource.includes('onExercisesChange'),
     'Invariant 9.1: TrainerProgramExercisesPanel accepts programDays, refreshKey, and onExercisesChange props'
+);
+
+assert(
+    exercisesPanelSource.includes('new AbortController()') &&
+    exercisesPanelSource.includes('requestGenRef') &&
+    exercisesPanelSource.includes('isMountedRef'),
+    'Invariant 9.2: TrainerProgramExercisesPanel implements new AbortController(), requestGenRef, and isMountedRef race safety guards'
+);
+
+const exerciseFetchWithSignalRegex = /apiClient\.get\(\s*`\/api\/trainer\/training-programs\/\$\{programId\}\/exercises`\s*,\s*\{[\s\S]*?signal:\s*controller\.signal[\s\S]*?\}\s*\)/;
+assert(
+    exerciseFetchWithSignalRegex.test(exercisesPanelSource),
+    'Invariant 9.3: TrainerProgramExercisesPanel canonical exercise GET request passes { signal: controller.signal }'
+);
+
+const bareExerciseFetchRegex = /apiClient\.get\(\s*`\/api\/trainer\/training-programs\/\$\{programId\}\/exercises`\s*\)/;
+assert(
+    !bareExerciseFetchRegex.test(exercisesPanelSource),
+    'Invariant 9.4: Negative check: TrainerProgramExercisesPanel does not contain bare apiClient.get without abort signal options'
 );
 
 // 10. Server-authoritative day ordering (Zero client-side sorting)

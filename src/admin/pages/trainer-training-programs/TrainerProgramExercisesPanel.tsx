@@ -117,7 +117,12 @@ export function TrainerProgramExercisesPanel({
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(`/api/trainer/training-programs/${programId}/exercises`);
+      const res = await apiClient.get(
+        `/api/trainer/training-programs/${programId}/exercises`,
+        {
+          signal: controller.signal
+        }
+      );
 
       if (!isMountedRef.current || currentGen !== requestGenRef.current) return;
 
