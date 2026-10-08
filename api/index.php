@@ -749,6 +749,17 @@ if (isset($routes[$method][$requestUri])) {
     }
 
     // Dynamic matching for trainer member measurements endpoints
+    if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurement-progress$#', $requestUri, $matches)) {
+        AuthMiddleware::hasRole(['trainer']);
+        $memberId = (int)$matches[1];
+        require_once __DIR__ . '/controllers/TrainerMeasurementProgressController.php';
+        $controller = new \Controllers\TrainerMeasurementProgressController();
+        if ($method === 'GET') {
+            $controller->index($memberId);
+            $matched = true;
+        }
+    }
+
     if (preg_match('#^/api/trainer/members/([1-9]\d*)/measurements$#', $requestUri, $matches)) {
         AuthMiddleware::hasRole(['trainer']);
         $memberId = (int)$matches[1];

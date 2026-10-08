@@ -190,3 +190,55 @@ export function isMemberProgressNoteCreateResponse(val: unknown): val is MemberP
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.uuid)
   );
 }
+
+export interface MeasurementMetricSummary {
+  latest: number | null;
+  previous: number | null;
+  first: number | null;
+  diff_previous: number | null;
+  diff_first: number | null;
+}
+
+export interface MeasurementProgressDeltas {
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+}
+
+export interface TrainerMeasurementProgressReadModel {
+  member_id: number;
+  total_measurements: number;
+  latest: MemberMeasurementListItem | null;
+  previous: MemberMeasurementListItem | null;
+  first: MemberMeasurementListItem | null;
+  baseline: MemberMeasurementListItem | null;
+  diff_from_previous: MeasurementProgressDeltas | null;
+  changes_from_previous: MeasurementProgressDeltas | null;
+  since_previous: MeasurementProgressDeltas | null;
+  diff_from_first: MeasurementProgressDeltas | null;
+  changes_from_first: MeasurementProgressDeltas | null;
+  since_first: MeasurementProgressDeltas | null;
+  diff_from_baseline: MeasurementProgressDeltas | null;
+  changes_from_baseline: MeasurementProgressDeltas | null;
+  since_baseline: MeasurementProgressDeltas | null;
+  days_since_previous: number | null;
+  days_since_first: number | null;
+  days_since_baseline: number | null;
+  metrics: Record<string, MeasurementMetricSummary>;
+}
+
+export function isTrainerMeasurementProgressReadModel(val: unknown): val is TrainerMeasurementProgressReadModel {
+  if (!isRecord(val)) return false;
+  if (typeof val.member_id !== 'number' || !Number.isInteger(val.member_id) || val.member_id <= 0) return false;
+  if (typeof val.total_measurements !== 'number' || !Number.isInteger(val.total_measurements) || val.total_measurements < 0) return false;
+  if (val.latest !== null && !isMemberMeasurementListItem(val.latest)) return false;
+  if (val.previous !== null && !isMemberMeasurementListItem(val.previous)) return false;
+  if (val.first !== null && !isMemberMeasurementListItem(val.first)) return false;
+  if (!isRecord(val.metrics)) return false;
+  return true;
+}
+

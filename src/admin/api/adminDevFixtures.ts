@@ -1230,6 +1230,106 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     program.deleted_at = null;
     return createResponse({ data: { success: true } });
   }
+
+  // --- Trainer Member Measurement Progress Read Model ---
+  const measurementProgressMatch = path.match(/^\/api\/trainer\/members\/([1-9]\d*)\/measurement-progress$/);
+  if (measurementProgressMatch) {
+    if (currentDevRole !== 'trainer' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+    const memberId = parseInt(measurementProgressMatch[1], 10);
+    const member = mockMembers.find(m => m.id === memberId);
+    if (!member || member.deleted_at) {
+      return createError('Member not found or not assigned to you.', 404, 'NOT_FOUND');
+    }
+    if (method !== 'GET') {
+      return createError('Method not allowed', 405, 'METHOD_NOT_ALLOWED');
+    }
+    if (Array.from(url.searchParams.keys()).length > 0) {
+      return createError('Query parameters are not allowed.', 422, 'VALIDATION_ERROR');
+    }
+
+    const metricFields = ['weight_kg', 'body_fat_percent', 'chest_cm', 'waist_cm', 'hip_cm', 'arm_cm', 'thigh_cm'] as const;
+    const active = mockMeasurements
+      .filter(m => m.member_id === memberId && !m.deleted_at)
+      .sort((a, b) => a.measured_at.localeCompare(b.measured_at) || a.id - b.id);
+
+    const totalMeasurements = active.length;
+    let latest: any = null;
+    let previous: any = null;
+    let first: any = null;
+    let diffFromPrevious: Record<string, number | null> | null = null;
+    let diffFromFirst: Record<string, number | null> | null = null;
+    let daysSincePrevious: number | null = null;
+    let daysSinceFirst: number | null = null;
+
+    if (totalMeasurements === 1) {
+      const { notes, ...m0 } = active[0];
+      latest = m0;
+      first = m0;
+    } else if (totalMeasurements >= 2) {
+      const { notes: n1, ...mFirst } = active[0];
+      const { notes: n2, ...mPrev } = active[totalMeasurements - 2];
+      const { notes: n3, ...mLatest } = active[totalMeasurements - 1];
+      first = mFirst;
+      previous = mPrev;
+      latest = mLatest;
+
+      diffFromPrevious = {};
+      diffFromFirst = {};
+      for (const f of metricFields) {
+        const lVal = latest[f];
+        const pVal = previous[f];
+        const fVal = first[f];
+        diffFromPrevious[f] = (lVal !== null && pVal !== null) ? Math.round((lVal - pVal) * 100) / 100 : null;
+        diffFromFirst[f] = (lVal !== null && fVal !== null) ? Math.round((lVal - fVal) * 100) / 100 : null;
+      }
+      const dLatest = new Date(latest.measured_at.replace(' ', 'T')).getTime();
+      const dPrev = new Date(previous.measured_at.replace(' ', 'T')).getTime();
+      const dFirst = new Date(first.measured_at.replace(' ', 'T')).getTime();
+      daysSincePrevious = Math.round(Math.abs(dLatest - dPrev) / (1000 * 60 * 60 * 24));
+      daysSinceFirst = Math.round(Math.abs(dLatest - dFirst) / (1000 * 60 * 60 * 24));
+    }
+
+    const metrics: Record<string, any> = {};
+    for (const f of metricFields) {
+      const lVal = latest ? latest[f] : null;
+      const pVal = previous ? previous[f] : null;
+      const fVal = first ? first[f] : null;
+      metrics[f] = {
+        latest: lVal,
+        previous: pVal,
+        first: fVal,
+        diff_previous: (totalMeasurements >= 2 && lVal !== null && pVal !== null) ? Math.round((lVal - pVal) * 100) / 100 : null,
+        diff_first: (totalMeasurements >= 2 && lVal !== null && fVal !== null) ? Math.round((lVal - fVal) * 100) / 100 : null,
+      };
+    }
+
+    return createResponse({
+      data: {
+        member_id: memberId,
+        total_measurements: totalMeasurements,
+        latest,
+        previous,
+        first,
+        baseline: first,
+        diff_from_previous: diffFromPrevious,
+        changes_from_previous: diffFromPrevious,
+        since_previous: diffFromPrevious,
+        diff_from_first: diffFromFirst,
+        changes_from_first: diffFromFirst,
+        since_first: diffFromFirst,
+        diff_from_baseline: diffFromFirst,
+        changes_from_baseline: diffFromFirst,
+        since_baseline: diffFromFirst,
+        days_since_previous: daysSincePrevious,
+        days_since_first: daysSinceFirst,
+        days_since_baseline: daysSinceFirst,
+        metrics
+      }
+    });
+  }
+
   // --- Member Measurements Endpoints ---
   const measurementListMatch = path.match(/^\/api\/(admin|trainer)\/members\/([1-9]\d*)\/measurements$/);
   if (measurementListMatch) {

@@ -571,6 +571,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * per-exercise busy state isolates mutation loading per row without locking the global editor
 * zero client-side sorting, zero drag/drop libraries, zero backend/schema modifications
 
+## F.30A Measurement Progress Summary Read Model
+* trainer-facing deterministic read model provides measurement progress comparison (`GET /api/trainer/members/{memberId}/measurement-progress`)
+* dedicated controller `TrainerMeasurementProgressController.php` with `index(int $memberId)` handler
+* RBAC strictly restricted to `trainer` role with session `admin_id -> trainers.admin_id` resolution
+* strict member ownership check: member must belong to trainer (`members.trainer_id = ? AND members.deleted_at IS NULL`), failing with 404 if unassigned or deleted
+* query parameters strictly rejected with 422 `VALIDATION_ERROR` for deterministic endpoint contract
+* active measurements only (`deleted_at IS NULL`); server-authoritative chronological ordering (`measured_at ASC, id ASC`)
+* deterministic comparison calculation across 7 core metrics (`weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`): latest, previous, and first/baseline measurements
+* exact mathematical deltas (`latest - previous` and `latest - first`) rounded to 2 decimal places; nullable metric handling
+* zero medical or coaching interpretation: strictly zero BMI, ideal weight, healthy range, obesity classification, health/fitness scores, or risk predictions
+* read-only foundation with zero mutations; zero schema changes, zero new database tables or columns
+
+
 
 
 

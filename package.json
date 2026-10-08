@@ -82,7 +82,8 @@
     "verify:trainer-retention-attention-ui": "node scripts/verify-trainer-retention-attention-ui.mjs",
     "verify:trainer-program-days": "node scripts/verify-trainer-program-days.mjs",
     "verify:trainer-program-days-ui": "node scripts/verify-trainer-program-days-ui.mjs",
-    "verify:trainer-program-editor-v2": "node scripts/verify-trainer-program-editor-v2.mjs"
+    "verify:trainer-program-editor-v2": "node scripts/verify-trainer-program-editor-v2.mjs",
+    "verify:trainer-measurement-progress": "node scripts/verify-trainer-measurement-progress.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
