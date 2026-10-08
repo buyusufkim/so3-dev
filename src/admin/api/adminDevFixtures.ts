@@ -1310,7 +1310,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
           latest: snap,
           comparisons: {
             from_previous: null,
-            from_first: null,
+            from_first: calculateDeltas(snap, snap),
           },
         },
       });

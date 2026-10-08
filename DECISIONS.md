@@ -571,7 +571,7 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * per-exercise busy state isolates mutation loading per row without locking the global editor
 * zero client-side sorting, zero drag/drop libraries, zero backend/schema modifications
 
-## F.30A Measurement Progress Summary Read Model & Canonical Corrective
+## F.30A Measurement Progress Summary Read Model, Canonical & Consistency Corrective
 * trainer-facing deterministic read model provides measurement progress comparison (`GET /api/trainer/members/{memberId}/measurement-progress`)
 * dedicated controller `TrainerMeasurementProgressController.php` with `index(int $memberId)` handler
 * RBAC strictly restricted to `trainer` role with session `admin_id -> trainers.admin_id` resolution
@@ -581,9 +581,10 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * canonical response contract only: `{ measurement_count, first, previous, latest, comparisons: { from_previous, from_first } }`
 * all redundant aliases and out-of-scope fields strictly removed (`member_id`, `total_measurements`, `baseline`, `diff_*`, `changes_*`, `since_*`, `days_since_*`, `metrics`)
 * snapshot exact projection: 10 fields only (`id`, `uuid`, `measured_at`, `weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`); `member_id`, `trainer_id`, `notes`, `created_at`, `updated_at`, `deleted_at` omitted from projection
-* deterministic comparisons across 7 core metrics (`weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`): exact mathematical deltas (`latest - baseline`) rounded to 2 decimal places with null safety
-* strict zero/one/multi measurement semantics: count 0 yields null snapshots and null comparisons; count 1 yields latest snapshot for first/latest with null previous and null comparisons; count >= 2 yields populated snapshots and delta comparisons
-* frontend TypeScript types and fail-closed validators (`isTrainerMeasurementProgressReadModel`, `isMeasurementProgressSnapshot`, `isMeasurementProgressDeltas`)
+* single-measurement contract: when measurement_count is 1, first === latest, previous is null, from_previous is null, and from_first is the factual zero-delta object derived via `calculateDeltas(latest, first)` (zero for numbers, null for null metrics)
+* dev fixture parity: `adminDevFixtures.ts` returns identical zero-delta object for single measurement via `calculateDeltas(snap, snap)`
+* fail-closed frontend runtime validator: `isTrainerMeasurementProgressReadModel` mathematically validates that every delta matches `Math.round((latest - reference) * 100) / 100`, rejecting tampered deltas, null tampers, missing or extra keys, non-canonical datetime formats, and invalid UUIDs
+* exact key enforcement: top-level (5 keys), comparisons (2 keys), snapshots (10 keys), deltas (7 keys) fail closed on any unexpected extra key
 * zero medical or coaching interpretation: strictly zero BMI, ideal weight, healthy range, obesity classification, health/fitness scores, or risk predictions
 * read-only foundation with zero mutations; zero schema changes, zero new database tables or columns
 

@@ -174,7 +174,7 @@ class TrainerMeasurementProgressController
             $first = $latest;
             $previous = null;
             $fromPrevious = null;
-            $fromFirst = null;
+            $fromFirst = $this->calculateDeltas($latest, $first);
         } elseif ($measurementCount === 2) {
             $previous = $this->formatMeasurement($latestRows[1]);
             $first = $previous;

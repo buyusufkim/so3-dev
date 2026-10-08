@@ -149,6 +149,12 @@ assert(
   "Controller does NOT perform unbounded lifetime fetchAll() over full history"
 );
 
+// Single measurement from_first factual delta calculation invariant
+assert(
+  controllerSource.includes("$fromFirst = $this->calculateDeltas($latest, $first);"),
+  "Controller calculates factual zero-deltas for single measurement using $this->calculateDeltas($latest, $first)"
+);
+
 // Canonical response fields assertion
 assert(
   controllerSource.includes("'measurement_count' => $measurementCount") || controllerSource.includes("'measurement_count' =>"),
@@ -320,7 +326,7 @@ function computeCanonicalProgress(measurements) {
       latest,
       comparisons: {
         from_previous: null,
-        from_first: null
+        from_first: calculateDeltas(latest, latest)
       }
     };
   }
@@ -350,26 +356,34 @@ assert(res0.first === null, "Semantics (0 measurements): first is null");
 assert(res0.comparisons.from_previous === null, "Semantics (0 measurements): comparisons.from_previous is null");
 assert(res0.comparisons.from_first === null, "Semantics (0 measurements): comparisons.from_first is null");
 
-// Case 1: 1 measurement
+// Case 1: 1 measurement (Section 20 Example Fixture)
 const m1 = {
   id: 1,
   uuid: 'c637a7f4-8da0-4bd2-97b5-045389ca0121',
   measured_at: '2026-08-01 10:00:00',
-  weight_kg: 80.0,
-  body_fat_percent: 22.0,
-  chest_cm: 102.0,
-  waist_cm: 88.0,
-  hip_cm: 100.0,
-  arm_cm: 34.0,
-  thigh_cm: 58.0
+  weight_kg: 80,
+  body_fat_percent: null,
+  chest_cm: 100,
+  waist_cm: 85,
+  hip_cm: 95,
+  arm_cm: 35,
+  thigh_cm: 57
 };
 const res1 = computeCanonicalProgress([m1]);
 assert(res1.measurement_count === 1, "Semantics (1 measurement): measurement_count is 1");
 assert(res1.latest.id === 1, "Semantics (1 measurement): latest is m1");
 assert(res1.previous === null, "Semantics (1 measurement): previous is null");
 assert(res1.first.id === 1, "Semantics (1 measurement): first is m1");
+assert(res1.first.id === res1.latest.id, "Semantics (1 measurement): first.id === latest.id");
 assert(res1.comparisons.from_previous === null, "Semantics (1 measurement): comparisons.from_previous is null");
-assert(res1.comparisons.from_first === null, "Semantics (1 measurement): comparisons.from_first is null");
+assert(res1.comparisons.from_first !== null, "Semantics (1 measurement): comparisons.from_first is non-null delta object");
+assert(res1.comparisons.from_first.weight_kg === 0, "Semantics (1 measurement): from_first.weight_kg === 0");
+assert(res1.comparisons.from_first.body_fat_percent === null, "Semantics (1 measurement): null metric body_fat_percent delta is null");
+assert(res1.comparisons.from_first.chest_cm === 0, "Semantics (1 measurement): from_first.chest_cm === 0");
+assert(res1.comparisons.from_first.waist_cm === 0, "Semantics (1 measurement): from_first.waist_cm === 0");
+assert(res1.comparisons.from_first.hip_cm === 0, "Semantics (1 measurement): from_first.hip_cm === 0");
+assert(res1.comparisons.from_first.arm_cm === 0, "Semantics (1 measurement): from_first.arm_cm === 0");
+assert(res1.comparisons.from_first.thigh_cm === 0, "Semantics (1 measurement): from_first.thigh_cm === 0");
 
 // Case 2: 2 measurements
 const m2 = {
@@ -378,17 +392,18 @@ const m2 = {
   measured_at: '2026-09-01 10:00:00',
   weight_kg: 78.2,
   body_fat_percent: 20.5,
-  chest_cm: 101.0,
-  waist_cm: 85.0,
-  hip_cm: 99.0,
+  chest_cm: 99.0,
+  waist_cm: 82.0,
+  hip_cm: 94.0,
   arm_cm: 34.5,
-  thigh_cm: 57.5
+  thigh_cm: 56.5
 };
 const res2 = computeCanonicalProgress([m1, m2]);
 assert(res2.measurement_count === 2, "Semantics (2 measurements): measurement_count is 2");
 assert(res2.latest.id === 2, "Semantics (2 measurements): latest is m2");
 assert(res2.previous.id === 1, "Semantics (2 measurements): previous is m1");
 assert(res2.first.id === 1, "Semantics (2 measurements): first is m1");
+assert(res2.previous.id === res2.first.id, "Semantics (2 measurements): previous.id === first.id is valid");
 assert(res2.comparisons.from_previous.weight_kg === -1.8, "Semantics (2 measurements): from_previous weight_kg is -1.8");
 assert(res2.comparisons.from_first.weight_kg === -1.8, "Semantics (2 measurements): from_first weight_kg is -1.8 (equal to previous)");
 assert(res2.comparisons.from_previous.waist_cm === -3.0, "Semantics (2 measurements): from_previous waist_cm is -3.0");
@@ -399,12 +414,12 @@ const m3 = {
   uuid: 'f2be6d78-bf7a-4ec9-8664-d6a543e49e29',
   measured_at: '2026-10-01 10:00:00',
   weight_kg: 75.3,
-  body_fat_percent: null,
-  chest_cm: 100.0,
-  waist_cm: 82.0,
-  hip_cm: 97.5,
+  body_fat_percent: 19.0,
+  chest_cm: 98.0,
+  waist_cm: 79.0,
+  hip_cm: 93.0,
   arm_cm: 35.0,
-  thigh_cm: 56.5
+  thigh_cm: 55.5
 };
 const res3 = computeCanonicalProgress([m1, m2, m3]);
 assert(res3.measurement_count === 3, "Semantics (3 measurements): measurement_count is 3");
@@ -413,8 +428,8 @@ assert(res3.previous.id === 2, "Semantics (3 measurements): previous is m2");
 assert(res3.first.id === 1, "Semantics (3 measurements): first is m1");
 assert(res3.comparisons.from_previous.weight_kg === -2.9, "Semantics (3 measurements): delta latest - prev is -2.9");
 assert(res3.comparisons.from_first.weight_kg === -4.7, "Semantics (3 measurements): delta latest - first is -4.7");
-assert(res3.comparisons.from_previous.body_fat_percent === null, "Semantics (3 measurements): nullable metric delta is null");
-assert(res3.comparisons.from_first.body_fat_percent === null, "Semantics (3 measurements): nullable metric delta from first is null");
+assert(res3.comparisons.from_previous.body_fat_percent === -1.5, "Semantics (3 measurements): body_fat_percent delta latest - prev is -1.5");
+assert(res3.comparisons.from_first.body_fat_percent === null, "Semantics (3 measurements): first body_fat_percent is null -> delta from first is null");
 
 console.log('\n=== 6. TypeScript Contract & Fail-Closed Validator Invariants ===');
 
@@ -450,19 +465,103 @@ assert(
   typesSource.includes('export function isMeasurementProgressDeltas'),
   "types.ts exports isMeasurementProgressDeltas validator"
 );
+assert(
+  typesSource.includes('export function expectedDelta'),
+  "types.ts exports expectedDelta helper"
+);
 
 // Dynamically import and test the validator
 const typesModule = await import(path.join(rootDir, 'src', 'admin', 'pages', 'member-progress', 'types.ts'));
 const { isTrainerMeasurementProgressReadModel, isMeasurementProgressSnapshot } = typesModule;
 
+// Valid models
 assert(isTrainerMeasurementProgressReadModel(res0), "Validator accepts valid 0-measurement response");
-assert(isTrainerMeasurementProgressReadModel(res1), "Validator accepts valid 1-measurement response");
+assert(isTrainerMeasurementProgressReadModel(res1), "Validator accepts valid 1-measurement response with zero deltas");
 assert(isTrainerMeasurementProgressReadModel(res2), "Validator accepts valid 2-measurement response");
 assert(isTrainerMeasurementProgressReadModel(res3), "Validator accepts valid 3-measurement response");
 
-// Fail-closed checks
+// Basic fail-closed checks
 assert(!isTrainerMeasurementProgressReadModel(null), "Validator rejects null");
 assert(!isTrainerMeasurementProgressReadModel({}), "Validator rejects empty object");
+
+// Single measurement contract validation
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res1,
+    comparisons: { from_previous: null, from_first: null }
+  }),
+  "Validator strictly rejects count=1 when from_first is null"
+);
+
+// Mathematical tamper rejection (Section 21)
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    comparisons: {
+      ...res3.comparisons,
+      from_previous: { ...res3.comparisons.from_previous, weight_kg: 999 }
+    }
+  }),
+  "Validator fail-closed rejects mathematically tampered delta: from_previous.weight_kg = 999"
+);
+
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    comparisons: {
+      ...res3.comparisons,
+      from_first: { ...res3.comparisons.from_first, waist_cm: 0 }
+    }
+  }),
+  "Validator fail-closed rejects mathematically tampered delta: from_first.waist_cm = 0 when expected is -6"
+);
+
+// Null tamper rejection (Section 22)
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    comparisons: {
+      ...res3.comparisons,
+      from_first: { ...res3.comparisons.from_first, body_fat_percent: 0 }
+    }
+  }),
+  "Validator fail-closed rejects null metric tamper: delta is 0 when baseline is null"
+);
+
+// Extra key fail-closed tests (Section 23)
+assert(
+  !isTrainerMeasurementProgressReadModel({ ...res3, foo: 'unexpected_top_level' }),
+  "Validator fail-closed rejects extra top-level key: top-level.foo"
+);
+
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    comparisons: { ...res3.comparisons, foo: 'unexpected_comparison' }
+  }),
+  "Validator fail-closed rejects extra comparisons key: comparisons.foo"
+);
+
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    latest: { ...res3.latest, foo: 'unexpected_snapshot_field' }
+  }),
+  "Validator fail-closed rejects extra snapshot key: snapshot.foo"
+);
+
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    comparisons: {
+      ...res3.comparisons,
+      from_previous: { ...res3.comparisons.from_previous, foo: 'unexpected_delta_field' }
+    }
+  }),
+  "Validator fail-closed rejects extra delta key: delta.foo"
+);
+
+// Legacy alias rejection
 assert(
   !isTrainerMeasurementProgressReadModel({ ...res3, member_id: 10 }),
   "Validator fail-closed rejects payload containing legacy alias 'member_id'"
@@ -494,7 +593,48 @@ assert(
   "Validator fail-closed rejects snapshot with leaked 'member_id'"
 );
 
-// Zero count semantics fail-closed: if count is 0 but latest is non-null
+// Canonical datetime format validation (Section 17)
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    latest: { ...res3.latest, measured_at: '2026-10-01' }
+  }),
+  "Validator rejects non-canonical measured_at format (missing time)"
+);
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    latest: { ...res3.latest, measured_at: '2026/10/01 10:00:00' }
+  }),
+  "Validator rejects non-canonical measured_at format (slashes)"
+);
+
+// UUID validation (Section 18)
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    latest: { ...res3.latest, uuid: 'invalid-non-uuid-string' }
+  }),
+  "Validator rejects invalid UUID in snapshot"
+);
+
+// ID consistency tests (Section 11)
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res3,
+    previous: { ...res3.latest }
+  }),
+  "Validator rejects count >= 2 when previous.id === latest.id"
+);
+assert(
+  !isTrainerMeasurementProgressReadModel({
+    ...res1,
+    first: { ...res1.first, id: 999 }
+  }),
+  "Validator rejects count = 1 when first.id !== latest.id"
+);
+
+// Inconsistent count / snapshot semantics
 assert(
   !isTrainerMeasurementProgressReadModel({
     measurement_count: 0,
@@ -505,15 +645,13 @@ assert(
   }),
   "Validator rejects inconsistent count=0 with non-null snapshots"
 );
-
-// One count semantics fail-closed: if count is 1 but previous is non-null
 assert(
   !isTrainerMeasurementProgressReadModel({
     measurement_count: 1,
     first: m1,
     previous: m1,
     latest: m1,
-    comparisons: { from_previous: null, from_first: null }
+    comparisons: { from_previous: null, from_first: res1.comparisons.from_first }
   }),
   "Validator rejects count=1 with non-null previous"
 );
@@ -539,5 +677,5 @@ console.log(`========================================`);
 if (exitCode !== 0) {
   process.exit(1);
 } else {
-  console.log('\nPASS — F.30A CANONICAL READ MODEL CORRECTIVE VERIFIED');
+  console.log('\nPASS — F.30A SINGLE-MEASUREMENT & DELTA CONSISTENCY CORRECTIVE VERIFIED');
 }

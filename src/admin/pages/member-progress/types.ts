@@ -227,7 +227,7 @@ export interface TrainerMeasurementProgressReadModel {
   comparisons: MeasurementProgressComparisons;
 }
 
-const PROGRESS_METRIC_KEYS = [
+export const PROGRESS_METRIC_KEYS = [
   'weight_kg',
   'body_fat_percent',
   'chest_cm',
@@ -237,14 +237,43 @@ const PROGRESS_METRIC_KEYS = [
   'thigh_cm',
 ] as const;
 
+export const PROGRESS_SNAPSHOT_KEYS = [
+  'id',
+  'uuid',
+  'measured_at',
+  'weight_kg',
+  'body_fat_percent',
+  'chest_cm',
+  'waist_cm',
+  'hip_cm',
+  'arm_cm',
+  'thigh_cm',
+] as const;
+
+const TOP_LEVEL_READ_MODEL_KEYS = new Set([
+  'measurement_count',
+  'first',
+  'previous',
+  'latest',
+  'comparisons',
+]);
+
+const COMPARISONS_KEYS = new Set(['from_previous', 'from_first']);
+const SNAPSHOT_KEYS_SET = new Set<string>(PROGRESS_SNAPSHOT_KEYS);
+const DELTA_KEYS_SET = new Set<string>(PROGRESS_METRIC_KEYS);
+
+const MEASURED_AT_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function isMeasurementProgressSnapshot(val: unknown): val is MeasurementProgressSnapshot {
   if (!isRecord(val)) return false;
-  if (typeof val.id !== 'number' || !Number.isInteger(val.id) || val.id <= 0) return false;
-  if (typeof val.uuid !== 'string' || !val.uuid) return false;
-  if (typeof val.measured_at !== 'string' || !val.measured_at) return false;
-  if ('member_id' in val || 'trainer_id' in val || 'notes' in val || 'created_at' in val || 'updated_at' in val || 'deleted_at' in val) {
+  const keys = Object.keys(val);
+  if (keys.length !== 10 || !keys.every(k => SNAPSHOT_KEYS_SET.has(k))) {
     return false;
   }
+  if (typeof val.id !== 'number' || !Number.isInteger(val.id) || val.id <= 0) return false;
+  if (typeof val.uuid !== 'string' || !UUID_REGEX.test(val.uuid)) return false;
+  if (typeof val.measured_at !== 'string' || !MEASURED_AT_REGEX.test(val.measured_at)) return false;
   for (const k of PROGRESS_METRIC_KEYS) {
     const v = val[k];
     if (v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
@@ -256,6 +285,10 @@ export function isMeasurementProgressSnapshot(val: unknown): val is MeasurementP
 
 export function isMeasurementProgressDeltas(val: unknown): val is MeasurementProgressDeltas {
   if (!isRecord(val)) return false;
+  const keys = Object.keys(val);
+  if (keys.length !== 7 || !keys.every(k => DELTA_KEYS_SET.has(k))) {
+    return false;
+  }
   for (const k of PROGRESS_METRIC_KEYS) {
     const v = val[k];
     if (v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
@@ -265,36 +298,57 @@ export function isMeasurementProgressDeltas(val: unknown): val is MeasurementPro
   return true;
 }
 
+export function expectedDelta(
+  latest: number | null,
+  reference: number | null
+): number | null {
+  if (latest === null || reference === null) return null;
+  return Math.round((latest - reference) * 100) / 100;
+}
+
+function matchesExpectedDeltas(
+  deltas: MeasurementProgressDeltas,
+  latest: MeasurementProgressSnapshot,
+  reference: MeasurementProgressSnapshot
+): boolean {
+  for (const field of PROGRESS_METRIC_KEYS) {
+    const exp = expectedDelta(latest[field], reference[field]);
+    const actual = deltas[field];
+    if (exp === null) {
+      if (actual !== null) return false;
+    } else {
+      if (actual === null) return false;
+      if (typeof actual !== 'number' || !Number.isFinite(actual)) return false;
+      if (actual !== exp) return false;
+    }
+  }
+  return true;
+}
+
 export function isTrainerMeasurementProgressReadModel(val: unknown): val is TrainerMeasurementProgressReadModel {
   if (!isRecord(val)) return false;
-  if (
-    'member_id' in val ||
-    'total_measurements' in val ||
-    'baseline' in val ||
-    'diff_from_previous' in val ||
-    'changes_from_previous' in val ||
-    'since_previous' in val ||
-    'diff_from_first' in val ||
-    'changes_from_first' in val ||
-    'since_first' in val ||
-    'diff_from_baseline' in val ||
-    'changes_from_baseline' in val ||
-    'since_baseline' in val ||
-    'days_since_previous' in val ||
-    'days_since_first' in val ||
-    'days_since_baseline' in val ||
-    'metrics' in val
-  ) {
+
+  // Exact top-level keys check
+  const topKeys = Object.keys(val);
+  if (topKeys.length !== 5 || !topKeys.every(k => TOP_LEVEL_READ_MODEL_KEYS.has(k))) {
     return false;
   }
 
   if (typeof val.measurement_count !== 'number' || !Number.isInteger(val.measurement_count) || val.measurement_count < 0) {
     return false;
   }
+
   if (!isRecord(val.comparisons)) {
     return false;
   }
 
+  // Exact comparisons keys check
+  const compKeys = Object.keys(val.comparisons);
+  if (compKeys.length !== 2 || !compKeys.every(k => COMPARISONS_KEYS.has(k))) {
+    return false;
+  }
+
+  // Case 0: 0 measurements
   if (val.measurement_count === 0) {
     return (
       val.first === null &&
@@ -305,23 +359,37 @@ export function isTrainerMeasurementProgressReadModel(val: unknown): val is Trai
     );
   }
 
+  // Case 1: 1 measurement
   if (val.measurement_count === 1) {
-    return (
-      isMeasurementProgressSnapshot(val.first) &&
-      val.previous === null &&
-      isMeasurementProgressSnapshot(val.latest) &&
-      val.first.id === val.latest.id &&
-      val.comparisons.from_previous === null &&
-      val.comparisons.from_first === null
-    );
+    if (
+      !isMeasurementProgressSnapshot(val.first) ||
+      val.previous !== null ||
+      !isMeasurementProgressSnapshot(val.latest) ||
+      val.first.id !== val.latest.id ||
+      val.comparisons.from_previous !== null ||
+      !isMeasurementProgressDeltas(val.comparisons.from_first)
+    ) {
+      return false;
+    }
+
+    return matchesExpectedDeltas(val.comparisons.from_first, val.latest, val.first);
+  }
+
+  // Case >= 2: Multi measurements
+  if (
+    !isMeasurementProgressSnapshot(val.first) ||
+    !isMeasurementProgressSnapshot(val.previous) ||
+    !isMeasurementProgressSnapshot(val.latest) ||
+    val.previous.id === val.latest.id ||
+    !isMeasurementProgressDeltas(val.comparisons.from_previous) ||
+    !isMeasurementProgressDeltas(val.comparisons.from_first)
+  ) {
+    return false;
   }
 
   return (
-    isMeasurementProgressSnapshot(val.first) &&
-    isMeasurementProgressSnapshot(val.previous) &&
-    isMeasurementProgressSnapshot(val.latest) &&
-    isMeasurementProgressDeltas(val.comparisons.from_previous) &&
-    isMeasurementProgressDeltas(val.comparisons.from_first)
+    matchesExpectedDeltas(val.comparisons.from_previous, val.latest, val.previous) &&
+    matchesExpectedDeltas(val.comparisons.from_first, val.latest, val.first)
   );
 }
 
