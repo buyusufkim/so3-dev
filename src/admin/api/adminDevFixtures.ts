@@ -1254,79 +1254,83 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
       .filter(m => m.member_id === memberId && !m.deleted_at)
       .sort((a, b) => a.measured_at.localeCompare(b.measured_at) || a.id - b.id);
 
-    const totalMeasurements = active.length;
-    let latest: any = null;
-    let previous: any = null;
-    let first: any = null;
-    let diffFromPrevious: Record<string, number | null> | null = null;
-    let diffFromFirst: Record<string, number | null> | null = null;
-    let daysSincePrevious: number | null = null;
-    let daysSinceFirst: number | null = null;
+    const measurementCount = active.length;
 
-    if (totalMeasurements === 1) {
-      const { notes, ...m0 } = active[0];
-      latest = m0;
-      first = m0;
-    } else if (totalMeasurements >= 2) {
-      const { notes: n1, ...mFirst } = active[0];
-      const { notes: n2, ...mPrev } = active[totalMeasurements - 2];
-      const { notes: n3, ...mLatest } = active[totalMeasurements - 1];
-      first = mFirst;
-      previous = mPrev;
-      latest = mLatest;
+    const formatProgressSnapshot = (m: any) => {
+      if (!m) return null;
+      return {
+        id: m.id,
+        uuid: m.uuid,
+        measured_at: m.measured_at,
+        weight_kg: m.weight_kg !== null && m.weight_kg !== undefined ? Number(m.weight_kg) : null,
+        body_fat_percent: m.body_fat_percent !== null && m.body_fat_percent !== undefined ? Number(m.body_fat_percent) : null,
+        chest_cm: m.chest_cm !== null && m.chest_cm !== undefined ? Number(m.chest_cm) : null,
+        waist_cm: m.waist_cm !== null && m.waist_cm !== undefined ? Number(m.waist_cm) : null,
+        hip_cm: m.hip_cm !== null && m.hip_cm !== undefined ? Number(m.hip_cm) : null,
+        arm_cm: m.arm_cm !== null && m.arm_cm !== undefined ? Number(m.arm_cm) : null,
+        thigh_cm: m.thigh_cm !== null && m.thigh_cm !== undefined ? Number(m.thigh_cm) : null,
+      };
+    };
 
-      diffFromPrevious = {};
-      diffFromFirst = {};
+    const calculateDeltas = (latest: any, baseline: any) => {
+      if (!latest || !baseline) return null;
+      const deltas: Record<string, number | null> = {};
       for (const f of metricFields) {
         const lVal = latest[f];
-        const pVal = previous[f];
-        const fVal = first[f];
-        diffFromPrevious[f] = (lVal !== null && pVal !== null) ? Math.round((lVal - pVal) * 100) / 100 : null;
-        diffFromFirst[f] = (lVal !== null && fVal !== null) ? Math.round((lVal - fVal) * 100) / 100 : null;
+        const bVal = baseline[f];
+        deltas[f] = (lVal !== null && lVal !== undefined && bVal !== null && bVal !== undefined)
+          ? Math.round((Number(lVal) - Number(bVal)) * 100) / 100
+          : null;
       }
-      const dLatest = new Date(latest.measured_at.replace(' ', 'T')).getTime();
-      const dPrev = new Date(previous.measured_at.replace(' ', 'T')).getTime();
-      const dFirst = new Date(first.measured_at.replace(' ', 'T')).getTime();
-      daysSincePrevious = Math.round(Math.abs(dLatest - dPrev) / (1000 * 60 * 60 * 24));
-      daysSinceFirst = Math.round(Math.abs(dLatest - dFirst) / (1000 * 60 * 60 * 24));
+      return deltas;
+    };
+
+    if (measurementCount === 0) {
+      return createResponse({
+        data: {
+          measurement_count: 0,
+          first: null,
+          previous: null,
+          latest: null,
+          comparisons: {
+            from_previous: null,
+            from_first: null,
+          },
+        },
+      });
     }
 
-    const metrics: Record<string, any> = {};
-    for (const f of metricFields) {
-      const lVal = latest ? latest[f] : null;
-      const pVal = previous ? previous[f] : null;
-      const fVal = first ? first[f] : null;
-      metrics[f] = {
-        latest: lVal,
-        previous: pVal,
-        first: fVal,
-        diff_previous: (totalMeasurements >= 2 && lVal !== null && pVal !== null) ? Math.round((lVal - pVal) * 100) / 100 : null,
-        diff_first: (totalMeasurements >= 2 && lVal !== null && fVal !== null) ? Math.round((lVal - fVal) * 100) / 100 : null,
-      };
+    if (measurementCount === 1) {
+      const snap = formatProgressSnapshot(active[0]);
+      return createResponse({
+        data: {
+          measurement_count: 1,
+          first: snap,
+          previous: null,
+          latest: snap,
+          comparisons: {
+            from_previous: null,
+            from_first: null,
+          },
+        },
+      });
     }
+
+    const latestSnap = formatProgressSnapshot(active[measurementCount - 1]);
+    const prevSnap = formatProgressSnapshot(active[measurementCount - 2]);
+    const firstSnap = formatProgressSnapshot(active[0]);
 
     return createResponse({
       data: {
-        member_id: memberId,
-        total_measurements: totalMeasurements,
-        latest,
-        previous,
-        first,
-        baseline: first,
-        diff_from_previous: diffFromPrevious,
-        changes_from_previous: diffFromPrevious,
-        since_previous: diffFromPrevious,
-        diff_from_first: diffFromFirst,
-        changes_from_first: diffFromFirst,
-        since_first: diffFromFirst,
-        diff_from_baseline: diffFromFirst,
-        changes_from_baseline: diffFromFirst,
-        since_baseline: diffFromFirst,
-        days_since_previous: daysSincePrevious,
-        days_since_first: daysSinceFirst,
-        days_since_baseline: daysSinceFirst,
-        metrics
-      }
+        measurement_count: measurementCount,
+        first: firstSnap,
+        previous: prevSnap,
+        latest: latestSnap,
+        comparisons: {
+          from_previous: calculateDeltas(latestSnap, prevSnap),
+          from_first: calculateDeltas(latestSnap, firstSnap),
+        },
+      },
     });
   }
 

@@ -78,7 +78,6 @@ class TrainerMeasurementProgressController
         return [
             'id' => (int)$row['id'],
             'uuid' => (string)$row['uuid'],
-            'member_id' => (int)$row['member_id'],
             'measured_at' => (string)$row['measured_at'],
             'weight_kg' => $row['weight_kg'] !== null ? (float)$row['weight_kg'] : null,
             'body_fat_percent' => $row['body_fat_percent'] !== null ? (float)$row['body_fat_percent'] : null,
@@ -111,22 +110,6 @@ class TrainerMeasurementProgressController
         return $deltas;
     }
 
-    private function calculateDaysBetween(?string $earlierDate, ?string $laterDate): ?int
-    {
-        if ($earlierDate === null || $laterDate === null) {
-            return null;
-        }
-
-        try {
-            $d1 = new \DateTimeImmutable($earlierDate);
-            $d2 = new \DateTimeImmutable($laterDate);
-            $diff = $d1->diff($d2);
-            return (int)$diff->days;
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
-
     public function index(int $memberId): void
     {
         AuthMiddleware::hasRole(['trainer']);
@@ -139,95 +122,97 @@ class TrainerMeasurementProgressController
         $trainerId = $this->getTrainerProfileId();
         $this->checkMemberOwnership($memberId, $trainerId);
 
-        $stmt = $this->db->prepare("
-            SELECT 
-                mm.id, mm.uuid, mm.member_id, mm.trainer_id, mm.measured_at,
-                mm.weight_kg, mm.body_fat_percent, mm.chest_cm, mm.waist_cm, mm.hip_cm, mm.arm_cm, mm.thigh_cm,
-                mm.created_at, mm.updated_at
-            FROM member_measurements mm
-            JOIN members mem ON mm.member_id = mem.id
-            WHERE mm.member_id = :member_id
-              AND mm.trainer_id = :measurement_trainer_id
-              AND mem.trainer_id = :member_trainer_id
-              AND mem.deleted_at IS NULL
-              AND mm.deleted_at IS NULL
-            ORDER BY mm.measured_at ASC, mm.id ASC
+        // Count total active measurements
+        $countStmt = $this->db->prepare("
+            SELECT COUNT(*) 
+            FROM member_measurements
+            WHERE member_id = ?
+              AND trainer_id = ?
+              AND deleted_at IS NULL
         ");
-        $stmt->bindValue(':member_id', $memberId, PDO::PARAM_INT);
-        $stmt->bindValue(':measurement_trainer_id', $trainerId, PDO::PARAM_INT);
-        $stmt->bindValue(':member_trainer_id', $trainerId, PDO::PARAM_INT);
-        $stmt->execute();
+        $countStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $countStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $countStmt->execute();
+        $measurementCount = (int)$countStmt->fetchColumn();
 
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $totalMeasurements = count($rows);
-
-        $latest = null;
-        $previous = null;
-        $first = null;
-        $diffFromPrevious = null;
-        $diffFromFirst = null;
-        $daysSincePrevious = null;
-        $daysSinceFirst = null;
-
-        if ($totalMeasurements === 1) {
-            $latest = $this->formatMeasurement($rows[0]);
-            $first = $latest;
-            $previous = null;
-        } elseif ($totalMeasurements >= 2) {
-            $first = $this->formatMeasurement($rows[0]);
-            $previous = $this->formatMeasurement($rows[$totalMeasurements - 2]);
-            $latest = $this->formatMeasurement($rows[$totalMeasurements - 1]);
-
-            $diffFromPrevious = $this->calculateDeltas($latest, $previous);
-            $diffFromFirst = $this->calculateDeltas($latest, $first);
-
-            $daysSincePrevious = $this->calculateDaysBetween($previous['measured_at'], $latest['measured_at']);
-            $daysSinceFirst = $this->calculateDaysBetween($first['measured_at'], $latest['measured_at']);
+        if ($measurementCount === 0) {
+            Response::json([
+                'measurement_count' => 0,
+                'first' => null,
+                'previous' => null,
+                'latest' => null,
+                'comparisons' => [
+                    'from_previous' => null,
+                    'from_first' => null,
+                ],
+            ]);
+            return;
         }
 
-        $metrics = [];
-        foreach (self::METRIC_FIELDS as $field) {
-            $latestVal = $latest !== null ? $latest[$field] : null;
-            $prevVal = $previous !== null ? $previous[$field] : null;
-            $firstVal = $first !== null ? $first[$field] : null;
+        // Query A: latest two measurements
+        $latestStmt = $this->db->prepare("
+            SELECT id, uuid, measured_at, weight_kg, body_fat_percent, chest_cm, waist_cm, hip_cm, arm_cm, thigh_cm
+            FROM member_measurements
+            WHERE member_id = ?
+              AND trainer_id = ?
+              AND deleted_at IS NULL
+            ORDER BY measured_at DESC, id DESC
+            LIMIT 2
+        ");
+        $latestStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+        $latestStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+        $latestStmt->execute();
+        $latestRows = $latestStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $diffPrev = ($totalMeasurements >= 2 && $latestVal !== null && $prevVal !== null)
-                ? round((float)$latestVal - (float)$prevVal, 2)
-                : null;
+        $latest = $this->formatMeasurement($latestRows[0]);
+        $previous = null;
+        $first = null;
+        $fromPrevious = null;
+        $fromFirst = null;
 
-            $diff1st = ($totalMeasurements >= 2 && $latestVal !== null && $firstVal !== null)
-                ? round((float)$latestVal - (float)$firstVal, 2)
-                : null;
+        if ($measurementCount === 1) {
+            $first = $latest;
+            $previous = null;
+            $fromPrevious = null;
+            $fromFirst = null;
+        } elseif ($measurementCount === 2) {
+            $previous = $this->formatMeasurement($latestRows[1]);
+            $first = $previous;
+            $fromPrevious = $this->calculateDeltas($latest, $previous);
+            $fromFirst = $this->calculateDeltas($latest, $first);
+        } else {
+            // measurementCount >= 3
+            $previous = $this->formatMeasurement($latestRows[1]);
 
-            $metrics[$field] = [
-                'latest' => $latestVal,
-                'previous' => $prevVal,
-                'first' => $firstVal,
-                'diff_previous' => $diffPrev,
-                'diff_first' => $diff1st,
-            ];
+            // Query B: first one
+            $firstStmt = $this->db->prepare("
+                SELECT id, uuid, measured_at, weight_kg, body_fat_percent, chest_cm, waist_cm, hip_cm, arm_cm, thigh_cm
+                FROM member_measurements
+                WHERE member_id = ?
+                  AND trainer_id = ?
+                  AND deleted_at IS NULL
+                ORDER BY measured_at ASC, id ASC
+                LIMIT 1
+            ");
+            $firstStmt->bindValue(1, $memberId, PDO::PARAM_INT);
+            $firstStmt->bindValue(2, $trainerId, PDO::PARAM_INT);
+            $firstStmt->execute();
+            $firstRow = $firstStmt->fetch(PDO::FETCH_ASSOC);
+
+            $first = $this->formatMeasurement($firstRow ?: null);
+            $fromPrevious = $this->calculateDeltas($latest, $previous);
+            $fromFirst = $this->calculateDeltas($latest, $first);
         }
 
         Response::json([
-            'member_id' => $memberId,
-            'total_measurements' => $totalMeasurements,
-            'latest' => $latest,
-            'previous' => $previous,
+            'measurement_count' => $measurementCount,
             'first' => $first,
-            'baseline' => $first,
-            'diff_from_previous' => $diffFromPrevious,
-            'changes_from_previous' => $diffFromPrevious,
-            'since_previous' => $diffFromPrevious,
-            'diff_from_first' => $diffFromFirst,
-            'changes_from_first' => $diffFromFirst,
-            'since_first' => $diffFromFirst,
-            'diff_from_baseline' => $diffFromFirst,
-            'changes_from_baseline' => $diffFromFirst,
-            'since_baseline' => $diffFromFirst,
-            'days_since_previous' => $daysSincePrevious,
-            'days_since_first' => $daysSinceFirst,
-            'days_since_baseline' => $daysSinceFirst,
-            'metrics' => $metrics,
+            'previous' => $previous,
+            'latest' => $latest,
+            'comparisons' => [
+                'from_previous' => $fromPrevious,
+                'from_first' => $fromFirst,
+            ],
         ]);
     }
 }

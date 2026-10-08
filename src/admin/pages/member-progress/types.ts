@@ -191,12 +191,17 @@ export function isMemberProgressNoteCreateResponse(val: unknown): val is MemberP
   );
 }
 
-export interface MeasurementMetricSummary {
-  latest: number | null;
-  previous: number | null;
-  first: number | null;
-  diff_previous: number | null;
-  diff_first: number | null;
+export interface MeasurementProgressSnapshot {
+  id: number;
+  uuid: string;
+  measured_at: string;
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
 }
 
 export interface MeasurementProgressDeltas {
@@ -209,36 +214,114 @@ export interface MeasurementProgressDeltas {
   thigh_cm: number | null;
 }
 
+export interface MeasurementProgressComparisons {
+  from_previous: MeasurementProgressDeltas | null;
+  from_first: MeasurementProgressDeltas | null;
+}
+
 export interface TrainerMeasurementProgressReadModel {
-  member_id: number;
-  total_measurements: number;
-  latest: MemberMeasurementListItem | null;
-  previous: MemberMeasurementListItem | null;
-  first: MemberMeasurementListItem | null;
-  baseline: MemberMeasurementListItem | null;
-  diff_from_previous: MeasurementProgressDeltas | null;
-  changes_from_previous: MeasurementProgressDeltas | null;
-  since_previous: MeasurementProgressDeltas | null;
-  diff_from_first: MeasurementProgressDeltas | null;
-  changes_from_first: MeasurementProgressDeltas | null;
-  since_first: MeasurementProgressDeltas | null;
-  diff_from_baseline: MeasurementProgressDeltas | null;
-  changes_from_baseline: MeasurementProgressDeltas | null;
-  since_baseline: MeasurementProgressDeltas | null;
-  days_since_previous: number | null;
-  days_since_first: number | null;
-  days_since_baseline: number | null;
-  metrics: Record<string, MeasurementMetricSummary>;
+  measurement_count: number;
+  first: MeasurementProgressSnapshot | null;
+  previous: MeasurementProgressSnapshot | null;
+  latest: MeasurementProgressSnapshot | null;
+  comparisons: MeasurementProgressComparisons;
+}
+
+const PROGRESS_METRIC_KEYS = [
+  'weight_kg',
+  'body_fat_percent',
+  'chest_cm',
+  'waist_cm',
+  'hip_cm',
+  'arm_cm',
+  'thigh_cm',
+] as const;
+
+export function isMeasurementProgressSnapshot(val: unknown): val is MeasurementProgressSnapshot {
+  if (!isRecord(val)) return false;
+  if (typeof val.id !== 'number' || !Number.isInteger(val.id) || val.id <= 0) return false;
+  if (typeof val.uuid !== 'string' || !val.uuid) return false;
+  if (typeof val.measured_at !== 'string' || !val.measured_at) return false;
+  if ('member_id' in val || 'trainer_id' in val || 'notes' in val || 'created_at' in val || 'updated_at' in val || 'deleted_at' in val) {
+    return false;
+  }
+  for (const k of PROGRESS_METRIC_KEYS) {
+    const v = val[k];
+    if (v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isMeasurementProgressDeltas(val: unknown): val is MeasurementProgressDeltas {
+  if (!isRecord(val)) return false;
+  for (const k of PROGRESS_METRIC_KEYS) {
+    const v = val[k];
+    if (v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function isTrainerMeasurementProgressReadModel(val: unknown): val is TrainerMeasurementProgressReadModel {
   if (!isRecord(val)) return false;
-  if (typeof val.member_id !== 'number' || !Number.isInteger(val.member_id) || val.member_id <= 0) return false;
-  if (typeof val.total_measurements !== 'number' || !Number.isInteger(val.total_measurements) || val.total_measurements < 0) return false;
-  if (val.latest !== null && !isMemberMeasurementListItem(val.latest)) return false;
-  if (val.previous !== null && !isMemberMeasurementListItem(val.previous)) return false;
-  if (val.first !== null && !isMemberMeasurementListItem(val.first)) return false;
-  if (!isRecord(val.metrics)) return false;
-  return true;
+  if (
+    'member_id' in val ||
+    'total_measurements' in val ||
+    'baseline' in val ||
+    'diff_from_previous' in val ||
+    'changes_from_previous' in val ||
+    'since_previous' in val ||
+    'diff_from_first' in val ||
+    'changes_from_first' in val ||
+    'since_first' in val ||
+    'diff_from_baseline' in val ||
+    'changes_from_baseline' in val ||
+    'since_baseline' in val ||
+    'days_since_previous' in val ||
+    'days_since_first' in val ||
+    'days_since_baseline' in val ||
+    'metrics' in val
+  ) {
+    return false;
+  }
+
+  if (typeof val.measurement_count !== 'number' || !Number.isInteger(val.measurement_count) || val.measurement_count < 0) {
+    return false;
+  }
+  if (!isRecord(val.comparisons)) {
+    return false;
+  }
+
+  if (val.measurement_count === 0) {
+    return (
+      val.first === null &&
+      val.previous === null &&
+      val.latest === null &&
+      val.comparisons.from_previous === null &&
+      val.comparisons.from_first === null
+    );
+  }
+
+  if (val.measurement_count === 1) {
+    return (
+      isMeasurementProgressSnapshot(val.first) &&
+      val.previous === null &&
+      isMeasurementProgressSnapshot(val.latest) &&
+      val.first.id === val.latest.id &&
+      val.comparisons.from_previous === null &&
+      val.comparisons.from_first === null
+    );
+  }
+
+  return (
+    isMeasurementProgressSnapshot(val.first) &&
+    isMeasurementProgressSnapshot(val.previous) &&
+    isMeasurementProgressSnapshot(val.latest) &&
+    isMeasurementProgressDeltas(val.comparisons.from_previous) &&
+    isMeasurementProgressDeltas(val.comparisons.from_first)
+  );
 }
 

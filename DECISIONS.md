@@ -571,15 +571,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * per-exercise busy state isolates mutation loading per row without locking the global editor
 * zero client-side sorting, zero drag/drop libraries, zero backend/schema modifications
 
-## F.30A Measurement Progress Summary Read Model
+## F.30A Measurement Progress Summary Read Model & Canonical Corrective
 * trainer-facing deterministic read model provides measurement progress comparison (`GET /api/trainer/members/{memberId}/measurement-progress`)
 * dedicated controller `TrainerMeasurementProgressController.php` with `index(int $memberId)` handler
 * RBAC strictly restricted to `trainer` role with session `admin_id -> trainers.admin_id` resolution
 * strict member ownership check: member must belong to trainer (`members.trainer_id = ? AND members.deleted_at IS NULL`), failing with 404 if unassigned or deleted
 * query parameters strictly rejected with 422 `VALIDATION_ERROR` for deterministic endpoint contract
-* active measurements only (`deleted_at IS NULL`); server-authoritative chronological ordering (`measured_at ASC, id ASC`)
-* deterministic comparison calculation across 7 core metrics (`weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`): latest, previous, and first/baseline measurements
-* exact mathematical deltas (`latest - previous` and `latest - first`) rounded to 2 decimal places; nullable metric handling
+* bounded query architecture: replaces full-table history fetchAll() with bounded reads — `COUNT(*)` for count, Query A (`ORDER BY measured_at DESC, id DESC LIMIT 2`) for latest two, and Query B (`ORDER BY measured_at ASC, id ASC LIMIT 1`) for first
+* canonical response contract only: `{ measurement_count, first, previous, latest, comparisons: { from_previous, from_first } }`
+* all redundant aliases and out-of-scope fields strictly removed (`member_id`, `total_measurements`, `baseline`, `diff_*`, `changes_*`, `since_*`, `days_since_*`, `metrics`)
+* snapshot exact projection: 10 fields only (`id`, `uuid`, `measured_at`, `weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`); `member_id`, `trainer_id`, `notes`, `created_at`, `updated_at`, `deleted_at` omitted from projection
+* deterministic comparisons across 7 core metrics (`weight_kg`, `body_fat_percent`, `chest_cm`, `waist_cm`, `hip_cm`, `arm_cm`, `thigh_cm`): exact mathematical deltas (`latest - baseline`) rounded to 2 decimal places with null safety
+* strict zero/one/multi measurement semantics: count 0 yields null snapshots and null comparisons; count 1 yields latest snapshot for first/latest with null previous and null comparisons; count >= 2 yields populated snapshots and delta comparisons
+* frontend TypeScript types and fail-closed validators (`isTrainerMeasurementProgressReadModel`, `isMeasurementProgressSnapshot`, `isMeasurementProgressDeltas`)
 * zero medical or coaching interpretation: strictly zero BMI, ideal weight, healthy range, obesity classification, health/fitness scores, or risk predictions
 * read-only foundation with zero mutations; zero schema changes, zero new database tables or columns
 
