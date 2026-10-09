@@ -115,6 +115,7 @@ export function AdminLayout() {
                 <NavLink to="/admin/trainers" className={navLinkClass}>Eğitmenler</NavLink>
                 <NavLink to="/admin/events" className={navLinkClass}>Etkinlikler</NavLink>
                 <NavLink to="/admin/media" className={navLinkClass}>Medya</NavLink>
+                <NavLink to="/admin/community-updates" className={navLinkClass}>Topluluk</NavLink>
               </div>
             </div>
           )}

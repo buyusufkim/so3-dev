@@ -39,6 +39,7 @@ const TrainerDashboard = lazy(() => import("../admin/pages/trainer-dashboard/Tra
 const ReceptionDashboard = lazy(() => import("../admin/pages/reception/ReceptionDashboard").then(m => ({ default: m.ReceptionDashboard })));
 const AppointmentListPage = lazy(() => import("../admin/pages/appointments/AppointmentListPage").then(m => ({ default: m.AppointmentListPage })));
 const TrainerAvailabilityPage = lazy(() => import("../admin/pages/trainer-availability/TrainerAvailabilityPage").then(m => ({ default: m.TrainerAvailabilityPage })));
+const CommunityUpdatesPage = lazy(() => import("../admin/pages/community-updates/CommunityUpdatesPage").then(m => ({ default: m.CommunityUpdatesPage })));
 
 import { MemberSuspense } from '../member/components/MemberSuspense';
 import { MemberAuthProvider } from '../member/auth/MemberAuthContext';
@@ -171,6 +172,10 @@ const router = createBrowserRouter([
       {
         path: "media",
         element: <AdminSuspense><MediaPage /></AdminSuspense>,
+      },
+      {
+        path: "community-updates",
+        element: <AdminSuspense><CommunityUpdatesPage /></AdminSuspense>,
       },
       {
         path: "events",

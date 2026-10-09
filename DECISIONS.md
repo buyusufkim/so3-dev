@@ -666,6 +666,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * publication lifecycle: first-publication timestamp is preserved permanently upon subsequent edits, unpublish (`published -> draft`), and republish (`draft -> published`); a new timestamp is only assigned on initial publish (`draft -> published` when `published_at IS NULL` or create with `status = 'published'`)
 * response privacy & contracts: separate formatters (`formatListRow` vs `formatDetailRow`); list excludes `body`; neither formatter exposes actor IDs, creator names, or `deleted_at`; strict TypeScript types and fail-closed runtime validators implemented in `src/admin/pages/community-updates/types.ts` and `src/member/api/validators.ts` with API client integration in `src/member/api/client.ts`
 
+## F.32B — Admin Community Updates Management UI
+* route & role access: primary management route `/admin/community-updates` registered in `src/routes/index.tsx`; accessible to `super_admin`, `admin`, and `editor` via `hasRoleAccess()` editor CMS allowlist; blocked for `trainer` and `reception`
+* navigation: "Topluluk" link placed under the `İçerik` section in `src/admin/layouts/AdminLayout.tsx` within the `showCMS` navigation block
+* list management: consumes `GET /api/admin/community-updates` with query parameters (`status=all|draft|published`, `page`, `per_page=20`); validated with fail-closed `validateCommunityUpdateListResponse`; strictly preserves canonical backend ordering without client-side `.sort()`
+* race & memory safety: list fetch implements `AbortController`, request generation tracking (`requestGenerationRef`), and component mount guard (`isMountedRef`)
+* create & edit UX: modal editor (`CommunityUpdateEditorModal.tsx`) supporting plain text title (1..160) and body (1..5000); edit mode fetches fresh detail from `GET /api/admin/community-updates/{id}` validated with `validateCommunityUpdateDetail`; publication timestamp is managed strictly on the backend; double-submit is blocked via `submitting` state
+* soft-delete with confirmation: explicit confirmation dialog with safe wording (`"Bu duyuruyu silmek istediğinize emin misiniz?"`); invokes `DELETE /api/admin/community-updates/{id}` and canonical refetch (decrements page if last item on page > 1 was deleted); no restore or archive actions
+* bounded error handling & deterministic dates: user-facing errors use bounded Turkish messages ("Topluluk duyuruları yüklenemedi.", "Duyuru oluşturulamadı.", "Duyuru güncellenemedi.", "Duyuru silinemedi."); timestamps formatted with string-based deterministic `formatDateTime` helper (DD.MM.YYYY HH:mm or "—"); zero Date/Intl APIs
+* touch targets & accessibility: interactive controls, filter tabs, edit/delete actions, and pagination buttons enforce `min-h-[44px]` touch targets
+* zero social features: strictly zero comments, likes, reactions, direct messaging, user targeting, or media uploads
+
+
 
 
 

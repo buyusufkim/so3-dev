@@ -90,7 +90,8 @@
     "verify:admin-operations-attention": "node scripts/verify-admin-operations-attention.mjs",
     "verify:operations-attention-ui": "node scripts/verify-operations-attention-ui.mjs",
     "verify:admin-operations-attention-ui": "node scripts/verify-operations-attention-ui.mjs",
-    "verify:community-updates-foundation": "node scripts/verify-community-updates-foundation.mjs"
+    "verify:community-updates-foundation": "node scripts/verify-community-updates-foundation.mjs",
+    "verify:community-updates-admin-ui": "node scripts/verify-community-updates-admin-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

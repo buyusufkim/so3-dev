@@ -65,7 +65,7 @@ export const hasRoleAccess = (role: AdminRole, pathname: string): boolean => {
   }
   
   if (role === 'editor') {
-    const cmsRoutes = ['/admin/homepage', '/admin/branches', '/admin/trainers', '/admin/events', '/admin/media'];
+    const cmsRoutes = ['/admin/homepage', '/admin/branches', '/admin/trainers', '/admin/events', '/admin/media', '/admin/community-updates'];
     return cmsRoutes.some(r => pathname === r || pathname.startsWith(r + '/'));
   }
   
