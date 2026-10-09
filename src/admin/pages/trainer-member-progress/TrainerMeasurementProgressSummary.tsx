@@ -5,7 +5,7 @@ import {
   TrainerMeasurementProgressReadModel,
   isTrainerMeasurementProgressReadModel,
   PROGRESS_METRIC_KEYS
-} from './types';
+} from '../member-progress/types';
 
 export interface TrainerMeasurementProgressSummaryProps {
   memberId: number;

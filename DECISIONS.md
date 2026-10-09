@@ -598,7 +598,9 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * neutral delta presentation: zero semantic green/red coloring based on sign; strictly neutral styling across all seven metrics
 * zero medical interpretation: strictly no BMI, ideal weight, target weight, healthy range, body composition/fitness scores, or progress judgments (iyi/kötü/başarılı)
 * zero chart: no charting library, SVG graphs, or trend lines added
-* refresh after measurement mutations: parent `AdminMemberProgressPage` increments `progressSummaryRefreshKey` on successful measurement create, edit, archive, and restore; row selection does not trigger refetch
+* refresh after measurement mutations: parent `TrainerMemberProgressPage` increments `progressSummaryRefreshKey` on successful measurement create, edit, archive, and restore; row selection does not trigger refetch
+* trainer surface integration corrective: `TrainerMeasurementProgressSummary` rendered canonically in `/admin/my-members/:memberId/progress` (`TrainerMemberProgressPage`) under `activeTab === 'measurements'`; all F30B additions removed from `AdminMemberProgressPage` to align with the trainer-only endpoint authorization contract
+* component location: moved to `src/admin/pages/trainer-member-progress/TrainerMeasurementProgressSummary.tsx`
 * no backend/schema change: purely frontend additive UI component preserving all existing CRUD semantics
 
 

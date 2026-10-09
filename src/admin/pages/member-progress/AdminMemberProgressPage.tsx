@@ -15,7 +15,6 @@ import {
 } from "./types";
 import { MemberMeasurementFormModal } from "./MemberMeasurementFormModal";
 import { MemberProgressNoteFormModal } from "./MemberProgressNoteFormModal";
-import { TrainerMeasurementProgressSummary } from "./TrainerMeasurementProgressSummary";
 
 function formatDateTime(dateStr: unknown): string {
   if (typeof dateStr !== 'string') return "—";
@@ -80,7 +79,6 @@ export function AdminMemberProgressPage() {
   const [selectedNote, setSelectedNote] = useState<MemberProgressNoteDetail | null>(null);
   
   const [refreshKey, setRefreshKey] = useState(0);
-  const [progressSummaryRefreshKey, setProgressSummaryRefreshKey] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -138,7 +136,6 @@ export function AdminMemberProgressPage() {
       clearDetailSelection();
       setPage(1);
       setRefreshKey(prev => prev + 1);
-      setProgressSummaryRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
       if (!isMounted.current) return;
       if (err instanceof ApiError) {
@@ -243,7 +240,6 @@ export function AdminMemberProgressPage() {
       clearDetailSelection();
       setPage(1);
       setRefreshKey(prev => prev + 1);
-      setProgressSummaryRefreshKey(prev => prev + 1);
     } catch (err: unknown) {
       if (!isMounted.current) return;
       if (err instanceof ApiError) {
@@ -287,7 +283,6 @@ export function AdminMemberProgressPage() {
       clearDetailSelection();
     }
     setRefreshKey(prev => prev + 1);
-    setProgressSummaryRefreshKey(prev => prev + 1);
   };
 
 
@@ -429,12 +424,6 @@ export function AdminMemberProgressPage() {
             <div role="alert" className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
               {mutationError}
             </div>
-          )}
-          {activeTab === 'measurements' && memberId && /^[1-9]\d*$/.test(memberId) && (
-            <TrainerMeasurementProgressSummary
-              memberId={parseInt(memberId, 10)}
-              refreshKey={progressSummaryRefreshKey}
-            />
           )}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 flex flex-col gap-4">

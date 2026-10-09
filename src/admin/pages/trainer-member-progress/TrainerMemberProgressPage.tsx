@@ -27,6 +27,7 @@ import {
   isMemberProgressSuccessResponse
 } from "../member-progress/types";
 import { TrainerMeasurementFormModal } from "./TrainerMeasurementFormModal";
+import { TrainerMeasurementProgressSummary } from "./TrainerMeasurementProgressSummary";
 import { TrainerProgressNotesPanel } from "./TrainerProgressNotesPanel";
 import { TrainerMemberWorkspaceNav } from "../../components/TrainerMemberWorkspaceNav";
 
@@ -103,6 +104,7 @@ export function TrainerMemberProgressPage() {
   const [editingMeasurement, setEditingMeasurement] = useState<MemberMeasurementDetail | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+  const [progressSummaryRefreshKey, setProgressSummaryRefreshKey] = useState(0);
 
   // Mutation Locks & State
   const isMutatingRef = useRef(false);
@@ -374,6 +376,7 @@ export function TrainerMemberProgressPage() {
       setDetailRefreshKey((k) => k + 1);
     }
     setEditingMeasurement(null);
+    setProgressSummaryRefreshKey((prev) => prev + 1);
   };
 
   const handleCloseModal = () => {
@@ -406,6 +409,7 @@ export function TrainerMemberProgressPage() {
       setDetailError(null);
       setPage(1);
       setListRefreshKey((k) => k + 1);
+      setProgressSummaryRefreshKey((prev) => prev + 1);
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
       setActionError(getMutationErrorMessage(err, "Ölçüm arşivlenirken bir hata oluştu. Lütfen tekrar deneyin."));
@@ -444,6 +448,7 @@ export function TrainerMemberProgressPage() {
       setDetailError(null);
       setPage(1);
       setListRefreshKey((k) => k + 1);
+      setProgressSummaryRefreshKey((prev) => prev + 1);
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
       setActionError(getMutationErrorMessage(err, "Ölçüm geri yüklenirken bir hata oluştu. Lütfen tekrar deneyin."));
@@ -577,6 +582,11 @@ export function TrainerMemberProgressPage() {
       {/* Tab Content: Measurements Read-Only View */}
       {activeTab === "measurements" && (
         <div className="space-y-4 lg:space-y-6">
+          <TrainerMeasurementProgressSummary
+            memberId={member.id}
+            refreshKey={progressSummaryRefreshKey}
+          />
+
           {/* Controls Bar: Filter, New Button & Info */}
           <div className="bg-[#121212] border border-white/10 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center">
             <div className="flex items-center gap-1 sm:gap-1.5 bg-white/5 p-1 rounded-lg border border-white/5 overflow-x-auto">

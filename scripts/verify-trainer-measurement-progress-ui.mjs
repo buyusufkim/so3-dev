@@ -28,10 +28,10 @@ const summaryComponentPath = path.join(
   'src',
   'admin',
   'pages',
-  'member-progress',
+  'trainer-member-progress',
   'TrainerMeasurementProgressSummary.tsx'
 );
-assert(fs.existsSync(summaryComponentPath), 'TrainerMeasurementProgressSummary.tsx exists in src/admin/pages/member-progress/');
+assert(fs.existsSync(summaryComponentPath), 'TrainerMeasurementProgressSummary.tsx exists in src/admin/pages/trainer-member-progress/');
 const summarySource = fs.readFileSync(summaryComponentPath, 'utf8');
 
 const parentPagePath = path.join(
@@ -39,21 +39,41 @@ const parentPagePath = path.join(
   'src',
   'admin',
   'pages',
+  'trainer-member-progress',
+  'TrainerMemberProgressPage.tsx'
+);
+assert(fs.existsSync(parentPagePath), 'TrainerMemberProgressPage.tsx exists');
+const parentSource = fs.readFileSync(parentPagePath, 'utf8');
+
+// Negative check on admin page (restored pre-F30B behavior)
+const adminPagePath = path.join(
+  rootDir,
+  'src',
+  'admin',
+  'pages',
   'member-progress',
   'AdminMemberProgressPage.tsx'
 );
-assert(fs.existsSync(parentPagePath), 'AdminMemberProgressPage.tsx exists');
-const parentSource = fs.readFileSync(parentPagePath, 'utf8');
+assert(fs.existsSync(adminPagePath), 'AdminMemberProgressPage.tsx exists');
+const adminSource = fs.readFileSync(adminPagePath, 'utf8');
+assert(
+  !adminSource.includes('TrainerMeasurementProgressSummary'),
+  'AdminMemberProgressPage does NOT import or reference TrainerMeasurementProgressSummary'
+);
+assert(
+  !adminSource.includes('progressSummaryRefreshKey'),
+  'AdminMemberProgressPage does NOT contain progressSummaryRefreshKey state'
+);
 
 // Parent imports summary component
 assert(
   parentSource.includes('TrainerMeasurementProgressSummary'),
-  'AdminMemberProgressPage imports TrainerMeasurementProgressSummary'
+  'TrainerMemberProgressPage imports TrainerMeasurementProgressSummary'
 );
 
 // Rendered only on measurements tab
 assert(
-  parentSource.includes("activeTab === 'measurements'") &&
+  (parentSource.includes("activeTab === 'measurements'") || parentSource.includes('activeTab === "measurements"')) &&
   parentSource.includes('<TrainerMeasurementProgressSummary'),
   "TrainerMeasurementProgressSummary is conditionally rendered when activeTab === 'measurements'"
 );
@@ -67,7 +87,7 @@ assert(
 
 // Summary is placed above the list/detail grid
 const summaryIdx = parentSource.indexOf('<TrainerMeasurementProgressSummary');
-const gridIdx = parentSource.indexOf('grid grid-cols-1 lg:grid-cols-3 gap-6');
+const gridIdx = parentSource.indexOf('grid grid-cols-1 lg:grid-cols-3');
 assert(
   summaryIdx !== -1 && gridIdx !== -1 && summaryIdx < gridIdx,
   'TrainerMeasurementProgressSummary is placed above existing measurement list/detail workspace grid'
@@ -76,7 +96,9 @@ assert(
 // Not rendered on notes tab
 assert(
   !parentSource.includes("activeTab === 'notes' && <TrainerMeasurementProgressSummary") &&
-  !parentSource.includes("activeTab === 'notes' && (\n            <TrainerMeasurementProgressSummary"),
+  !parentSource.includes('activeTab === "notes" && <TrainerMeasurementProgressSummary') &&
+  !parentSource.includes("activeTab === 'notes' && (\n            <TrainerMeasurementProgressSummary") &&
+  !parentSource.includes('activeTab === "notes" && (\n            <TrainerMeasurementProgressSummary'),
   'TrainerMeasurementProgressSummary is NOT rendered on notes tab'
 );
 
@@ -128,18 +150,18 @@ function extractFunctionBody(source, name) {
 }
 
 // Parent increments refresh key after create/edit modal success
-const handleModalSuccessBody = extractFunctionBody(parentSource, 'const handleModalSuccess');
-assert(handleModalSuccessBody !== null, 'handleModalSuccess exists in parent');
+const handleFormSuccessBody = extractFunctionBody(parentSource, 'const handleFormSuccess');
+assert(handleFormSuccessBody !== null, 'handleFormSuccess exists in parent');
 assert(
-  handleModalSuccessBody && handleModalSuccessBody.includes('setProgressSummaryRefreshKey(prev => prev + 1)'),
-  'handleModalSuccess increments progressSummaryRefreshKey on measurement create/edit'
+  handleFormSuccessBody && handleFormSuccessBody.includes('setProgressSummaryRefreshKey('),
+  'handleFormSuccess increments progressSummaryRefreshKey on measurement create/edit'
 );
 
 // Parent increments refresh key after measurement archive
 const handleArchiveBody = extractFunctionBody(parentSource, 'const handleArchive = async');
 assert(handleArchiveBody !== null, 'handleArchive exists in parent');
 assert(
-  handleArchiveBody && handleArchiveBody.includes('setProgressSummaryRefreshKey(prev => prev + 1)'),
+  handleArchiveBody && handleArchiveBody.includes('setProgressSummaryRefreshKey('),
   'handleArchive increments progressSummaryRefreshKey on measurement archive'
 );
 
@@ -147,7 +169,7 @@ assert(
 const handleRestoreBody = extractFunctionBody(parentSource, 'const handleRestore = async');
 assert(handleRestoreBody !== null, 'handleRestore exists in parent');
 assert(
-  handleRestoreBody && handleRestoreBody.includes('setProgressSummaryRefreshKey(prev => prev + 1)'),
+  handleRestoreBody && handleRestoreBody.includes('setProgressSummaryRefreshKey('),
   'handleRestore increments progressSummaryRefreshKey on measurement restore'
 );
 
