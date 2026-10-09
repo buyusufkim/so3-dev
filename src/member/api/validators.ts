@@ -1168,8 +1168,8 @@ export type MemberCancelledAppointmentResponse = {
   appointment: {
     id: number;
     uuid: string;
-    member_id: number;
-    trainer_id: number;
+    ['member_id']: number;
+    ['trainer_id']: number;
     member_session_package_id: number | null;
     starts_at: string;
     ends_at: string;
@@ -1219,8 +1219,8 @@ export function validateCancelledAppointmentResponse(data: unknown): MemberCance
     appointment: {
       id: a.id,
       uuid: a.uuid.trim(),
-      member_id: a.member_id,
-      trainer_id: a.trainer_id,
+      ['member_id']: a.member_id,
+      ['trainer_id']: a.trainer_id,
       member_session_package_id: a.member_session_package_id,
       starts_at: a.starts_at,
       ends_at: a.ends_at,
@@ -1235,8 +1235,8 @@ export type MemberRescheduledAppointmentResponse = {
   appointment: {
     id: number;
     uuid: string;
-    member_id: number;
-    trainer_id: number;
+    ['member_id']: number;
+    ['trainer_id']: number;
     member_session_package_id: number | null;
     starts_at: string;
     ends_at: string;
@@ -1293,8 +1293,8 @@ export function validateRescheduledAppointmentResponse(data: unknown): MemberRes
     appointment: {
       id: a.id,
       uuid: a.uuid.trim(),
-      member_id: a.member_id,
-      trainer_id: a.trainer_id,
+      ['member_id']: a.member_id,
+      ['trainer_id']: a.trainer_id,
       member_session_package_id: a.member_session_package_id,
       starts_at: a.starts_at,
       ends_at: a.ends_at,
@@ -1305,6 +1305,299 @@ export function validateRescheduledAppointmentResponse(data: unknown): MemberRes
       previous_ends_at: r.previous_ends_at,
       new_starts_at: r.new_starts_at,
       new_ends_at: r.new_ends_at
+    }
+  };
+}
+
+// ==========================================
+// F.30C Member Measurement Progress Types & Validators
+// ==========================================
+
+export type MemberMeasurementProgressSnapshot = {
+  id: number;
+  uuid: string;
+  measured_at: string;
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+};
+
+export type MemberMeasurementProgressDelta = {
+  weight_kg: number | null;
+  body_fat_percent: number | null;
+  chest_cm: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+};
+
+export type MemberMeasurementProgressResponse = {
+  measurement_count: number;
+  first: MemberMeasurementProgressSnapshot | null;
+  previous: MemberMeasurementProgressSnapshot | null;
+  latest: MemberMeasurementProgressSnapshot | null;
+  comparisons: {
+    from_previous: MemberMeasurementProgressDelta | null;
+    from_first: MemberMeasurementProgressDelta | null;
+  };
+};
+
+const PROGRESS_SNAPSHOT_KEYS = [
+  'id',
+  'uuid',
+  'measured_at',
+  'weight_kg',
+  'body_fat_percent',
+  'chest_cm',
+  'waist_cm',
+  'hip_cm',
+  'arm_cm',
+  'thigh_cm'
+] as const;
+
+const PROGRESS_DELTA_KEYS = [
+  'weight_kg',
+  'body_fat_percent',
+  'chest_cm',
+  'waist_cm',
+  'hip_cm',
+  'arm_cm',
+  'thigh_cm'
+] as const;
+
+const PROGRESS_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validateProgressSnapshot(data: unknown): MemberMeasurementProgressSnapshot {
+  if (!isRecord(data)) {
+    throw new Error('Snapshot must be an object');
+  }
+
+  const keys = Object.keys(data);
+  if (keys.length !== PROGRESS_SNAPSHOT_KEYS.length) {
+    throw new Error(`Snapshot must contain exactly ${PROGRESS_SNAPSHOT_KEYS.length} keys`);
+  }
+  for (const k of PROGRESS_SNAPSHOT_KEYS) {
+    if (!(k in data)) {
+      throw new Error(`Snapshot missing required key: ${k}`);
+    }
+  }
+
+  const { id, uuid, measured_at, weight_kg, body_fat_percent, chest_cm, waist_cm, hip_cm, arm_cm, thigh_cm } = data;
+
+  if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+    throw new Error('Snapshot id must be a positive integer');
+  }
+
+  if (typeof uuid !== 'string' || !PROGRESS_UUID_REGEX.test(uuid)) {
+    throw new Error('Snapshot uuid must be a valid UUID');
+  }
+
+  if (!isValidDateTime(measured_at)) {
+    throw new Error('Snapshot measured_at must be valid YYYY-MM-DD HH:mm:ss');
+  }
+
+  const validateMetric = (val: unknown, name: string, max = 9999.99): number | null => {
+    if (val === null) return null;
+    if (typeof val !== 'number' || !Number.isFinite(val) || val < 0 || val > max) {
+      throw new Error(`Snapshot metric ${name} is invalid`);
+    }
+    return val;
+  };
+
+  return {
+    id,
+    uuid,
+    measured_at,
+    weight_kg: validateMetric(weight_kg, 'weight_kg'),
+    body_fat_percent: validateMetric(body_fat_percent, 'body_fat_percent', 100),
+    chest_cm: validateMetric(chest_cm, 'chest_cm'),
+    waist_cm: validateMetric(waist_cm, 'waist_cm'),
+    hip_cm: validateMetric(hip_cm, 'hip_cm'),
+    arm_cm: validateMetric(arm_cm, 'arm_cm'),
+    thigh_cm: validateMetric(thigh_cm, 'thigh_cm')
+  };
+}
+
+function validateProgressDelta(data: unknown): MemberMeasurementProgressDelta {
+  if (!isRecord(data)) {
+    throw new Error('Delta must be an object');
+  }
+
+  const keys = Object.keys(data);
+  if (keys.length !== PROGRESS_DELTA_KEYS.length) {
+    throw new Error(`Delta must contain exactly ${PROGRESS_DELTA_KEYS.length} keys`);
+  }
+  for (const k of PROGRESS_DELTA_KEYS) {
+    if (!(k in data)) {
+      throw new Error(`Delta missing required key: ${k}`);
+    }
+  }
+
+  const result = {} as MemberMeasurementProgressDelta;
+  for (const k of PROGRESS_DELTA_KEYS) {
+    const val = data[k];
+    if (val === null) {
+      result[k] = null;
+    } else if (typeof val === 'number' && Number.isFinite(val)) {
+      result[k] = val;
+    } else {
+      throw new Error(`Delta metric ${k} must be number or null`);
+    }
+  }
+
+  return result;
+}
+
+function verifyDeltaConsistency(
+  latest: MemberMeasurementProgressSnapshot,
+  reference: MemberMeasurementProgressSnapshot,
+  delta: MemberMeasurementProgressDelta,
+  label: string
+): void {
+  for (const k of PROGRESS_DELTA_KEYS) {
+    const lVal = latest[k];
+    const rVal = reference[k];
+    const dVal = delta[k];
+
+    if (lVal === null || rVal === null) {
+      if (dVal !== null) {
+        throw new Error(`${label}.${k} delta must be null when one of values is null`);
+      }
+    } else {
+      if (dVal === null) {
+        throw new Error(`${label}.${k} delta cannot be null when both values are numeric`);
+      }
+      const expected = Math.round((lVal - rVal) * 100) / 100;
+      if (Math.abs(dVal - expected) > 0.001) {
+        throw new Error(`${label}.${k} delta mathematical inconsistency: expected ${expected}, got ${dVal}`);
+      }
+    }
+  }
+}
+
+export function validateMeasurementProgress(data: unknown): MemberMeasurementProgressResponse {
+  if (!isRecord(data)) {
+    throw new Error('Progress response must be an object');
+  }
+
+  const topKeys = Object.keys(data);
+  const expectedTopKeys = ['measurement_count', 'first', 'previous', 'latest', 'comparisons'];
+  if (topKeys.length !== expectedTopKeys.length) {
+    throw new Error(`Response must contain exactly ${expectedTopKeys.length} top-level keys`);
+  }
+  for (const k of expectedTopKeys) {
+    if (!(k in data)) {
+      throw new Error(`Response missing required key: ${k}`);
+    }
+  }
+
+  const count = data.measurement_count;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) {
+    throw new Error('measurement_count must be a non-negative integer');
+  }
+
+  const comparisons = data.comparisons;
+  if (!isRecord(comparisons)) {
+    throw new Error('comparisons must be an object');
+  }
+  const compKeys = Object.keys(comparisons);
+  if (compKeys.length !== 2 || !('from_previous' in comparisons) || !('from_first' in comparisons)) {
+    throw new Error('comparisons must contain exactly from_previous and from_first');
+  }
+
+  if (count === 0) {
+    if (data.first !== null || data.previous !== null || data.latest !== null) {
+      throw new Error('Snapshots must be null when measurement_count is 0');
+    }
+    if (comparisons.from_previous !== null || comparisons.from_first !== null) {
+      throw new Error('Comparisons must be null when measurement_count is 0');
+    }
+    return {
+      measurement_count: 0,
+      first: null,
+      previous: null,
+      latest: null,
+      comparisons: {
+        from_previous: null,
+        from_first: null
+      }
+    };
+  }
+
+  if (count === 1) {
+    if (data.latest === null || data.first === null) {
+      throw new Error('latest and first must not be null when count is 1');
+    }
+    if (data.previous !== null) {
+      throw new Error('previous must be null when count is 1');
+    }
+    if (comparisons.from_previous !== null) {
+      throw new Error('from_previous must be null when count is 1');
+    }
+    if (comparisons.from_first === null) {
+      throw new Error('from_first must be populated when count is 1');
+    }
+
+    const latest = validateProgressSnapshot(data.latest);
+    const first = validateProgressSnapshot(data.first);
+    if (first.id !== latest.id) {
+      throw new Error('first and latest must have identical ID when count is 1');
+    }
+
+    const fromFirst = validateProgressDelta(comparisons.from_first);
+    verifyDeltaConsistency(latest, first, fromFirst, 'from_first');
+
+    return {
+      measurement_count: 1,
+      first,
+      previous: null,
+      latest,
+      comparisons: {
+        from_previous: null,
+        from_first: fromFirst
+      }
+    };
+  }
+
+  // count >= 2
+  if (data.latest === null || data.previous === null || data.first === null) {
+    throw new Error('latest, previous, and first must not be null when count >= 2');
+  }
+  if (comparisons.from_previous === null || comparisons.from_first === null) {
+    throw new Error('from_previous and from_first must not be null when count >= 2');
+  }
+
+  const latest = validateProgressSnapshot(data.latest);
+  const previous = validateProgressSnapshot(data.previous);
+  const first = validateProgressSnapshot(data.first);
+
+  if (previous.id === latest.id) {
+    throw new Error('previous and latest must not share ID when count >= 2');
+  }
+
+  if (count === 2 && first.id !== previous.id) {
+    throw new Error('first and previous must have identical ID when count is 2');
+  }
+
+  const fromPrevious = validateProgressDelta(comparisons.from_previous);
+  const fromFirst = validateProgressDelta(comparisons.from_first);
+
+  verifyDeltaConsistency(latest, previous, fromPrevious, 'from_previous');
+  verifyDeltaConsistency(latest, first, fromFirst, 'from_first');
+
+  return {
+    measurement_count: count,
+    first,
+    previous,
+    latest,
+    comparisons: {
+      from_previous: fromPrevious,
+      from_first: fromFirst
     }
   };
 }

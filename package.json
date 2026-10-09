@@ -84,7 +84,9 @@
     "verify:trainer-program-days-ui": "node scripts/verify-trainer-program-days-ui.mjs",
     "verify:trainer-program-editor-v2": "node scripts/verify-trainer-program-editor-v2.mjs",
     "verify:trainer-measurement-progress": "node scripts/verify-trainer-measurement-progress.mjs",
-    "verify:trainer-measurement-progress-ui": "node scripts/verify-trainer-measurement-progress-ui.mjs"
+    "verify:trainer-measurement-progress-ui": "node scripts/verify-trainer-measurement-progress-ui.mjs",
+    "verify:member-measurement-progress": "node scripts/verify-member-measurement-progress.mjs",
+    "verify:member-progress-v2": "node scripts/verify-member-progress-v2.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

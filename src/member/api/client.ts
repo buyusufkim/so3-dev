@@ -23,7 +23,9 @@ import {
   MemberCancelledAppointmentResponse,
   validateCancelledAppointmentResponse,
   MemberRescheduledAppointmentResponse,
-  validateRescheduledAppointmentResponse
+  validateRescheduledAppointmentResponse,
+  MemberMeasurementProgressResponse,
+  validateMeasurementProgress
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -185,6 +187,11 @@ export const memberApiClient = {
   async getMeasurements(signal?: AbortSignal): Promise<MemberMeasurement[]> {
     const data = await request('/api/member/measurements', { signal });
     return validateMeasurements(data);
+  },
+
+  async getMeasurementProgress(signal?: AbortSignal): Promise<MemberMeasurementProgressResponse> {
+    const data = await request('/api/member/measurement-progress', { signal });
+    return validateMeasurementProgress(data);
   },
 
   async getAppointmentBookingOptions(signal?: AbortSignal): Promise<MemberAppointmentBookingOptions> {

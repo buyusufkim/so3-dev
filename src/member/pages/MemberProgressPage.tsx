@@ -2,9 +2,12 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useMemberAuth } from '../auth/MemberAuthContext';
 import { memberApiClient, MemberApiError } from '../api/client';
-import { MemberMeasurement } from '../api/validators';
+import {
+  MemberMeasurement,
+  MemberMeasurementProgressResponse
+} from '../api/validators';
 import { MeasurementTrendChart, MeasurementTrendPoint } from '../components/MeasurementTrendChart';
-import { Activity, Scale, Ruler } from 'lucide-react';
+import { Activity, Scale, Ruler, RotateCcw } from 'lucide-react';
 
 type MeasurementMetricKey = 'weight_kg' | 'body_fat_percent' | 'chest_cm' | 'waist_cm' | 'hip_cm' | 'arm_cm' | 'thigh_cm';
 
@@ -18,6 +21,16 @@ const METRIC_LABELS: Record<MeasurementMetricKey, { label: string; unit: string;
   thigh_cm: { label: 'Bacak', unit: 'cm', icon: <Ruler className="w-4 h-4" /> }
 };
 
+const COMPARISON_METRICS: Array<{ key: MeasurementMetricKey; label: string; unit: string }> = [
+  { key: 'weight_kg', label: 'Kilo', unit: 'kg' },
+  { key: 'body_fat_percent', label: 'Yağ Oranı', unit: '%' },
+  { key: 'chest_cm', label: 'Göğüs', unit: 'cm' },
+  { key: 'waist_cm', label: 'Bel', unit: 'cm' },
+  { key: 'hip_cm', label: 'Kalça', unit: 'cm' },
+  { key: 'arm_cm', label: 'Kol', unit: 'cm' },
+  { key: 'thigh_cm', label: 'Bacak', unit: 'cm' }
+];
+
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
   const [date, time] = dateStr.split(' ');
@@ -30,6 +43,21 @@ function formatDate(dateStr: string) {
   return `${parseInt(day, 10)} ${monthName} ${year}${hour ? ` • ${hour}:${minute}` : ''}`;
 }
 
+function formatProgressDate(dateStr: string | null | undefined): string {
+  if (!dateStr || typeof dateStr !== 'string') return '—';
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return dateStr;
+  const [, year, month, day] = match;
+  return `${day}.${month}.${year}`;
+}
+
+function formatDeltaValue(delta: number | null, unit: string): string {
+  if (delta === null) return '—';
+  if (delta > 0) return `+${delta} ${unit}`;
+  if (delta < 0) return `${delta} ${unit}`;
+  return `0 ${unit}`;
+}
+
 export function MemberProgressPage() {
   const { identity, isLoading: isAuthLoading, refreshIdentity } = useMemberAuth();
   const navigate = useNavigate();
@@ -39,7 +67,14 @@ export function MemberProgressPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MeasurementMetricKey>('weight_kg');
 
+  // Independent Progress Summary State
+  const [progressData, setProgressData] = useState<MemberMeasurementProgressResponse | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [comparisonMode, setComparisonMode] = useState<'previous' | 'first'>('previous');
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const progressAbortControllerRef = useRef<AbortController | null>(null);
 
   const loadData = async () => {
     if (abortControllerRef.current) {
@@ -71,12 +106,43 @@ export function MemberProgressPage() {
     }
   };
 
+  const loadProgress = async () => {
+    if (progressAbortControllerRef.current) {
+      progressAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    progressAbortControllerRef.current = controller;
+
+    setProgressLoading(true);
+    setProgressError(null);
+
+    try {
+      const data = await memberApiClient.getMeasurementProgress(controller.signal);
+      if (!controller.signal.aborted) {
+        setProgressData(data);
+        setProgressLoading(false);
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+
+      if (err instanceof MemberApiError && err.code === 'PASSWORD_CHANGE_REQUIRED') {
+        await refreshIdentity();
+        navigate('/uye/sifre-degistir', { replace: true });
+        return;
+      }
+
+      setProgressError('Ölçüm karşılaştırması yüklenemedi.');
+      setProgressLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthLoading && identity) {
       if (identity.account.must_change_password) {
         navigate('/uye/sifre-degistir', { replace: true });
       } else {
         loadData();
+        loadProgress();
       }
     }
   }, [isAuthLoading, identity, navigate]);
@@ -85,6 +151,9 @@ export function MemberProgressPage() {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      if (progressAbortControllerRef.current) {
+        progressAbortControllerRef.current.abort();
       }
     };
   }, []);
@@ -173,19 +242,6 @@ export function MemberProgressPage() {
     }))
     .reverse(); // oldest to newest for chart
 
-  // Delta calculation
-  let deltaText = 'Önceki ölçüm yok';
-  let deltaValue: number | null = null;
-  if (chartData.length >= 2) {
-    const current = chartData[chartData.length - 1].value;
-    const previous = chartData[chartData.length - 2].value;
-    deltaValue = current - previous;
-    const sign = deltaValue > 0 ? '+' : '';
-    deltaText = `Son ölçüme göre ${sign}${deltaValue.toFixed(1)} ${METRIC_LABELS[selectedMetric].unit}`;
-  } else if (chartData.length === 1) {
-    deltaText = 'Önceki ölçüm yok';
-  }
-
   return (
     <div className="space-y-8 pb-12">
       <div>
@@ -227,13 +283,138 @@ export function MemberProgressPage() {
         </div>
       </div>
 
+      {/* Factual Comparison Panel */}
+      {progressLoading && !progressData && (
+        <div className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6 animate-pulse">
+          <div className="h-5 bg-white/10 rounded w-1/4 mb-2"></div>
+          <div className="h-4 bg-white/5 rounded w-1/2 mb-6"></div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 bg-white/5 rounded-xl"></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {progressError && (
+        <div className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-medium text-white">Ölçüm Değişimi</h2>
+            <p className="text-sm text-red-400 mt-1">{progressError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={loadProgress}
+            className="min-h-[44px] px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Tekrar Dene
+          </button>
+        </div>
+      )}
+
+      {!progressLoading && !progressError && progressData && progressData.measurement_count === 1 && (
+        <div className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6">
+          <h2 className="text-lg font-medium text-white mb-1">Ölçüm Değişimi</h2>
+          <p className="text-white/50 text-sm mb-4">Son ölçümünün önceki ve ilk ölçümüne göre sayısal farkları.</p>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-white/80">
+            İlk ölçümün kaydedildi. Karşılaştırma için yeni bir ölçüm daha gerekli.
+          </div>
+        </div>
+      )}
+
+      {!progressLoading && !progressError && progressData && progressData.measurement_count >= 2 && (
+        <div className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+            <div>
+              <h2 className="text-lg font-medium text-white mb-1">Ölçüm Değişimi</h2>
+              <p className="text-white/50 text-sm">Son ölçümünün önceki ve ilk ölçümüne göre sayısal farkları.</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-white/50">
+                <span>Son ölçüm: <strong className="text-white/80 font-normal">{formatProgressDate(progressData.latest?.measured_at)}</strong></span>
+                <span>Önceki: <strong className="text-white/80 font-normal">{formatProgressDate(progressData.previous?.measured_at)}</strong></span>
+                <span>İlk: <strong className="text-white/80 font-normal">{formatProgressDate(progressData.first?.measured_at)}</strong></span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-lg border border-white/10 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setComparisonMode('previous')}
+                className={`min-h-[44px] px-3.5 py-2 rounded-md text-xs font-medium transition-colors ${
+                  comparisonMode === 'previous'
+                    ? 'bg-[#851C35] text-white shadow-sm'
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                Önceki Ölçüme Göre
+              </button>
+              <button
+                type="button"
+                onClick={() => setComparisonMode('first')}
+                className={`min-h-[44px] px-3.5 py-2 rounded-md text-xs font-medium transition-colors ${
+                  comparisonMode === 'first'
+                    ? 'bg-[#851C35] text-white shadow-sm'
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                İlk Ölçüme Göre
+              </button>
+            </div>
+          </div>
+
+          {(() => {
+            const deltas = comparisonMode === 'previous'
+              ? progressData.comparisons.from_previous
+              : progressData.comparisons.from_first;
+            const refSnapshot = comparisonMode === 'previous'
+              ? progressData.previous
+              : progressData.first;
+            const referenceLabel = comparisonMode === 'previous' ? 'Önceki' : 'İlk';
+
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {COMPARISON_METRICS.map(({ key, label, unit }) => {
+                  const currentVal = progressData.latest ? progressData.latest[key] : null;
+                  const refVal = refSnapshot ? refSnapshot[key] : null;
+                  const deltaVal = deltas ? deltas[key] : null;
+
+                  return (
+                    <div key={key} className="bg-[#0A0A0A] border border-white/5 rounded-xl p-4 flex flex-col justify-between gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-white/50">{label}</span>
+                        <span className="text-xs font-mono px-2 py-0.5 rounded bg-white/5 text-white/80 border border-white/10 whitespace-nowrap">
+                          {formatDeltaValue(deltaVal, unit)}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-xl font-light text-white">
+                          {currentVal !== null ? `${currentVal.toFixed(1)} ${unit}` : '—'}
+                        </div>
+                        <div className="text-xs text-white/40 mt-1">
+                          {referenceLabel}: {refVal !== null ? `${refVal.toFixed(1)} ${unit}` : '—'}
+                        </div>
+                      </div>
+                      {deltaVal === null && (
+                        <p className="text-[11px] text-white/40 italic">
+                          Karşılaştırma için iki ölçümde de bu değer gerekli.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Trends */}
       {availableMetrics.length > 0 && (
         <div className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6">
           <div className="flex flex-col md:flex-row justify-between md:items-start gap-6 mb-8">
             <div>
               <h2 className="text-lg font-medium text-white mb-1">Gelişim Trendi</h2>
-              <p className="text-white/50 text-sm">{deltaText}</p>
+              <p className="text-white/50 text-sm">Seçili ölçümün zaman içindeki kayıtları.</p>
             </div>
             
             <div className="flex flex-wrap gap-2">
