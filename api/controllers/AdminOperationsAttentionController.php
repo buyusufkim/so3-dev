@@ -92,17 +92,19 @@ class AdminOperationsAttentionController
             $visitStmt = $db->prepare("
                 SELECT
                     COUNT(*) AS current_count,
-                    COALESCE(SUM(CASE WHEN checked_in_at < :today_start THEN 1 ELSE 0 END), 0) AS carried_over,
-                    COALESCE(SUM(CASE WHEN checked_in_at >= :today_start AND checked_in_at < :tomorrow_start THEN 1 ELSE 0 END), 0) AS opened_today,
-                    COALESCE(SUM(CASE WHEN checked_in_at >= :tomorrow_start THEN 1 ELSE 0 END), 0) AS future_dated,
+                    COALESCE(SUM(CASE WHEN checked_in_at < :today_start1 THEN 1 ELSE 0 END), 0) AS carried_over,
+                    COALESCE(SUM(CASE WHEN checked_in_at >= :today_start2 AND checked_in_at < :tomorrow_start1 THEN 1 ELSE 0 END), 0) AS opened_today,
+                    COALESCE(SUM(CASE WHEN checked_in_at >= :tomorrow_start2 THEN 1 ELSE 0 END), 0) AS future_dated,
                     MIN(checked_in_at) AS oldest_checked_in_at
                 FROM member_visits
                 WHERE checked_out_at IS NULL
             ");
 
             $visitStmt->execute([
-                ':today_start' => $todayStartStr,
-                ':tomorrow_start' => $tomorrowStartStr,
+                ':today_start1' => $todayStartStr,
+                ':today_start2' => $todayStartStr,
+                ':tomorrow_start1' => $tomorrowStartStr,
+                ':tomorrow_start2' => $tomorrowStartStr,
             ]);
 
             $visitRow = $visitStmt->fetch(PDO::FETCH_ASSOC);

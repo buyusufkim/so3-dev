@@ -8,6 +8,7 @@
  * 4. Zero Medical / Coaching / Score / Finance / Workflow Invariant
  * 5. Zero Database Mutation & Read-Only Invariant
  * 6. Bounded Aggregate Query Architecture (Zero fetchAll, Zero SQL NOW())
+ * 6B. Native PDO Prepared Statement & Parameter Number (HY093) Invariants
  * 7. Algorithmic Simulation of Lifecycle States & Aggregates
  * 8. TypeScript Contract & Fail-Closed Validator Invariants (types.ts)
  * 9. Dev Fixture RBAC Parity Invariants in src/admin/api/adminDevFixtures.ts
@@ -174,6 +175,80 @@ pass('Controller uses PHP-bound timestamps instead of SQL NOW() / CURRENT_TIMEST
 assert(controllerSrc.includes('DateTimeZone'), 'Controller uses PHP DateTimeZone for time authority');
 assert(controllerSrc.includes('DateTimeImmutable'), 'Controller uses DateTimeImmutable');
 pass('Time authority established via PHP DateTimeImmutable with Europe/Istanbul timezone');
+
+console.log('\n=== 6B. Native PDO Prepared Statement & Parameter Number (HY093) Invariants ===');
+
+// Check Database.php PDO::ATTR_EMULATE_PREPARES setting
+const dbPath = path.join(ROOT, 'api/core/Database.php');
+assert(fs.existsSync(dbPath), 'api/core/Database.php must exist');
+const dbSrc = fs.readFileSync(dbPath, 'utf-8');
+assert(!dbSrc.includes('PDO::ATTR_EMULATE_PREPARES => true'), 'PDO::ATTR_EMULATE_PREPARES must NEVER be set to true');
+assert(
+  dbSrc.includes('PDO::ATTR_EMULATE_PREPARES => false') || dbSrc.includes('PDO::ATTR_EMULATE_PREPARES   => false'),
+  'Database.php must explicitly configure PDO::ATTR_EMULATE_PREPARES => false'
+);
+pass('Database.php explicitly maintains native PDO prepared statements (PDO::ATTR_EMULATE_PREPARES => false)');
+
+// Parse every SQL string prepared in AdminOperationsAttentionController.php
+// Ensure ZERO duplicate placeholders in any single prepared statement string
+// Ensure execute array contains an exact 1:1 match for all prepared placeholders
+const prepareRegex = /\$([a-zA-Z0-9_]+)\s*=\s*\$db->prepare\(\s*(["'])([\s\S]*?)\2\s*\);[\s\S]*?\$\1->execute\(\s*\[([\s\S]*?)\]\s*\);/g;
+let match;
+let prepareCount = 0;
+
+// Also count how many times '$db->prepare(' occurs in controllerSrc
+const totalDbPrepares = (controllerSrc.match(/\$db->prepare\(/g) || []).length;
+assert(totalDbPrepares >= 2, 'Controller must contain at least 2 prepared statements');
+
+while ((match = prepareRegex.exec(controllerSrc)) !== null) {
+  prepareCount++;
+  const stmtVar = match[1];
+  const sql = match[3];
+  const execBlock = match[4];
+
+  // Extract all named placeholders from SQL (:placeholder)
+  const rawPlaceholders = sql.match(/:[a-zA-Z0-9_]+/g) || [];
+  assert(rawPlaceholders.length > 0, `Prepared statement $${stmtVar} must contain parameters`);
+
+  // Check for duplicates
+  const seenPlaceholders = new Set();
+  const duplicates = [];
+  for (const p of rawPlaceholders) {
+    if (seenPlaceholders.has(p)) {
+      duplicates.push(p);
+    }
+    seenPlaceholders.add(p);
+  }
+  assert.strictEqual(
+    duplicates.length,
+    0,
+    `Prepared statement $${stmtVar} contains duplicate named placeholders: ${duplicates.join(', ')}. Under native prepares (PDO::ATTR_EMULATE_PREPARES => false), every parameter must be unique to avoid HY093.`
+  );
+  pass(`Prepared statement $${stmtVar} contains zero duplicate named placeholders (${rawPlaceholders.length} unique parameters)`);
+
+  // Extract all keys from execute array
+  const execKeysMatches = execBlock.match(/['"](:[a-zA-Z0-9_]+)['"]\s*=>/g) || [];
+  const execKeys = execKeysMatches.map(k => k.replace(/['"]\s*=>/, '').replace(/['"]/, ''));
+
+  // Ensure exact 1:1 match between SQL placeholders and execute array keys
+  assert.strictEqual(
+    execKeys.length,
+    rawPlaceholders.length,
+    `Prepared statement $${stmtVar} execute array count (${execKeys.length}) must match SQL placeholder count (${rawPlaceholders.length})`
+  );
+
+  const sortedSqlPlaceholders = [...rawPlaceholders].sort();
+  const sortedExecKeys = [...execKeys].sort();
+  assert.deepStrictEqual(
+    sortedExecKeys,
+    sortedSqlPlaceholders,
+    `Prepared statement $${stmtVar} execute bindings must match SQL placeholders 1:1`
+  );
+  pass(`Prepared statement $${stmtVar} execute array provides exact 1:1 match for all prepared placeholders`);
+}
+
+assert.strictEqual(prepareCount, totalDbPrepares, `All ${totalDbPrepares} prepared statements in controller were parsed and verified`);
+pass(`All ${prepareCount} prepared statements in AdminOperationsAttentionController verified native-PDO safe`);
 
 console.log('\n=== 7. Algorithmic Simulation of Lifecycle States & Aggregates ===');
 // Simulate appointment lifecycle breakdown:

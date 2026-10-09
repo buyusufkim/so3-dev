@@ -637,6 +637,7 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero scoring / heuristics / finance / workflows: strictly zero efficiency/occupancy/staff scores, no threshold heuristics (e.g. "open > 3h = stale"), zero revenue/payment fields, and zero check-in/terminalization mutation actions
 * strict TypeScript contract & validator: `src/admin/pages/operations-attention/types.ts` exports `OperationsAttentionResponse` and `validateOperationsAttention` with fail-closed schema, type, regex datetime, and relational invariant enforcement
 * dev fixture parity: `src/admin/api/adminDevFixtures.ts` provides matching mock response and role guard (`currentDevRole !== 'super_admin' && currentDevRole !== 'admin'`)
+* native PDO prepared statement compatibility: repository strictly enforces `PDO::ATTR_EMULATE_PREPARES => false`; every named placeholder in queries (`:today_start1`, `:today_start2`, `:tomorrow_start1`, `:tomorrow_start2`) is uniquely declared and 1:1 bound to prevent HY093 duplicate parameter number runtime errors under native MySQL prepares
 
 
 
