@@ -263,10 +263,47 @@ assert(
   "Component formats server timestamps to deterministic DD.MM.YYYY HH:mm"
 );
 
+console.log("\n=== 13. F.31B Final UI Contract Corrective Invariants ===");
+// Bounded error message invariants
+assert(
+  panelSource.includes('setError("Dikkat verileri yüklenemedi.")') ||
+  panelSource.includes("setError('Dikkat verileri yüklenemedi.')"),
+  "Component sets bounded error message 'Dikkat verileri yüklenemedi.' on request failure"
+);
+assert(
+  panelSource.includes('setError("Dikkat verileri doğrulanamadı.")') ||
+  panelSource.includes("setError('Dikkat verileri doğrulanamadı.')"),
+  "Component sets bounded error message 'Dikkat verileri doğrulanamadı.' on validation failure"
+);
+assert(
+  !panelSource.includes("err.message") && !panelSource.includes("error.message"),
+  "Component does NOT leak raw backend or exception error messages"
+);
+
+// Positive-only attention card rendering
+assert(
+  panelSource.includes("{apptCount > 0 &&"),
+  "Unresolved appointments card is conditionally rendered only when apptCount > 0"
+);
+assert(
+  panelSource.includes("{carriedOverVisits > 0 &&"),
+  "Carried-over open visits card is conditionally rendered only when carriedOverVisits > 0"
+);
+assert(
+  panelSource.includes("{futureDatedVisits > 0 &&"),
+  "Future-dated open visits card is conditionally rendered only when futureDatedVisits > 0"
+);
+
+// Touch target invariant (>= 44px)
+assert(
+  panelSource.includes("min-h-[44px]"),
+  "Component applies minimum 44px touch targets (min-h-[44px]) on interactive elements"
+);
+
 console.log("\n=======================================================");
 console.log(`Summary: ${passedAssertions}/${totalAssertions} assertions passed.`);
 if (exitCode === 0) {
-  console.log("PASS — F.31B UI CONTRACT CORRECTIVE IMPLEMENTED");
+  console.log("PASS — F.31B FINAL UI CONTRACT CORRECTIVE IMPLEMENTED");
 } else {
   console.error("FAIL: Some assertions failed.");
 }

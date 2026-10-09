@@ -52,9 +52,9 @@ export function OperationsAttentionPanel() {
       if (validateOperationsAttention(response)) {
         setData(response);
       } else {
-        setError("Operasyonel dikkat verileri doğrulanamadı.");
+        setError("Dikkat verileri doğrulanamadı.");
       }
-    } catch (err: unknown) {
+    } catch (_err: unknown) {
       if (
         controller.signal.aborted ||
         generation !== requestGenerationRef.current ||
@@ -62,7 +62,7 @@ export function OperationsAttentionPanel() {
       ) {
         return;
       }
-      setError(err instanceof Error ? err.message : "Operasyonel dikkat verileri alınamadı.");
+      setError("Dikkat verileri yüklenemedi.");
     } finally {
       if (
         !controller.signal.aborted &&
@@ -105,7 +105,7 @@ export function OperationsAttentionPanel() {
         <button
           type="button"
           onClick={fetchAttention}
-          className="self-start sm:self-auto px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 text-white rounded transition"
+          className="self-start sm:self-auto min-h-[44px] px-4 py-2 text-xs bg-white/10 hover:bg-white/20 text-white rounded transition inline-flex items-center justify-center font-medium"
         >
           Tekrar Dene
         </button>
@@ -145,6 +145,18 @@ export function OperationsAttentionPanel() {
     );
   }
 
+  const activeCardsCount =
+    (apptCount > 0 ? 1 : 0) +
+    (carriedOverVisits > 0 ? 1 : 0) +
+    (futureDatedVisits > 0 ? 1 : 0);
+
+  const gridCols =
+    activeCardsCount === 3
+      ? "grid-cols-1 md:grid-cols-3"
+      : activeCardsCount === 2
+      ? "grid-cols-1 md:grid-cols-2"
+      : "grid-cols-1";
+
   return (
     <div className="bg-[#1a1a1a] border border-white/10 p-5 rounded-lg space-y-4">
       {/* Başlık ve Durum */}
@@ -160,98 +172,92 @@ export function OperationsAttentionPanel() {
         </div>
       </div>
 
-      {/* Kartlar: 2 veya 3 sütunlu grid (futureDatedVisits > 0 ise 3 kart, yoksa 2 kart) */}
-      <div className={`grid grid-cols-1 ${futureDatedVisits > 0 ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}>
-        {/* 1. Kapatılması gereken randevular */}
-        <div
-          className={`p-4 rounded-lg border flex flex-col justify-between ${
-            apptCount > 0 ? "bg-amber-500/5 border-amber-500/30" : "bg-white/[0.02] border-white/5"
-          }`}
-        >
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
-                Kapatılmamış Randevular
-              </span>
-              {apptCount > 0 && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+      {/* Kartlar: Yalnız pozitif metrikler için render edilir */}
+      <div className={`grid ${gridCols} gap-4`}>
+        {/* 1. Kapatılması gereken randevular — yalnız apptCount > 0 olduğunda render edilir */}
+        {apptCount > 0 && (
+          <div className="p-4 rounded-lg border flex flex-col justify-between bg-amber-500/5 border-amber-500/30">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
+                  Kapatılmamış Randevular
+                </span>
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-2">{apptCount}</div>
+              <p className="text-xs text-white/60 mb-2">
+                Bitiş saati geçtiği halde sonuçlandırılmamış randevular.
+              </p>
+              {data.appointments.oldest_needs_terminalization_ends_at && (
+                <div className="text-[11px] text-white/40 mb-2">
+                  En eski:{" "}
+                  <span className="text-white/70">
+                    {formatDateTime(data.appointments.oldest_needs_terminalization_ends_at)}
+                  </span>
+                </div>
+              )}
+              <div className="text-[10px] text-white/40 space-y-0.5 pt-2 border-t border-white/5">
+                <div>
+                  Bugün biten: <span className="text-white/60">{data.appointments.today.needs_terminalization}</span>
+                </div>
+                <div>
+                  Bugün devam eden: <span className="text-white/60">{data.appointments.today.scheduled_in_progress}</span>
+                </div>
+                <div>
+                  Bugün gelecek: <span className="text-white/60">{data.appointments.today.scheduled_future}</span>
+                </div>
+              </div>
             </div>
-            <div className="text-2xl font-bold text-white mb-2">{apptCount}</div>
-            <p className="text-xs text-white/60 mb-2">
-              {apptCount > 0
-                ? "Bitiş saati geçtiği halde sonuçlandırılmamış randevular."
-                : "Sonuçlandırılması gereken randevu bulunmuyor."}
-            </p>
-            {data.appointments.oldest_needs_terminalization_ends_at && (
-              <div className="text-[11px] text-white/40 mb-2">
-                En eski: <span className="text-white/70">{formatDateTime(data.appointments.oldest_needs_terminalization_ends_at)}</span>
-              </div>
-            )}
-            <div className="text-[10px] text-white/40 space-y-0.5 pt-2 border-t border-white/5">
-              <div>
-                Bugün biten: <span className="text-white/60">{data.appointments.today.needs_terminalization}</span>
-              </div>
-              <div>
-                Bugün devam eden: <span className="text-white/60">{data.appointments.today.scheduled_in_progress}</span>
-              </div>
-              <div>
-                Bugün gelecek: <span className="text-white/60">{data.appointments.today.scheduled_future}</span>
-              </div>
-            </div>
-          </div>
-          {apptCount > 0 && (
             <Link
               to="/admin/appointments"
-              className="mt-3 inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-medium transition"
+              className="mt-3 min-h-[44px] inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-medium transition"
             >
               Randevuları İncele
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
-          )}
-        </div>
-
-        {/* 2. Günü devreden açık ziyaretler */}
-        <div
-          className={`p-4 rounded-lg border flex flex-col justify-between ${
-            carriedOverVisits > 0 ? "bg-amber-500/5 border-amber-500/30" : "bg-white/[0.02] border-white/5"
-          }`}
-        >
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
-                Günü Devreden Ziyaretler
-              </span>
-              {carriedOverVisits > 0 && <Clock className="w-4 h-4 text-amber-400" />}
-            </div>
-            <div className="text-2xl font-bold text-white mb-2">{carriedOverVisits}</div>
-            <p className="text-xs text-white/60 mb-2">
-              {carriedOverVisits > 0
-                ? "Önceki günlerden çıkışı yapılmamış açık ziyaret kayıtları."
-                : "Önceki günlerden açık kalan ziyaret kaydı yok."}
-            </p>
-            {data.open_visits.oldest_checked_in_at && carriedOverVisits > 0 && (
-              <div className="text-[11px] text-white/40 mb-2">
-                En eski giriş: <span className="text-white/70">{formatDateTime(data.open_visits.oldest_checked_in_at)}</span>
-              </div>
-            )}
-            <div className="text-[10px] text-white/40 space-y-0.5 pt-2 border-t border-white/5">
-              <div>
-                Bugün açılan açık ziyaret: <span className="text-white/60">{data.open_visits.opened_today}</span>
-              </div>
-              <div>
-                Toplam içerideki: <span className="text-white/60">{data.open_visits.current}</span>
-              </div>
-            </div>
           </div>
-          {carriedOverVisits > 0 && (
+        )}
+
+        {/* 2. Günü devreden açık ziyaretler — yalnız carriedOverVisits > 0 olduğunda render edilir */}
+        {carriedOverVisits > 0 && (
+          <div className="p-4 rounded-lg border flex flex-col justify-between bg-amber-500/5 border-amber-500/30">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
+                  Günü Devreden Ziyaretler
+                </span>
+                <Clock className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-2">{carriedOverVisits}</div>
+              <p className="text-xs text-white/60 mb-2">
+                Önceki günlerden çıkışı yapılmamış açık ziyaret kayıtları.
+              </p>
+              {data.open_visits.oldest_checked_in_at && (
+                <div className="text-[11px] text-white/40 mb-2">
+                  En eski giriş:{" "}
+                  <span className="text-white/70">
+                    {formatDateTime(data.open_visits.oldest_checked_in_at)}
+                  </span>
+                </div>
+              )}
+              <div className="text-[10px] text-white/40 space-y-0.5 pt-2 border-t border-white/5">
+                <div>
+                  Bugün açılan açık ziyaret: <span className="text-white/60">{data.open_visits.opened_today}</span>
+                </div>
+                <div>
+                  Toplam içerideki: <span className="text-white/60">{data.open_visits.current}</span>
+                </div>
+              </div>
+            </div>
             <Link
               to="/admin/reception"
-              className="mt-3 inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-medium transition"
+              className="mt-3 min-h-[44px] inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-medium transition"
             >
               Resepsiyonu İncele
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* 3. İleri tarihli açık ziyaretler — yalnızca future_dated > 0 olduğunda render edilir */}
         {futureDatedVisits > 0 && (
@@ -273,7 +279,7 @@ export function OperationsAttentionPanel() {
             </div>
             <Link
               to="/admin/reception"
-              className="mt-3 inline-flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 font-medium transition"
+              className="mt-3 min-h-[44px] inline-flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 font-medium transition"
             >
               Resepsiyonu İncele
               <ArrowRight className="w-3.5 h-3.5" />
