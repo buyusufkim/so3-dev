@@ -6,12 +6,12 @@ import { validateOperationsAttention, type OperationsAttentionResponse } from ".
 
 /**
  * Formats canonical `YYYY-MM-DD HH:mm:ss` server timestamp into `DD.MM.YYYY HH:mm`.
- * Falls back safely to input string if parsing fails.
+ * Fails closed to "—" if value is missing, non-string, or does not match canonical format.
  */
 function formatDateTime(val: string | null | undefined): string {
-  if (!val || typeof val !== "string") return "";
+  if (!val || typeof val !== "string") return "—";
   const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):\d{2}$/.exec(val);
-  if (!match) return val;
+  if (!match) return "—";
   const [, year, month, day, hour, minute] = match;
   return `${day}.${month}.${year} ${hour}:${minute}`;
 }
@@ -180,13 +180,13 @@ export function OperationsAttentionPanel() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
-                  Kapatılmamış Randevular
+                  Sonuçlandırılmayı Bekleyen Randevular
                 </span>
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
               </div>
               <div className="text-2xl font-bold text-white mb-2">{apptCount}</div>
               <p className="text-xs text-white/60 mb-2">
-                Bitiş saati geçtiği halde sonuçlandırılmamış randevular.
+                Bitiş saati geçmiş ve durumu hâlâ planlı olan randevular.
               </p>
               {data.appointments.oldest_needs_terminalization_ends_at && (
                 <div className="text-[11px] text-white/40 mb-2">
@@ -224,7 +224,7 @@ export function OperationsAttentionPanel() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-white/60">
-                  Günü Devreden Ziyaretler
+                  Dünden Devreden Açık Ziyaretler
                 </span>
                 <Clock className="w-4 h-4 text-amber-400" />
               </div>
@@ -274,7 +274,7 @@ export function OperationsAttentionPanel() {
                 Giriş saati yarın veya sonrasına ait tarih anomalisi kayıtları.
               </p>
               <div className="text-[10px] text-white/40 pt-2 border-t border-white/5">
-                Durum: <span className="text-rose-400">Veri tutarsızlığı incelenmeli</span>
+                Durum: <span className="text-rose-400">Gelecek tarihli görünen açık kayıtlar</span>
               </div>
             </div>
             <Link

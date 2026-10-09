@@ -300,10 +300,47 @@ assert(
   "Component applies minimum 44px touch targets (min-h-[44px]) on interactive elements"
 );
 
+console.log("\n=== 14. F.31B Final Presentation Corrective Invariants ===");
+// Fail-closed formatDateTime invariant
+assert(
+  panelSource.includes('return "—";') || panelSource.includes("return '—';"),
+  "formatDateTime fails closed to em dash '—' when invalid or unparsed"
+);
+
+// Canonical clear-state copy
+assert(
+  panelSource.includes("Sonuçlandırılması gereken randevu veya günü devreden açık ziyaret bulunmuyor."),
+  "Compact clear-state displays canonical copy 'Sonuçlandırılması gereken randevu veya günü devreden açık ziyaret bulunmuyor.'"
+);
+
+// Non-prescriptive anomaly copy
+assert(
+  panelSource.includes("Gelecek tarihli görünen açık kayıtlar"),
+  "Anomaly card presents non-prescriptive factual description 'Gelecek tarihli görünen açık kayıtlar'"
+);
+assert(
+  !panelSource.includes("Veri tutarsızlığı incelenmeli"),
+  "Anomaly card does NOT contain prescriptive imperative 'Veri tutarsızlığı incelenmeli'"
+);
+
+// Refined card titles & descriptions
+assert(
+  panelSource.includes("Sonuçlandırılmayı Bekleyen Randevular"),
+  "Appointments card uses canonical title 'Sonuçlandırılmayı Bekleyen Randevular'"
+);
+assert(
+  panelSource.includes("Dünden Devreden Açık Ziyaretler"),
+  "Carried-over card uses title 'Dünden Devreden Açık Ziyaretler'"
+);
+assert(
+  panelSource.includes("Bitiş saati geçmiş ve durumu hâlâ planlı olan randevular."),
+  "Appointments card describes 'Bitiş saati geçmiş ve durumu hâlâ planlı olan randevular.'"
+);
+
 console.log("\n=======================================================");
 console.log(`Summary: ${passedAssertions}/${totalAssertions} assertions passed.`);
 if (exitCode === 0) {
-  console.log("PASS — F.31B FINAL UI CONTRACT CORRECTIVE IMPLEMENTED");
+  console.log("PASS — F.31B FINAL PRESENTATION CORRECTIVE IMPLEMENTED");
 } else {
   console.error("FAIL: Some assertions failed.");
 }

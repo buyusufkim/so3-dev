@@ -653,6 +653,8 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * bounded user-facing error messages: catches and errors map strictly to bounded client messages ("Dikkat verileri yüklenemedi." and "Dikkat verileri doğrulanamadı."); raw exception or network messages are never exposed to the UI
 * positive-only attention card rendering: attention cards for unterminalized appointments, carried-over open visits, and future-dated visits are strictly conditionally rendered only when their respective metric is positive (`> 0`); cards with zero counts are not displayed in the attention grid
 * touch target accessibility (>=44px): all interactive retry buttons and route navigation links enforce `min-h-[44px]` touch target compliance
+* fail-closed timestamp formatting: `formatDateTime` strictly fails closed to em dash (`"—"`) whenever raw string input is unparsed, missing, or malformed
+* canonical presentation copy: clear-state copy enforces canonical string `"Sonuçlandırılması gereken randevu veya günü devreden açık ziyaret bulunmuyor."`; anomaly status card avoids prescriptive commands ("Veri tutarsızlığı incelenmeli") in favor of neutral operational observation (`"Gelecek tarihli görünen açık kayıtlar"`); appointment card labeled `"Sonuçlandırılmayı Bekleyen Randevular"` and carried-over visits labeled `"Dünden Devreden Açık Ziyaretler"`
 
 
 
