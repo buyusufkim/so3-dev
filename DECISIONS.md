@@ -589,6 +589,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * read-only foundation with zero mutations; zero schema changes, zero new database tables or columns
 * dev fixture RBAC parity: `adminDevFixtures.ts` strictly enforces `currentDevRole === 'trainer'` for `/api/trainer/members/{id}/measurement-progress` (blocking `admin`, `super_admin`, `reception`, and all non-trainer roles with 403 `FORBIDDEN`), matching production `AuthMiddleware::hasRole(['trainer'])` contract
 
+## F.30B Trainer Measurement Progress Comparison UI
+* F30A canonical endpoint reused: consumes `GET /api/trainer/members/${memberId}/measurement-progress` with zero query params
+* independent summary component/fetch boundary: `TrainerMeasurementProgressSummary` manages its own loading, error, and retry lifecycle without coupling to or blocking the measurement list/detail workspace
+* server deltas authoritative: UI directly presents `comparisons.from_previous` and `comparisons.from_first` without client arithmetic (`latest - previous` or `latest - first` forbidden)
+* previous/first comparison modes: two explicit mode buttons (`Önceki Ölçüme Göre` and `İlk Ölçüme Göre`, default previous) backed by local component state only (no localStorage, sessionStorage, or URL query params)
+* factual values only: prominent current value, muted reference value (`Önceki: ...` or `İlk: ...`), and signed delta (`+1.5 kg`, `-2.0 cm`, `0 kg`, or `—` when null)
+* neutral delta presentation: zero semantic green/red coloring based on sign; strictly neutral styling across all seven metrics
+* zero medical interpretation: strictly no BMI, ideal weight, target weight, healthy range, body composition/fitness scores, or progress judgments (iyi/kötü/başarılı)
+* zero chart: no charting library, SVG graphs, or trend lines added
+* refresh after measurement mutations: parent `AdminMemberProgressPage` increments `progressSummaryRefreshKey` on successful measurement create, edit, archive, and restore; row selection does not trigger refetch
+* no backend/schema change: purely frontend additive UI component preserving all existing CRUD semantics
+
 
 
 
