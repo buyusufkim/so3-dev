@@ -1601,3 +1601,79 @@ export function validateMeasurementProgress(data: unknown): MemberMeasurementPro
     }
   };
 }
+
+export type MemberCommunityUpdate = {
+  id: number;
+  uuid: string;
+  title: string;
+  body: string;
+  published_at: string;
+};
+
+export function validateCommunityUpdates(data: unknown): MemberCommunityUpdate[] {
+  if (!isRecord(data)) {
+    throw new Error('Response must be an object');
+  }
+
+  const topLevelKeys = Object.keys(data);
+  if (topLevelKeys.length !== 1 || topLevelKeys[0] !== 'items') {
+    throw new Error('Response must contain exactly "items" key');
+  }
+
+  if (!Array.isArray(data.items)) {
+    throw new Error('items must be an array');
+  }
+
+  const allowedItemKeys = ['id', 'uuid', 'title', 'body', 'published_at'];
+
+  return data.items.map((item, idx) => {
+    if (!isRecord(item)) {
+      throw new Error(`Item at index ${idx} must be an object`);
+    }
+
+    const itemKeys = Object.keys(item);
+    for (const key of itemKeys) {
+      if (!allowedItemKeys.includes(key)) {
+        throw new Error(`Unexpected key "${key}" in community update at index ${idx}`);
+      }
+    }
+
+    for (const reqKey of allowedItemKeys) {
+      if (!(reqKey in item)) {
+        throw new Error(`Missing key "${reqKey}" in community update at index ${idx}`);
+      }
+    }
+
+    if (typeof item.id !== 'number' || !Number.isInteger(item.id) || item.id <= 0) {
+      throw new Error(`id must be a positive integer at index ${idx}`);
+    }
+
+    if (
+      typeof item.uuid !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.uuid)
+    ) {
+      throw new Error(`uuid must be a valid UUID string at index ${idx}`);
+    }
+
+    if (typeof item.title !== 'string' || item.title.trim().length === 0 || item.title.length > 160) {
+      throw new Error(`title must be a non-empty string with max 160 characters at index ${idx}`);
+    }
+
+    if (typeof item.body !== 'string' || item.body.trim().length === 0 || item.body.length > 5000) {
+      throw new Error(`body must be a non-empty string with max 5000 characters at index ${idx}`);
+    }
+
+    if (typeof item.published_at !== 'string' || !isValidDateTime(item.published_at)) {
+      throw new Error(`published_at must be a valid datetime string (YYYY-MM-DD HH:mm:ss) at index ${idx}`);
+    }
+
+    return {
+      id: item.id,
+      uuid: item.uuid,
+      title: item.title,
+      body: item.body,
+      published_at: item.published_at
+    };
+  });
+}
+

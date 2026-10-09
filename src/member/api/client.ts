@@ -25,7 +25,9 @@ import {
   MemberRescheduledAppointmentResponse,
   validateRescheduledAppointmentResponse,
   MemberMeasurementProgressResponse,
-  validateMeasurementProgress
+  validateMeasurementProgress,
+  MemberCommunityUpdate,
+  validateCommunityUpdates
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -273,5 +275,15 @@ export const memberApiClient = {
       signal
     });
     return validateRescheduledAppointmentResponse(data);
+  },
+
+  async getCommunityUpdates(
+    signal?: AbortSignal
+  ): Promise<MemberCommunityUpdate[]> {
+    const data = await request('/api/member/community-updates', {
+      method: 'GET',
+      signal
+    });
+    return validateCommunityUpdates(data);
   }
 };

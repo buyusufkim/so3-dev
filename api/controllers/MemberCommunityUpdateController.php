@@ -50,43 +50,18 @@ class MemberCommunityUpdateController
     }
 
     /**
-     * GET /api/member/community/updates
+     * GET /api/member/community-updates
      */
     public function index(): void
     {
         $this->guard();
 
-        $page = isset($_GET['page']) ? filter_var($_GET['page'], FILTER_VALIDATE_INT) : 1;
-        if ($page === false || $page < 1) {
-            $page = 1;
+        // Member endpoint must reject ANY query parameters
+        if (!empty($_GET)) {
+            Response::error('Sorgu parametreleri kabul edilmemektedir.', 'VALIDATION_ERROR', 422);
         }
 
-        $perPage = isset($_GET['per_page']) ? filter_var($_GET['per_page'], FILTER_VALIDATE_INT) : 20;
-        if ($perPage === false || $perPage < 1) {
-            $perPage = 20;
-        } elseif ($perPage > 50) {
-            $perPage = 50;
-        }
-
-        $now = (new \DateTime('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d H:i:s');
-
-        // Count query
-        $countSql = "
-            SELECT COUNT(*) 
-            FROM community_updates 
-            WHERE status = 'published' 
-              AND published_at IS NOT NULL 
-              AND published_at <= :now
-              AND deleted_at IS NULL
-        ";
-        $countStmt = $this->db->prepare($countSql);
-        $countStmt->bindValue(':now', $now, PDO::PARAM_STR);
-        $countStmt->execute();
-        $total = (int)$countStmt->fetchColumn();
-
-        $offset = ($page - 1) * $perPage;
-
-        // Select query - strictly published only, ordered by published_at DESC, id DESC
+        // Bounded feed query: LIMIT 50, ORDER BY published_at DESC, id DESC
         $selectSql = "
             SELECT 
                 id,
@@ -97,66 +72,18 @@ class MemberCommunityUpdateController
             FROM community_updates
             WHERE status = 'published' 
               AND published_at IS NOT NULL 
-              AND published_at <= :now
               AND deleted_at IS NULL
             ORDER BY published_at DESC, id DESC
-            LIMIT :limit OFFSET :offset
+            LIMIT 50
         ";
 
-        $stmt = $this->db->prepare($selectSql);
-        $stmt->bindValue(':now', $now, PDO::PARAM_STR);
-        $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt = $this->db->query($selectSql);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $items = array_map([$this, 'formatRow'], $rows);
 
         Response::json([
-            'items' => $items,
-            'meta' => [
-                'total' => $total,
-                'page' => $page,
-                'per_page' => $perPage,
-                'last_page' => (int)(ceil($total / $perPage) ?: 1)
-            ]
-        ]);
-    }
-
-    /**
-     * GET /api/member/community/updates/{id}
-     */
-    public function show(int $id): void
-    {
-        $this->guard();
-
-        $now = (new \DateTime('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d H:i:s');
-
-        $stmt = $this->db->prepare("
-            SELECT 
-                id,
-                uuid,
-                title,
-                body,
-                published_at
-            FROM community_updates
-            WHERE id = :id
-              AND status = 'published' 
-              AND published_at IS NOT NULL 
-              AND published_at <= :now
-              AND deleted_at IS NULL
-        ");
-        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $stmt->bindValue(':now', $now, PDO::PARAM_STR);
-        $stmt->execute();
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$row) {
-            Response::error('Duyuru bulunamadı.', 'NOT_FOUND', 404);
-        }
-
-        Response::json([
-            'update' => $this->formatRow($row)
+            'items' => $items
         ]);
     }
 }

@@ -1286,7 +1286,7 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
     }
 
     // Community Updates API (Admin)
-    if ($requestUri === '/api/admin/community/updates') {
+    if ($requestUri === '/api/admin/community-updates') {
         AuthMiddleware::handle();
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         require_once __DIR__ . '/controllers/AdminCommunityUpdateController.php';
@@ -1300,7 +1300,7 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         }
     }
 
-    if (preg_match('#^/api/admin/community/updates/([1-9]\d*)$#', $requestUri, $matches)) {
+    if (preg_match('#^/api/admin/community-updates/([1-9]\d*)$#', $requestUri, $matches)) {
         AuthMiddleware::handle();
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         require_once __DIR__ . '/controllers/AdminCommunityUpdateController.php';
@@ -1319,15 +1319,9 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
     }
 
     // Community Updates API (Member Portal)
-    if ($requestUri === '/api/member/community/updates' && $method === 'GET') {
+    if ($requestUri === '/api/member/community-updates' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberCommunityUpdateController.php';
         (new \Controllers\MemberCommunityUpdateController())->index();
-        $matched = true;
-    }
-
-    if (preg_match('#^/api/member/community/updates/([1-9]\d*)$#', $requestUri, $matches) && $method === 'GET') {
-        require_once __DIR__ . '/controllers/MemberCommunityUpdateController.php';
-        (new \Controllers\MemberCommunityUpdateController())->show((int)$matches[1]);
         $matched = true;
     }
 

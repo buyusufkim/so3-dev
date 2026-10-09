@@ -53,8 +53,9 @@ class AdminCommunityUpdateController
     private function validateTitle(string $title): string
     {
         $trimmed = trim($title);
-        if (mb_strlen($trimmed, 'UTF-8') < 3 || mb_strlen($trimmed, 'UTF-8') > 160) {
-            Response::error('Başlık 3 ile 160 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
+        $len = mb_strlen($trimmed, 'UTF-8');
+        if ($len < 1 || $len > 160) {
+            Response::error('Başlık 1 ile 160 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
         }
         return $trimmed;
     }
@@ -62,13 +63,27 @@ class AdminCommunityUpdateController
     private function validateBody(string $body): string
     {
         $trimmed = trim($body);
-        if (mb_strlen($trimmed, 'UTF-8') < 5 || mb_strlen($trimmed, 'UTF-8') > 10000) {
-            Response::error('İçerik 5 ile 10000 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
+        $len = mb_strlen($trimmed, 'UTF-8');
+        if ($len < 1 || $len > 5000) {
+            Response::error('İçerik 1 ile 5000 karakter arasında olmalıdır.', 'VALIDATION_ERROR', 422);
         }
         return $trimmed;
     }
 
-    private function formatRow(array $row): array
+    private function formatListRow(array $row): array
+    {
+        return [
+            'id' => (int)$row['id'],
+            'uuid' => (string)$row['uuid'],
+            'title' => (string)$row['title'],
+            'status' => (string)$row['status'],
+            'published_at' => $row['published_at'] !== null ? (string)$row['published_at'] : null,
+            'created_at' => (string)$row['created_at'],
+            'updated_at' => (string)$row['updated_at']
+        ];
+    }
+
+    private function formatDetailRow(array $row): array
     {
         return [
             'id' => (int)$row['id'],
@@ -77,35 +92,46 @@ class AdminCommunityUpdateController
             'body' => (string)$row['body'],
             'status' => (string)$row['status'],
             'published_at' => $row['published_at'] !== null ? (string)$row['published_at'] : null,
-            'created_by_admin_id' => $row['created_by_admin_id'] !== null ? (int)$row['created_by_admin_id'] : null,
-            'creator_display_name' => $row['creator_display_name'] !== null ? (string)$row['creator_display_name'] : null,
-            'updated_by_admin_id' => $row['updated_by_admin_id'] !== null ? (int)$row['updated_by_admin_id'] : null,
             'created_at' => (string)$row['created_at'],
             'updated_at' => (string)$row['updated_at']
         ];
     }
 
     /**
-     * GET /api/admin/community/updates
+     * GET /api/admin/community-updates
      */
     public function index(): void
     {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
 
-        $page = isset($_GET['page']) ? filter_var($_GET['page'], FILTER_VALIDATE_INT) : 1;
-        if ($page === false || $page < 1) {
-            $page = 1;
+        // Strict query allowlist: exactly status, page, per_page allowed
+        $allowedQueryKeys = ['status', 'page', 'per_page'];
+        foreach (array_keys($_GET) as $key) {
+            if (!in_array($key, $allowedQueryKeys, true)) {
+                Response::error("Geçersiz sorgu parametresi: $key", 'VALIDATION_ERROR', 422);
+            }
         }
 
-        $perPage = isset($_GET['per_page']) ? filter_var($_GET['per_page'], FILTER_VALIDATE_INT) : 20;
-        if ($perPage === false || $perPage < 1) {
-            $perPage = 20;
-        } elseif ($perPage > 100) {
-            $perPage = 100;
+        $page = 1;
+        if (isset($_GET['page'])) {
+            $rawPage = $_GET['page'];
+            if (!is_numeric($rawPage) || (int)$rawPage < 1 || (string)(int)$rawPage !== (string)$rawPage) {
+                Response::error('Geçersiz sayfa numarası.', 'VALIDATION_ERROR', 422);
+            }
+            $page = (int)$rawPage;
+        }
+
+        $perPage = 20;
+        if (isset($_GET['per_page'])) {
+            $rawPerPage = $_GET['per_page'];
+            if (!is_numeric($rawPerPage) || (int)$rawPerPage < 1 || (int)$rawPerPage > 50 || (string)(int)$rawPerPage !== (string)$rawPerPage) {
+                Response::error('Geçersiz sayfa boyutu (1-50 arası olmalıdır).', 'VALIDATION_ERROR', 422);
+            }
+            $perPage = (int)$rawPerPage;
         }
 
         $statusFilter = null;
-        if (isset($_GET['status']) && $_GET['status'] !== '') {
+        if (isset($_GET['status']) && $_GET['status'] !== '' && $_GET['status'] !== 'all') {
             $status = (string)$_GET['status'];
             if (!in_array($status, ['draft', 'published'], true)) {
                 Response::error('Geçersiz durum filtresi.', 'VALIDATION_ERROR', 422);
@@ -113,33 +139,18 @@ class AdminCommunityUpdateController
             $statusFilter = $status;
         }
 
-        $search = null;
-        if (isset($_GET['search']) && trim((string)$_GET['search']) !== '') {
-            $search = trim((string)$_GET['search']);
-            if (mb_strlen($search, 'UTF-8') > 100) {
-                Response::error('Arama metni çok uzun.', 'VALIDATION_ERROR', 422);
-            }
-        }
-
-        $whereClauses = ['cu.deleted_at IS NULL'];
+        $whereClauses = ['deleted_at IS NULL'];
         $params = [];
 
         if ($statusFilter !== null) {
-            $whereClauses[] = 'cu.status = :status';
+            $whereClauses[] = 'status = :status';
             $params[':status'] = $statusFilter;
-        }
-
-        if ($search !== null) {
-            $whereClauses[] = '(cu.title LIKE :search_title OR cu.body LIKE :search_body)';
-            $searchParam = '%' . $search . '%';
-            $params[':search_title'] = $searchParam;
-            $params[':search_body'] = $searchParam;
         }
 
         $whereSql = implode(' AND ', $whereClauses);
 
         // Count query
-        $countSql = "SELECT COUNT(*) FROM community_updates cu WHERE $whereSql";
+        $countSql = "SELECT COUNT(*) FROM community_updates WHERE $whereSql";
         $countStmt = $this->db->prepare($countSql);
         foreach ($params as $k => $v) {
             $countStmt->bindValue($k, $v, PDO::PARAM_STR);
@@ -149,26 +160,20 @@ class AdminCommunityUpdateController
 
         $offset = ($page - 1) * $perPage;
 
-        // Select query
+        // Select query - List row strictly excludes body and internal actor fields
+        // Canonical ordering: created_at DESC, id DESC
         $selectSql = "
             SELECT 
-                cu.id,
-                cu.uuid,
-                cu.title,
-                cu.body,
-                cu.status,
-                cu.published_at,
-                cu.created_by_admin_id,
-                a.display_name AS creator_display_name,
-                cu.updated_by_admin_id,
-                cu.created_at,
-                cu.updated_at
-            FROM community_updates cu
-            LEFT JOIN admins a ON cu.created_by_admin_id = a.id
+                id,
+                uuid,
+                title,
+                status,
+                published_at,
+                created_at,
+                updated_at
+            FROM community_updates
             WHERE $whereSql
-            ORDER BY 
-                CASE WHEN cu.published_at IS NOT NULL THEN cu.published_at ELSE cu.created_at END DESC,
-                cu.id DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT :limit OFFSET :offset
         ";
 
@@ -181,7 +186,7 @@ class AdminCommunityUpdateController
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $items = array_map([$this, 'formatRow'], $rows);
+        $items = array_map([$this, 'formatListRow'], $rows);
 
         Response::json([
             'items' => $items,
@@ -195,7 +200,7 @@ class AdminCommunityUpdateController
     }
 
     /**
-     * GET /api/admin/community/updates/{id}
+     * GET /api/admin/community-updates/{id}
      */
     public function show(int $id): void
     {
@@ -203,20 +208,16 @@ class AdminCommunityUpdateController
 
         $stmt = $this->db->prepare("
             SELECT 
-                cu.id,
-                cu.uuid,
-                cu.title,
-                cu.body,
-                cu.status,
-                cu.published_at,
-                cu.created_by_admin_id,
-                a.display_name AS creator_display_name,
-                cu.updated_by_admin_id,
-                cu.created_at,
-                cu.updated_at
-            FROM community_updates cu
-            LEFT JOIN admins a ON cu.created_by_admin_id = a.id
-            WHERE cu.id = :id AND cu.deleted_at IS NULL
+                id,
+                uuid,
+                title,
+                body,
+                status,
+                published_at,
+                created_at,
+                updated_at
+            FROM community_updates
+            WHERE id = :id AND deleted_at IS NULL
         ");
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
         $stmt->execute();
@@ -227,12 +228,12 @@ class AdminCommunityUpdateController
         }
 
         Response::json([
-            'update' => $this->formatRow($row)
+            'update' => $this->formatDetailRow($row)
         ]);
     }
 
     /**
-     * POST /api/admin/community/updates
+     * POST /api/admin/community-updates
      */
     public function create(): void
     {
@@ -306,27 +307,23 @@ class AdminCommunityUpdateController
 
             $stmtShow = $this->db->prepare("
                 SELECT 
-                    cu.id,
-                    cu.uuid,
-                    cu.title,
-                    cu.body,
-                    cu.status,
-                    cu.published_at,
-                    cu.created_by_admin_id,
-                    a.display_name AS creator_display_name,
-                    cu.updated_by_admin_id,
-                    cu.created_at,
-                    cu.updated_at
-                FROM community_updates cu
-                LEFT JOIN admins a ON cu.created_by_admin_id = a.id
-                WHERE cu.id = :id
+                    id,
+                    uuid,
+                    title,
+                    body,
+                    status,
+                    published_at,
+                    created_at,
+                    updated_at
+                FROM community_updates
+                WHERE id = :id
             ");
             $stmtShow->bindValue(':id', $insertId, PDO::PARAM_INT);
             $stmtShow->execute();
             $row = $stmtShow->fetch(PDO::FETCH_ASSOC);
 
             Response::json([
-                'update' => $this->formatRow($row)
+                'update' => $this->formatDetailRow($row)
             ], 201);
 
         } catch (\Throwable $e) {
@@ -338,7 +335,7 @@ class AdminCommunityUpdateController
     }
 
     /**
-     * PATCH /api/admin/community/updates/{id}
+     * PATCH /api/admin/community-updates/{id}
      */
     public function update(int $id): void
     {
@@ -407,14 +404,15 @@ class AdminCommunityUpdateController
                 $updateFields[] = 'status = :status';
                 $params[':status'] = $newStatus;
 
-                // Lifecycle of published_at
-                if ($newStatus === 'published' && $current['status'] !== 'published') {
+                // Lifecycle of published_at:
+                // Canonical rule:
+                // If transitioning to 'published' AND published_at is currently NULL -> set to now
+                // If transitioning to 'published' AND published_at is ALREADY NOT NULL -> preserve stored published_at (republish)
+                // If transitioning to 'draft' -> preserve stored published_at (do NOT null it)
+                if ($newStatus === 'published' && $current['published_at'] === null) {
                     $now = (new \DateTime('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d H:i:s');
                     $updateFields[] = 'published_at = :published_at';
                     $params[':published_at'] = $now;
-                } elseif ($newStatus === 'draft' && $current['status'] !== 'draft') {
-                    $updateFields[] = 'published_at = :published_at';
-                    $params[':published_at'] = null;
                 }
             }
 
@@ -445,27 +443,23 @@ class AdminCommunityUpdateController
 
             $stmtShow = $this->db->prepare("
                 SELECT 
-                    cu.id,
-                    cu.uuid,
-                    cu.title,
-                    cu.body,
-                    cu.status,
-                    cu.published_at,
-                    cu.created_by_admin_id,
-                    a.display_name AS creator_display_name,
-                    cu.updated_by_admin_id,
-                    cu.created_at,
-                    cu.updated_at
-                FROM community_updates cu
-                LEFT JOIN admins a ON cu.created_by_admin_id = a.id
-                WHERE cu.id = :id
+                    id,
+                    uuid,
+                    title,
+                    body,
+                    status,
+                    published_at,
+                    created_at,
+                    updated_at
+                FROM community_updates
+                WHERE id = :id
             ");
             $stmtShow->bindValue(':id', $id, PDO::PARAM_INT);
             $stmtShow->execute();
             $row = $stmtShow->fetch(PDO::FETCH_ASSOC);
 
             Response::json([
-                'update' => $this->formatRow($row)
+                'update' => $this->formatDetailRow($row)
             ]);
 
         } catch (\Throwable $e) {
@@ -477,12 +471,14 @@ class AdminCommunityUpdateController
     }
 
     /**
-     * DELETE /api/admin/community/updates/{id}
+     * DELETE /api/admin/community-updates/{id}
      */
     public function destroy(int $id): void
     {
         AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
+
+        $now = (new \DateTime('now', new \DateTimeZone('Europe/Istanbul')))->format('Y-m-d H:i:s');
 
         $this->db->beginTransaction();
         try {
@@ -501,9 +497,10 @@ class AdminCommunityUpdateController
 
             $stmt = $this->db->prepare("
                 UPDATE community_updates 
-                SET deleted_at = NOW(), updated_by_admin_id = :admin_id 
+                SET deleted_at = :deleted_at, updated_by_admin_id = :admin_id 
                 WHERE id = :id
             ");
+            $stmt->bindValue(':deleted_at', $now, PDO::PARAM_STR);
             $stmt->bindValue(':admin_id', $adminId, PDO::PARAM_INT);
             $stmt->bindValue(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
