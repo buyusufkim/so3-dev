@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { OperationsAnalyticsPanel } from "../components/OperationsAnalyticsPanel";
+import { OperationsAttentionPanel } from "./operations-attention/OperationsAttentionPanel";
 
 interface DashboardMetrics {
   events: {
@@ -140,6 +141,10 @@ export function Dashboard() {
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="mb-8">
+            <OperationsAttentionPanel />
           </div>
 
           <div className="mb-8">

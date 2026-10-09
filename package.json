@@ -87,7 +87,9 @@
     "verify:trainer-measurement-progress-ui": "node scripts/verify-trainer-measurement-progress-ui.mjs",
     "verify:member-measurement-progress": "node scripts/verify-member-measurement-progress.mjs",
     "verify:member-progress-v2": "node scripts/verify-member-progress-v2.mjs",
-    "verify:admin-operations-attention": "node scripts/verify-admin-operations-attention.mjs"
+    "verify:admin-operations-attention": "node scripts/verify-admin-operations-attention.mjs",
+    "verify:operations-attention-ui": "node scripts/verify-operations-attention-ui.mjs",
+    "verify:admin-operations-attention-ui": "node scripts/verify-operations-attention-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

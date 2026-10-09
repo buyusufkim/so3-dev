@@ -639,6 +639,14 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * dev fixture parity: `src/admin/api/adminDevFixtures.ts` provides matching mock response and role guard (`currentDevRole !== 'super_admin' && currentDevRole !== 'admin'`)
 * native PDO prepared statement compatibility: repository strictly enforces `PDO::ATTR_EMULATE_PREPARES => false`; every named placeholder in queries (`:today_start1`, `:today_start2`, `:tomorrow_start1`, `:tomorrow_start2`) is uniquely declared and 1:1 bound to prevent HY093 duplicate parameter number runtime errors under native MySQL prepares
 
+## F.31B — Dashboard Dikkat Gerektirenler UI
+* audience & surface: `src/admin/pages/Dashboard.tsx` gated strictly under `isAdmin` (`admin` or `super_admin`); zero surface on trainer, reception, or editor views
+* placement order: positioned deterministically between `Operasyon Özeti` and `OperationsAnalyticsPanel` (`Operasyon Özeti` → `Dikkat Gerektirenler` → `Operasyon Analitiği`)
+* independent lifecycle: `OperationsAttentionPanel` encapsulates own fetch, loading skeleton, fail-closed runtime validation, and local error retry boundary without coupling to general dashboard or analytics requests
+* zero duplicate metrics: preserves existing active members, current occupancy, visits today, renewals, and analytics trends without redundant duplication
+* fail-closed validation: validates response using canonical `validateOperationsAttention` from `src/admin/pages/operations-attention/types.ts`; rejects invalid schema or relational inconsistencies
+* read-only awareness: displays unterminalized appointment backlog, carried-over open visits, and future-dated anomaly counts with context and safe route navigation links (`/admin/appointments`, `/admin/reception`); strictly zero mutation actions (no check-out, terminalization, cancel, or write workflows)
+
 
 
 
