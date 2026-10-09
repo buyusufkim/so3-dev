@@ -656,6 +656,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * fail-closed timestamp formatting: `formatDateTime` strictly fails closed to em dash (`"—"`) whenever raw string input is unparsed, missing, or malformed
 * canonical presentation copy: clear-state copy enforces canonical string `"Sonuçlandırılması gereken randevu veya günü devreden açık ziyaret bulunmuyor."`; anomaly status card avoids prescriptive commands ("Veri tutarsızlığı incelenmeli") in favor of neutral operational observation (`"Gelecek tarihli görünen açık kayıtlar"`); appointment card labeled `"Sonuçlandırılmayı Bekleyen Randevular"` and carried-over visits labeled `"Dünden Devreden Açık Ziyaretler"`
 
+## F.32A — Community Updates Foundation
+* product purpose: lightweight announcement & notice system for digital club members; not a social network
+* explicit anti-scope: zero comments, likes, reactions, member-authored posts, followers, chats, push notifications, or moderation queues
+* database schema: `community_updates` table (migration 044) with columns `id`, `uuid`, `title` (VARCHAR 160), `body` (TEXT), `status` (ENUM `draft`, `published`), `published_at` (DATETIME NULL), `created_by_admin_id`, `updated_by_admin_id`, `created_at`, `updated_at`, `deleted_at`; indexed on `(status, published_at, deleted_at, id)` and `(deleted_at, id)`
+* fresh-install & deployment parity: migration 044 incorporated into `database/fresh-install.sql` and `DEPLOYMENT_PHP_MYSQL.md` advanced through range 001–044
+* admin API: `GET/POST /api/admin/community/updates` and `GET/PATCH/DELETE /api/admin/community/updates/{id}` under `AuthMiddleware::hasRole(['super_admin', 'admin', 'editor'])`; supports pagination (`page`, `per_page`), filtering by status, search by title/body, soft-delete via `deleted_at`, and `AuditLogger` action audit logging (`community_update.create`, `community_update.update`, `community_update.delete`)
+* member API: read-only `GET /api/member/community/updates` and `GET /api/member/community/updates/{id}` guarded by `MemberAuthMiddleware::handle()` with active status and password change checks; strictly queries published, non-future-dated (`published_at <= NOW()`), non-deleted records ordered by `published_at DESC, id DESC`; zero internal admin IDs or creator names exposed to members
+
+
 
 
 

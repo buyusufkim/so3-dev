@@ -1285,6 +1285,52 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
         $matched = true;
     }
 
+    // Community Updates API (Admin)
+    if ($requestUri === '/api/admin/community/updates') {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        require_once __DIR__ . '/controllers/AdminCommunityUpdateController.php';
+        $controller = new \Controllers\AdminCommunityUpdateController();
+        if ($method === 'GET') {
+            $controller->index();
+            $matched = true;
+        } elseif ($method === 'POST') {
+            $controller->create();
+            $matched = true;
+        }
+    }
+
+    if (preg_match('#^/api/admin/community/updates/([1-9]\d*)$#', $requestUri, $matches)) {
+        AuthMiddleware::handle();
+        AuthMiddleware::hasRole(['super_admin', 'admin', 'editor']);
+        require_once __DIR__ . '/controllers/AdminCommunityUpdateController.php';
+        $controller = new \Controllers\AdminCommunityUpdateController();
+        $updateId = (int)$matches[1];
+        if ($method === 'GET') {
+            $controller->show($updateId);
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            $controller->update($updateId);
+            $matched = true;
+        } elseif ($method === 'DELETE') {
+            $controller->destroy($updateId);
+            $matched = true;
+        }
+    }
+
+    // Community Updates API (Member Portal)
+    if ($requestUri === '/api/member/community/updates' && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberCommunityUpdateController.php';
+        (new \Controllers\MemberCommunityUpdateController())->index();
+        $matched = true;
+    }
+
+    if (preg_match('#^/api/member/community/updates/([1-9]\d*)$#', $requestUri, $matches) && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberCommunityUpdateController.php';
+        (new \Controllers\MemberCommunityUpdateController())->show((int)$matches[1]);
+        $matched = true;
+    }
+
 if (!$matched) {
     Response::error('Not Found', 'NOT_FOUND', 404);
 }

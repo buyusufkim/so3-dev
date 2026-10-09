@@ -1,5 +1,5 @@
 -- SO3 PT Canonical Fresh Install SQL
--- Generated from migrations 001-043
+-- Generated from migrations 001-044
 -- 
 -- WARNING: This file is intended ONLY for a completely empty database.
 -- Do NOT import this file into a live database or a database containing existing data.
@@ -1216,6 +1216,28 @@ CHECK (
 );
 
 
+-- Migration: 044_create_community_updates.sql
+CREATE TABLE IF NOT EXISTS `community_updates` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uuid` CHAR(36) NOT NULL UNIQUE,
+    `title` VARCHAR(160) NOT NULL,
+    `body` TEXT NOT NULL,
+    `status` ENUM('draft', 'published') NOT NULL DEFAULT 'draft',
+    `published_at` DATETIME NULL,
+    `created_by_admin_id` INT NULL,
+    `updated_by_admin_id` INT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL,
+    CONSTRAINT `fk_community_updates_created_by` FOREIGN KEY (`created_by_admin_id`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_community_updates_updated_by` FOREIGN KEY (`updated_by_admin_id`) REFERENCES `admins`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX `idx_community_updates_status_pub_del_id` ON `community_updates`(`status`, `published_at`, `deleted_at`, `id`);
+CREATE INDEX `idx_community_updates_created_del_id` ON `community_updates`(`created_at`, `deleted_at`, `id`);
+CREATE INDEX `idx_community_updates_deleted_id` ON `community_updates`(`deleted_at`, `id`);
+
+
 -- Insert migration history to prevent migrate.php from rerunning these
 INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('001_create_schema_migrations.sql', CURRENT_TIMESTAMP),
@@ -1260,6 +1282,7 @@ INSERT INTO schema_migrations (migration, executed_at) VALUES
 ('040_add_member_appointment_actor_attribution.sql', CURRENT_TIMESTAMP),
 ('041_create_trainer_availability.sql', CURRENT_TIMESTAMP),
 ('042_add_member_appointment_lifecycle_actor_attribution.sql', CURRENT_TIMESTAMP),
-('043_add_training_program_days.sql', CURRENT_TIMESTAMP);
+('043_add_training_program_days.sql', CURRENT_TIMESTAMP),
+('044_create_community_updates.sql', CURRENT_TIMESTAMP);
 
 SET FOREIGN_KEY_CHECKS = @SO3_OLD_FOREIGN_KEY_CHECKS;
