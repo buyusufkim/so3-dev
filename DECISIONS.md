@@ -603,6 +603,42 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * component location: moved to `src/admin/pages/trainer-member-progress/TrainerMeasurementProgressSummary.tsx`
 * no backend/schema change: purely frontend additive UI component preserving all existing CRUD semantics
 
+## F.30C Member Measurement Progress v2
+* member-authenticated canonical progress endpoint: `GET /api/member/measurement-progress` with zero query params and zero path params
+* member auth authority: identity bound strictly from authenticated session (`$this->guard()`, `$this->memberId`), strictly rejecting `member_id`, `trainer_id`, or `account_id` request input
+* bounded query architecture: replaces full-history fetch with bounded SQL reads — `COUNT(*)` for total measurements, `ORDER BY measured_at DESC, id DESC LIMIT 2` for latest two, and `ORDER BY measured_at ASC, id ASC LIMIT 1` for first
+* canonical response contract: `{ measurement_count, first, previous, latest, comparisons: { from_previous, from_first } }`
+* strict fail-closed runtime validator: `validateMeasurementProgress` validates mathematical accuracy of every delta, rejecting tampered numbers, leaked fields, extra keys, and invalid date formats
+* member UI surface `/uye/gelisim`: removed client-side delta subtraction (`current - previous`) while preserving existing `MeasurementTrendChart` and full measurement history list
+* factual neutral comparison panel: presents server-authoritative deltas across seven metrics with mode toggle (`Önceki Ölçüme Göre` / `İlk Ölçüme Göre`, default previous) in component memory
+* zero medical/coaching interpretation: strictly zero BMI, ideal weight, target weight, healthy range, scores, or green/red value judgments
+
+## F.31A Salon Operations Attention Read Model
+* salon operations attention read model: dedicated canonical endpoint `GET /api/admin/operations/attention` for salon administrative situational awareness
+* dedicated controller: `AdminOperationsAttentionController.php` with `index()` handler; read-only foundation with zero mutations, transactions, or audit writes
+* strict RBAC: restricted exclusively to `super_admin` and `admin` via `AuthMiddleware::hasRole(['super_admin', 'admin'])`; non-admin roles (editor, trainer, reception) denied
+* strict zero query parameters: any query parameter in `$_GET` rejected with 422 `VALIDATION_ERROR`
+* authoritative time zone: `Europe/Istanbul` via PHP `DateTimeZone` and `DateTimeImmutable` (`now`, `today_start`, `tomorrow_start`); zero SQL `NOW()`, `CURRENT_TIMESTAMP`, or `CURDATE()` to prevent PHP/DB timezone drift
+* insight A (appointments backlog & lifecycle):
+  * evaluates appointments where `status = 'scheduled' AND starts_at < tomorrow_start`
+  * backlog attention: `ends_at <= now` counted in `needs_terminalization_count` (including unresolved historical backlog); `oldest_needs_terminalization_ends_at` formatted as `YYYY-MM-DD HH:mm:ss` (null when count is 0)
+  * today lifecycle breakdown: `scheduled_future` (`starts_at > now`), `scheduled_in_progress` (`starts_at <= now AND ends_at > now`), `needs_terminalization` (`ends_at <= now`)
+  * boundary semantics: `ends_at === now` counted as `needs_terminalization`; `starts_at === now AND ends_at > now` counted as `in_progress`
+* insight B (open member visits & rollover):
+  * evaluates open visits where `checked_out_at IS NULL`
+  * `current`: count of all active open visits (matching operational occupancy semantics)
+  * `carried_over`: visits where `checked_in_at < today_start` (started before today's Istanbul calendar date)
+  * `opened_today`: visits where `checked_in_at >= today_start AND checked_in_at < tomorrow_start`
+  * `future_dated`: visits where `checked_in_at >= tomorrow_start` (data anomaly detection count)
+  * `oldest_checked_in_at`: earliest check-in timestamp (`YYYY-MM-DD HH:mm:ss`, null when current is 0)
+  * relational invariant: `current === carried_over + opened_today + future_dated`
+* fixed aggregate query architecture: 2 bounded SQL aggregate queries with `SUM(CASE...)`, `MIN(CASE...)`, `COUNT(*)`; zero `fetchAll()` or full-row hydration loops
+* zero privacy leak: strictly zero member or trainer identity fields (`id`, `uuid`, `name`, `phone`, `email`) exposed
+* zero scoring / heuristics / finance / workflows: strictly zero efficiency/occupancy/staff scores, no threshold heuristics (e.g. "open > 3h = stale"), zero revenue/payment fields, and zero check-in/terminalization mutation actions
+* strict TypeScript contract & validator: `src/admin/pages/operations-attention/types.ts` exports `OperationsAttentionResponse` and `validateOperationsAttention` with fail-closed schema, type, regex datetime, and relational invariant enforcement
+* dev fixture parity: `src/admin/api/adminDevFixtures.ts` provides matching mock response and role guard (`currentDevRole !== 'super_admin' && currentDevRole !== 'admin'`)
+
+
 
 
 

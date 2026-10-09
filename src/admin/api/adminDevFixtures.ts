@@ -512,6 +512,39 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
     });
   }
 
+  // --- Operations Attention Endpoint ---
+  if (path === '/api/admin/operations/attention' && method === 'GET') {
+    if (currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+      return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
+    }
+
+    // Zero query params check
+    if (url.search !== '' && url.search !== '?') {
+      return createError('Query parameters are not allowed.', 422, 'VALIDATION_ERROR');
+    }
+
+    return createResponse({
+      timezone: 'Europe/Istanbul',
+      generated_at: '2026-10-09 14:30:00',
+      appointments: {
+        needs_terminalization_count: 3,
+        oldest_needs_terminalization_ends_at: '2026-10-08 16:00:00',
+        today: {
+          scheduled_future: 5,
+          scheduled_in_progress: 1,
+          needs_terminalization: 2
+        }
+      },
+      open_visits: {
+        current: 7,
+        carried_over: 1,
+        opened_today: 6,
+        future_dated: 0,
+        oldest_checked_in_at: '2026-10-08 22:14:00'
+      }
+    });
+  }
+
   // --- Trainers Endpoints ---
   if (path === '/api/admin/trainers' && method === 'GET') {
     const status = url.searchParams.get('status');

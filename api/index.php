@@ -65,6 +65,12 @@ $routes = [
             require_once __DIR__ . '/controllers/OperationsAnalyticsController.php';
             (new \Controllers\OperationsAnalyticsController())->operations();
         },
+        '/api/admin/operations/attention' => function() {
+            AuthMiddleware::handle();
+            AuthMiddleware::hasRole(['super_admin', 'admin']);
+            require_once __DIR__ . '/controllers/AdminOperationsAttentionController.php';
+            (new \Controllers\AdminOperationsAttentionController())->index();
+        },
         '/api/admin/dashboard' => function() {
             AuthMiddleware::handle();
             (new AdminController())->dashboard();
