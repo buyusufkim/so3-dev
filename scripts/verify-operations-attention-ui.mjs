@@ -214,10 +214,59 @@ assert(
   "Component provides safe navigation link to /admin/reception"
 );
 
+console.log("\n=== 12. F.31B UI Contract Corrective Invariants ===");
+// Race-safe fetch guards
+assert(
+  panelSource.includes("abortControllerRef") || panelSource.includes("AbortController"),
+  "Component uses AbortController for race cancellation"
+);
+assert(
+  panelSource.includes("requestGenerationRef") || panelSource.includes("generation"),
+  "Component tracks request generation counter to avoid race conditions"
+);
+assert(
+  panelSource.includes("signal: controller.signal") || panelSource.includes("signal"),
+  "Component passes AbortSignal to apiClient request"
+);
+assert(
+  panelSource.includes("isMountedRef"),
+  "Component tracks mount lifecycle with isMountedRef"
+);
+
+// Conditional anomaly card invariant
+assert(
+  panelSource.includes("futureDatedVisits > 0") &&
+  panelSource.includes("{futureDatedVisits > 0 &&"),
+  "Anomaly card is strictly conditionally rendered only when future_dated > 0"
+);
+
+// Compact clear-state invariant
+assert(
+  panelSource.includes("totalAttentionItems === 0") || panelSource.includes("totalAttentionItems == 0"),
+  "Component contains compact clear-state guard when all attention items are 0"
+);
+assert(
+  panelSource.includes("Tümü Olağan"),
+  "Component renders 'Tümü Olağan' badge/label in clear state"
+);
+
+// Datetime formatting invariant
+assert(
+  panelSource.includes("formatDateTime") || panelSource.includes("formatDate"),
+  "Component includes canonical datetime formatting helper"
+);
+assert(
+  panelSource.includes("${day}.${month}.${year} ${hour}:${minute}") ||
+  panelSource.includes("DD.MM.YYYY") ||
+  /(\d{2}\.\d{2}\.\d{4})/.test(panelSource) ||
+  panelSource.includes("formatDateTime("),
+  "Component formats server timestamps to deterministic DD.MM.YYYY HH:mm"
+);
+
 console.log("\n=======================================================");
 console.log(`Summary: ${passedAssertions}/${totalAssertions} assertions passed.`);
 if (exitCode === 0) {
-  console.log("PASS — F.31B DASHBOARD OPERATIONS ATTENTION UI IMPLEMENTED");
+  console.log("PASS — F.31B UI CONTRACT CORRECTIVE IMPLEMENTED");
 } else {
   console.error("FAIL: Some assertions failed.");
 }

@@ -646,6 +646,10 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero duplicate metrics: preserves existing active members, current occupancy, visits today, renewals, and analytics trends without redundant duplication
 * fail-closed validation: validates response using canonical `validateOperationsAttention` from `src/admin/pages/operations-attention/types.ts`; rejects invalid schema or relational inconsistencies
 * read-only awareness: displays unterminalized appointment backlog, carried-over open visits, and future-dated anomaly counts with context and safe route navigation links (`/admin/appointments`, `/admin/reception`); strictly zero mutation actions (no check-out, terminalization, cancel, or write workflows)
+* race-safe fetch lifecycle: uses `AbortController`, request generation counter (`requestGenerationRef`), and mount tracking (`isMountedRef`) to prevent stale async responses or race conditions
+* conditional anomaly presentation: "İleri Tarihli Ziyaretler" card is rendered strictly when `future_dated > 0`; normal operations display a clean 2-card layout
+* compact clear-state: when all attention counts are 0 (`totalAttentionItems === 0`), renders a compact, single-row "Tümü Olağan" state rather than empty warning cards
+* canonical timestamp formatting: formats server timestamps (`YYYY-MM-DD HH:mm:ss`) to deterministic `DD.MM.YYYY HH:mm` string representation
 
 
 
