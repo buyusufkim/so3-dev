@@ -656,7 +656,79 @@ assert(
   "Validator rejects count=1 with non-null previous"
 );
 
-console.log('\n=== 7. package.json Script Registration Invariant ===');
+console.log('\n=== 7. Dev Fixture RBAC Parity Invariants in src/admin/api/adminDevFixtures.ts ===');
+
+const fixturesPath = path.join(rootDir, 'src', 'admin', 'api', 'adminDevFixtures.ts');
+assert(fs.existsSync(fixturesPath), 'src/admin/api/adminDevFixtures.ts exists');
+const fixturesSource = fs.readFileSync(fixturesPath, 'utf8');
+
+// Extract measurement-progress handler block in fixtures
+const fixtureHandlerStart = fixturesSource.indexOf('measurementProgressMatch');
+assert(fixtureHandlerStart !== -1, 'adminDevFixtures.ts handles measurement-progress endpoint');
+
+const fixtureHandlerSlice = fixturesSource.slice(fixtureHandlerStart, fixtureHandlerStart + 600);
+
+// Negative check: must NOT allow admin or super_admin
+assert(
+  !fixtureHandlerSlice.includes("currentDevRole !== 'super_admin'") &&
+  !fixtureHandlerSlice.includes("currentDevRole !== 'admin'"),
+  "Dev fixture measurement-progress strictly does NOT permit admin or super_admin"
+);
+
+// Positive check: must strictly check currentDevRole !== 'trainer'
+assert(
+  fixtureHandlerSlice.includes("if (currentDevRole !== 'trainer')"),
+  "Dev fixture measurement-progress strictly enforces if (currentDevRole !== 'trainer')"
+);
+
+assert(
+  fixtureHandlerSlice.includes("return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');") ||
+  (fixtureHandlerSlice.includes('403') && fixtureHandlerSlice.includes('FORBIDDEN')),
+  "Dev fixture returns 403 FORBIDDEN when role is not trainer"
+);
+
+// Also verify global trainer namespace firewall
+assert(
+  fixturesSource.includes("if (path.startsWith('/api/trainer/') && currentDevRole !== 'trainer')"),
+  "Dev fixture enforces trainer namespace role firewall: path.startsWith('/api/trainer/') && currentDevRole !== 'trainer'"
+);
+
+// Runtime integration verification via handleAdminFallback
+const fixturesModule = await import(path.join(rootDir, 'src', 'admin', 'api', 'adminDevFixtures.ts'));
+const { handleAdminFallback } = fixturesModule;
+
+// 1. Admin login -> 403 FORBIDDEN
+await handleAdminFallback('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'admin' }) });
+const adminRes = await handleAdminFallback('/api/trainer/members/1/measurement-progress', { method: 'GET' });
+assert(adminRes.status === 403, "Dev fixture runtime RBAC: admin gets 403 FORBIDDEN");
+const adminBody = await adminRes.json();
+assert(adminBody.error?.code === 'FORBIDDEN', "Dev fixture runtime RBAC: admin response code is FORBIDDEN");
+
+// 2. Reception login -> 403 FORBIDDEN
+await handleAdminFallback('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'reception' }) });
+const recRes = await handleAdminFallback('/api/trainer/members/1/measurement-progress', { method: 'GET' });
+assert(recRes.status === 403, "Dev fixture runtime RBAC: reception gets 403 FORBIDDEN");
+const recBody = await recRes.json();
+assert(recBody.error?.code === 'FORBIDDEN', "Dev fixture runtime RBAC: reception response code is FORBIDDEN");
+
+// 3. Trainer login -> 200 OK with canonical structure
+await handleAdminFallback('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'trainer' }) });
+const trainerRes = await handleAdminFallback('/api/trainer/members/1/measurement-progress', { method: 'GET' });
+assert(trainerRes.status === 200, "Dev fixture runtime RBAC: trainer gets 200 OK");
+const trainerBody = await trainerRes.json();
+assert(trainerBody.data !== undefined, "Dev fixture runtime RBAC: trainer response contains data property");
+assert(trainerBody.data?.measurement_count !== undefined, "Dev fixture runtime RBAC: data contains measurement_count");
+assert(trainerBody.data?.first !== undefined, "Dev fixture runtime RBAC: data contains first");
+assert(trainerBody.data?.previous !== undefined, "Dev fixture runtime RBAC: data contains previous");
+assert(trainerBody.data?.latest !== undefined, "Dev fixture runtime RBAC: data contains latest");
+assert(trainerBody.data?.comparisons !== undefined, "Dev fixture runtime RBAC: data contains comparisons");
+assert(trainerBody.data?.comparisons?.from_previous !== undefined, "Dev fixture runtime RBAC: comparisons contains from_previous");
+assert(trainerBody.data?.comparisons?.from_first !== undefined, "Dev fixture runtime RBAC: comparisons contains from_first");
+
+// Clean up dev session by logging out (defaults back to super_admin)
+await handleAdminFallback('/api/auth/logout', { method: 'POST' });
+
+console.log('\n=== 8. package.json Script Registration Invariant ===');
 
 const pkgPath = path.join(rootDir, 'package.json');
 assert(fs.existsSync(pkgPath), 'package.json exists');
@@ -677,5 +749,6 @@ console.log(`========================================`);
 if (exitCode !== 0) {
   process.exit(1);
 } else {
-  console.log('\nPASS — F.30A SINGLE-MEASUREMENT & DELTA CONSISTENCY CORRECTIVE VERIFIED');
+  console.log('\nPASS — F.30A DEV FIXTURE RBAC PARITY CORRECTIVE IMPLEMENTED');
+  console.log('PASS — F.30A DEV FIXTURE RBAC PARITY CORRECTIVE VERIFIED');
 }

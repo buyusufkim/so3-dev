@@ -1234,7 +1234,7 @@ export async function handleAdminFallback(endpoint: string, options: RequestInit
   // --- Trainer Member Measurement Progress Read Model ---
   const measurementProgressMatch = path.match(/^\/api\/trainer\/members\/([1-9]\d*)\/measurement-progress$/);
   if (measurementProgressMatch) {
-    if (currentDevRole !== 'trainer' && currentDevRole !== 'super_admin' && currentDevRole !== 'admin') {
+    if (currentDevRole !== 'trainer') {
       return createError('Bu işlem için yetkiniz yok.', 403, 'FORBIDDEN');
     }
     const memberId = parseInt(measurementProgressMatch[1], 10);

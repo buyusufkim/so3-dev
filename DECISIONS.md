@@ -587,6 +587,7 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * exact key enforcement: top-level (5 keys), comparisons (2 keys), snapshots (10 keys), deltas (7 keys) fail closed on any unexpected extra key
 * zero medical or coaching interpretation: strictly zero BMI, ideal weight, healthy range, obesity classification, health/fitness scores, or risk predictions
 * read-only foundation with zero mutations; zero schema changes, zero new database tables or columns
+* dev fixture RBAC parity: `adminDevFixtures.ts` strictly enforces `currentDevRole === 'trainer'` for `/api/trainer/members/{id}/measurement-progress` (blocking `admin`, `super_admin`, `reception`, and all non-trainer roles with 403 `FORBIDDEN`), matching production `AuthMiddleware::hasRole(['trainer'])` contract
 
 
 
