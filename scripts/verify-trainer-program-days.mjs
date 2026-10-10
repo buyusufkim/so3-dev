@@ -107,7 +107,7 @@ const freshHasTable = freshInstallContent.includes('CREATE TABLE IF NOT EXISTS `
 const freshHasCol = freshInstallContent.includes('`program_day_id` INT NULL');
 const freshHasFk = freshInstallContent.includes('CONSTRAINT `fk_program_exercises_program_day_id` FOREIGN KEY (`program_day_id`) REFERENCES `training_program_days`(`id`) ON DELETE SET NULL');
 const freshHasMig = freshInstallContent.includes("('043_add_training_program_days.sql', CURRENT_TIMESTAMP)");
-const deployRangeHas043 = deploymentDocContent.includes('migrations 001–043');
+const deployRangeHas043 = deploymentDocContent.includes('migrations 001–043') || deploymentDocContent.includes('migrations 001–044');
 
 assert(
     Boolean(freshHasTable && freshHasCol && freshHasFk && freshHasMig && deployRangeHas043),

@@ -690,6 +690,17 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * empty state: canonical empty state copy `"Henüz yayınlanmış topluluk duyurusu bulunmuyor."` rendered when feed contains 0 items
 * zero anti-scope & mutations: strictly zero member-generated content, mutations (POST/PATCH/PUT/DELETE), comments, likes, reactions, share, bookmark, follow, direct messages, polls, read receipts, view counts, media uploads, search, or pagination
 
+## F.33A — Member Training Program Day Read Model
+* canonical endpoint preserved: existing `GET /api/member/training-program` retained without route changes, query parameters, or member ID path selectors; guarded by `MemberAuthMiddleware` and active password-change checks
+* canonical day-based read model: programs project `days` array containing canonical day shape (`id`, `title`, `sort_order`, `exercises`) and `unassigned_exercises` array containing exercises with `program_day_id IS NULL`; deprecated top-level `exercises` removed from contract
+* legacy & cross-program defensiveness: exercises referencing deleted days or cross-program days are defensively treated as `unassigned_exercises` under their parent program, preventing data loss or cross-program structural leakage
+* empty days preserved: days with zero exercises remain in the `days` list with `exercises: []`
+* bounded query architecture: eliminated per-program exercise N+1 pattern by fetching active member programs, days, and exercises in 3 bounded queries followed by grouping in PHP; zero queries executed within iteration loops; prepared statements verified for native PDO compatibility
+* deterministic ordering: programs ordered in SQL by `CASE WHEN tp.start_date IS NULL THEN 1 ELSE 0 END ASC, tp.start_date DESC, tp.created_at DESC, tp.id DESC`; days ordered by `sort_order ASC, id ASC`; exercises within days and unassigned ordered by `sort_order ASC, id ASC`
+* strict runtime validation: `validateTrainingPrograms()` in `src/member/api/validators.ts` validates exact top-level program keys (`id`, `uuid`, `title`, `start_date`, `end_date`, `trainer`, `days`, `unassigned_exercises`), day keys (`id`, `title`, `sort_order`, `exercises`), and exercise keys (`id`, `exercise_name`, `sets`, `repetitions`, `duration_seconds`, `rest_seconds`, `instructions`, `sort_order`); rejects unexpected internal fields
+* temporary dashboard compatibility: `MemberDashboardPage.tsx` flattens `days.flatMap(d => d.exercises)` and `unassigned_exercises` via temporary local helper `getProgramExercises()` preserving backend order without client-side `.sort()` or UI redesign until F.33B/F.33C
+* zero mutations & workout logging: read-only foundation with strictly zero member-initiated mutations, completion checkboxes, rep/weight logging, RPE, or workout tracking
+
 
 
 

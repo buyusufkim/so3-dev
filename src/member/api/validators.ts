@@ -371,6 +371,13 @@ export type MemberExercise = {
   sort_order: number;
 };
 
+export type MemberTrainingProgramDay = {
+  id: number;
+  title: string;
+  sort_order: number;
+  exercises: MemberExercise[];
+};
+
 export type MemberTrainingProgram = {
   id: number;
   uuid: string;
@@ -383,8 +390,62 @@ export type MemberTrainingProgram = {
     name: string;
     role_title: string;
   } | null;
-  exercises: MemberExercise[];
+  days: MemberTrainingProgramDay[];
+  unassigned_exercises: MemberExercise[];
 };
+
+function validateMemberExercise(ex: unknown): MemberExercise {
+  if (!isRecord(ex)) throw new Error('Invalid exercise item');
+
+  const requiredExKeys = ['id', 'exercise_name', 'sets', 'repetitions', 'duration_seconds', 'rest_seconds', 'instructions', 'sort_order'];
+  const exKeys = Object.keys(ex);
+  if (exKeys.length !== requiredExKeys.length || !requiredExKeys.every(k => k in ex)) {
+    throw new Error('Unexpected or missing fields in exercise item');
+  }
+
+  if (typeof ex.id !== 'number' || !Number.isInteger(ex.id) || ex.id <= 0) throw new Error('Invalid exercise id');
+  if (typeof ex.exercise_name !== 'string' || !ex.exercise_name.trim()) throw new Error('Invalid exercise_name');
+  
+  if (ex.sets !== null && (typeof ex.sets !== 'number' || !Number.isInteger(ex.sets))) throw new Error('Invalid sets');
+  if (ex.repetitions !== null && typeof ex.repetitions !== 'string') throw new Error('Invalid repetitions');
+  if (ex.duration_seconds !== null && (typeof ex.duration_seconds !== 'number' || !Number.isInteger(ex.duration_seconds))) throw new Error('Invalid duration_seconds');
+  if (ex.rest_seconds !== null && (typeof ex.rest_seconds !== 'number' || !Number.isInteger(ex.rest_seconds))) throw new Error('Invalid rest_seconds');
+  if (ex.instructions !== null && typeof ex.instructions !== 'string') throw new Error('Invalid instructions');
+  if (typeof ex.sort_order !== 'number' || !Number.isInteger(ex.sort_order)) throw new Error('Invalid sort_order');
+
+  return {
+    id: ex.id,
+    exercise_name: ex.exercise_name.trim(),
+    sets: ex.sets,
+    repetitions: ex.repetitions,
+    duration_seconds: ex.duration_seconds,
+    rest_seconds: ex.rest_seconds,
+    instructions: ex.instructions === null ? null : ex.instructions.trim(),
+    sort_order: ex.sort_order
+  };
+}
+
+function validateMemberTrainingProgramDay(day: unknown): MemberTrainingProgramDay {
+  if (!isRecord(day)) throw new Error('Invalid day item');
+
+  const requiredDayKeys = ['id', 'title', 'sort_order', 'exercises'];
+  const dayKeys = Object.keys(day);
+  if (dayKeys.length !== requiredDayKeys.length || !requiredDayKeys.every(k => k in day)) {
+    throw new Error('Unexpected or missing fields in day item');
+  }
+
+  if (typeof day.id !== 'number' || !Number.isInteger(day.id) || day.id <= 0) throw new Error('Invalid day id');
+  if (typeof day.title !== 'string' || !day.title.trim()) throw new Error('Invalid day title');
+  if (typeof day.sort_order !== 'number' || !Number.isInteger(day.sort_order)) throw new Error('Invalid day sort_order');
+  if (!Array.isArray(day.exercises)) throw new Error('Invalid day exercises array');
+
+  return {
+    id: day.id,
+    title: day.title.trim(),
+    sort_order: day.sort_order,
+    exercises: day.exercises.map(validateMemberExercise)
+  };
+}
 
 export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[] {
   if (!isRecord(data)) throw new Error('Invalid training programs');
@@ -392,6 +453,13 @@ export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[]
 
   return data.items.map(i => {
     if (!isRecord(i)) throw new Error('Invalid program item');
+
+    const requiredProgramKeys = ['id', 'uuid', 'title', 'start_date', 'end_date', 'trainer', 'days', 'unassigned_exercises'];
+    const pKeys = Object.keys(i);
+    if (pKeys.length !== requiredProgramKeys.length || !requiredProgramKeys.every(k => k in i)) {
+      throw new Error('Unexpected or missing fields in program item');
+    }
+
     if (typeof i.id !== 'number' || !Number.isInteger(i.id) || i.id <= 0) throw new Error('Invalid program id');
     if (typeof i.uuid !== 'string' || !i.uuid.trim()) throw new Error('Invalid program uuid');
     if (typeof i.title !== 'string' || !i.title.trim()) throw new Error('Invalid title');
@@ -402,6 +470,12 @@ export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[]
     let tr = null;
     if (i.trainer !== null) {
       if (!isRecord(i.trainer)) throw new Error('Invalid trainer');
+      const requiredTrainerKeys = ['id', 'uuid', 'name', 'role_title'];
+      const trKeys = Object.keys(i.trainer);
+      const trainerRec = i.trainer;
+      if (trKeys.length !== requiredTrainerKeys.length || !requiredTrainerKeys.every(k => k in trainerRec)) {
+        throw new Error('Unexpected or missing fields in trainer item');
+      }
       if (typeof i.trainer.id !== 'number' || !Number.isInteger(i.trainer.id) || i.trainer.id <= 0) throw new Error('Invalid trainer id');
       if (typeof i.trainer.uuid !== 'string' || !i.trainer.uuid.trim()) throw new Error('Invalid trainer uuid');
       if (typeof i.trainer.name !== 'string' || !i.trainer.name.trim()) throw new Error('Invalid trainer name');
@@ -414,31 +488,11 @@ export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[]
       };
     }
 
-    if (!Array.isArray(i.exercises)) throw new Error('Invalid exercises array');
+    if (!Array.isArray(i.days)) throw new Error('Invalid days array');
+    if (!Array.isArray(i.unassigned_exercises)) throw new Error('Invalid unassigned_exercises array');
 
-    const exercises = i.exercises.map(ex => {
-      if (!isRecord(ex)) throw new Error('Invalid exercise item');
-      if (typeof ex.id !== 'number' || !Number.isInteger(ex.id) || ex.id <= 0) throw new Error('Invalid exercise id');
-      if (typeof ex.exercise_name !== 'string' || !ex.exercise_name.trim()) throw new Error('Invalid exercise_name');
-      
-      if (ex.sets !== null && (typeof ex.sets !== 'number' || !Number.isInteger(ex.sets))) throw new Error('Invalid sets');
-      if (ex.repetitions !== null && typeof ex.repetitions !== 'string') throw new Error('Invalid repetitions');
-      if (ex.duration_seconds !== null && (typeof ex.duration_seconds !== 'number' || !Number.isInteger(ex.duration_seconds))) throw new Error('Invalid duration_seconds');
-      if (ex.rest_seconds !== null && (typeof ex.rest_seconds !== 'number' || !Number.isInteger(ex.rest_seconds))) throw new Error('Invalid rest_seconds');
-      if (ex.instructions !== null && typeof ex.instructions !== 'string') throw new Error('Invalid instructions');
-      if (typeof ex.sort_order !== 'number' || !Number.isInteger(ex.sort_order)) throw new Error('Invalid sort_order');
-
-      return {
-        id: ex.id,
-        exercise_name: ex.exercise_name.trim(),
-        sets: ex.sets,
-        repetitions: ex.repetitions,
-        duration_seconds: ex.duration_seconds,
-        rest_seconds: ex.rest_seconds,
-        instructions: ex.instructions === null ? null : ex.instructions.trim(),
-        sort_order: ex.sort_order
-      };
-    });
+    const days = i.days.map(validateMemberTrainingProgramDay);
+    const unassigned_exercises = i.unassigned_exercises.map(validateMemberExercise);
 
     return {
       id: i.id,
@@ -447,7 +501,8 @@ export function validateTrainingPrograms(data: unknown): MemberTrainingProgram[]
       start_date: i.start_date,
       end_date: i.end_date,
       trainer: tr,
-      exercises
+      days,
+      unassigned_exercises
     };
   });
 }
@@ -1518,7 +1573,7 @@ export function validateMeasurementProgress(data: unknown): MemberMeasurementPro
       throw new Error('Comparisons must be null when measurement_count is 0');
     }
     return {
-      measurement_count: 0,
+      measurement_count: count,
       first: null,
       previous: null,
       latest: null,

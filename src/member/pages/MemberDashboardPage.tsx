@@ -7,10 +7,18 @@ import {
   MemberSessionPackage, 
   MemberAppointmentsData, 
   MemberTrainingProgram,
+  MemberExercise,
   MemberAppointment,
   MemberAppointmentRescheduleOptions,
   MemberRescheduleSlot
 } from '../api/validators';
+
+function getProgramExercises(program: MemberTrainingProgram): MemberExercise[] {
+  return [
+    ...program.days.flatMap(day => day.exercises),
+    ...program.unassigned_exercises
+  ];
+}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
@@ -674,7 +682,9 @@ export function MemberDashboardPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {programs.map(prog => (
+            {programs.map(prog => {
+              const programExercises = getProgramExercises(prog);
+              return (
               <div key={prog.id} className="bg-[#121212] border border-white/10 rounded-2xl overflow-hidden">
                 <div className="p-5 border-b border-white/5 flex justify-between items-start gap-4">
                   <div>
@@ -685,9 +695,9 @@ export function MemberDashboardPage() {
                   </div>
                 </div>
                 
-                {prog.exercises.length > 0 ? (
+                {programExercises.length > 0 ? (
                   <div className="divide-y divide-white/5">
-                    {prog.exercises.map(ex => (
+                    {programExercises.map(ex => (
                       <div key={ex.id} className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:items-center">
                         <div className="flex-1">
                           <div className="text-white font-medium mb-1">{ex.exercise_name}</div>
@@ -730,7 +740,8 @@ export function MemberDashboardPage() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

@@ -90,7 +90,7 @@ pass('Trainer schema logic verified');
 
 // Program exercises
 if (controller.includes('training_program_id = :pid')) fail('training_program_id used in exercises query');
-if (!controller.includes('program_id = :pid')) fail('program_id not used in exercises query');
+if (!controller.includes('program_id = :pid') && !controller.includes('program_id IN')) fail('program_id not used in exercises query');
 pass('Program exercises FK logic verified');
 
 // Repetitions

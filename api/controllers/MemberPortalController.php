@@ -306,70 +306,117 @@ class MemberPortalController
             FROM training_programs tp
             LEFT JOIN trainers t ON tp.trainer_id = t.id
             WHERE tp.member_id = :id AND tp.status = 'active' AND tp.deleted_at IS NULL
+            ORDER BY CASE WHEN tp.start_date IS NULL THEN 1 ELSE 0 END ASC, tp.start_date DESC, tp.created_at DESC, tp.id DESC
         ");
         $stmt->execute([':id' => $this->memberId]);
         $programs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        if (empty($programs)) {
+            Response::json(['items' => []]);
+            return;
+        }
+
+        // Fetch days for all returned active programs for this member
+        $dayStmt = $this->db->prepare("
+            SELECT d.id, d.program_id, d.title, d.sort_order
+            FROM training_program_days d
+            WHERE d.program_id IN (
+                SELECT id FROM training_programs WHERE member_id = :d_mid AND status = 'active' AND deleted_at IS NULL
+            ) AND d.deleted_at IS NULL
+            ORDER BY d.sort_order ASC, d.id ASC
+        ");
+        $dayStmt->execute([':d_mid' => $this->memberId]);
+        $dayRows = $dayStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Fetch exercises for all returned active programs for this member
+        $exStmt = $this->db->prepare("
+            SELECT e.id, e.program_id, e.program_day_id, e.exercise_name, e.sets, e.repetitions,
+                   e.duration_seconds, e.rest_seconds, e.instructions, e.sort_order
+            FROM program_exercises e
+            WHERE e.program_id IN (
+                SELECT id FROM training_programs WHERE member_id = :e_mid AND status = 'active' AND deleted_at IS NULL
+            )
+            ORDER BY e.sort_order ASC, e.id ASC
+        ");
+        $exStmt->execute([':e_mid' => $this->memberId]);
+        $exRows = $exStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Group days by program_id
+        $programDays = [];
+        $programUnassigned = [];
+        foreach ($programs as $p) {
+            $pId = (int)$p['id'];
+            $programDays[$pId] = [];
+            $programUnassigned[$pId] = [];
+        }
+
+        foreach ($dayRows as $d) {
+            $pId = (int)$d['program_id'];
+            if (isset($programDays[$pId])) {
+                $dayId = (int)$d['id'];
+                $programDays[$pId][$dayId] = [
+                    'id' => $dayId,
+                    'title' => (string)$d['title'],
+                    'sort_order' => (int)$d['sort_order'],
+                    'exercises' => []
+                ];
+            }
+        }
+
+        // Group exercises by program and day; invalid or deleted days flow to unassigned_exercises
+        foreach ($exRows as $ex) {
+            $pId = (int)$ex['program_id'];
+            if (!isset($programDays[$pId])) {
+                continue;
+            }
+
+            $formattedEx = [
+                'id' => (int)$ex['id'],
+                'exercise_name' => (string)$ex['exercise_name'],
+                'sets' => $ex['sets'] !== null ? (int)$ex['sets'] : null,
+                'repetitions' => $ex['repetitions'] !== null ? (string)$ex['repetitions'] : null,
+                'duration_seconds' => $ex['duration_seconds'] !== null ? (int)$ex['duration_seconds'] : null,
+                'rest_seconds' => $ex['rest_seconds'] !== null ? (int)$ex['rest_seconds'] : null,
+                'instructions' => $ex['instructions'] !== null ? (string)$ex['instructions'] : null,
+                'sort_order' => (int)$ex['sort_order']
+            ];
+
+            $dayId = $ex['program_day_id'] !== null ? (int)$ex['program_day_id'] : null;
+
+            if ($dayId !== null && isset($programDays[$pId][$dayId])) {
+                $programDays[$pId][$dayId]['exercises'][] = $formattedEx;
+            } else {
+                $programUnassigned[$pId][] = $formattedEx;
+            }
+        }
+
         $items = [];
         foreach ($programs as $p) {
+            $pId = (int)$p['id'];
+
             $trainer = null;
             if ($p['trainer_id'] && $p['trainer_deleted_at'] === null) {
                 $trainer = [
                     'id' => (int)$p['trainer_id'],
-                    'uuid' => $p['trainer_uuid'],
-                    'name' => $p['trainer_name'],
-                    'role_title' => $p['trainer_role']
+                    'uuid' => (string)$p['trainer_uuid'],
+                    'name' => (string)$p['trainer_name'],
+                    'role_title' => (string)$p['trainer_role']
                 ];
             }
 
-            $stmtEx = $this->db->prepare("
-                SELECT id, exercise_name, sets, repetitions, duration_seconds, rest_seconds, instructions, sort_order
-                FROM program_exercises
-                WHERE program_id = :pid
-                ORDER BY sort_order ASC, id ASC
-            ");
-            $stmtEx->execute([':pid' => $p['id']]);
-            $exercises = $stmtEx->fetchAll(PDO::FETCH_ASSOC);
-            
-            $formattedEx = [];
-            foreach ($exercises as $ex) {
-                $formattedEx[] = [
-                    'id' => (int)$ex['id'],
-                    'exercise_name' => $ex['exercise_name'],
-                    'sets' => $ex['sets'] !== null ? (int)$ex['sets'] : null,
-                    'repetitions' => $ex['repetitions'],
-                    'duration_seconds' => $ex['duration_seconds'] !== null ? (int)$ex['duration_seconds'] : null,
-                    'rest_seconds' => $ex['rest_seconds'] !== null ? (int)$ex['rest_seconds'] : null,
-                    'instructions' => $ex['instructions'],
-                    'sort_order' => (int)$ex['sort_order']
-                ];
-            }
+            $daysList = array_values($programDays[$pId]);
 
             $items[] = [
-                'id' => (int)$p['id'],
-                'uuid' => $p['uuid'],
-                'title' => $p['title'],
+                'id' => $pId,
+                'uuid' => (string)$p['uuid'],
+                'title' => (string)$p['title'],
                 'start_date' => $p['start_date'],
                 'end_date' => $p['end_date'],
-                'created_at' => $p['created_at'],
                 'trainer' => $trainer,
-                'exercises' => $formattedEx
+                'days' => $daysList,
+                'unassigned_exercises' => $programUnassigned[$pId]
             ];
         }
-
-        usort($items, function($a, $b) {
-            if ($a['start_date'] !== $b['start_date']) {
-                if ($a['start_date'] === null) return 1;
-                if ($b['start_date'] === null) return -1;
-                return strcmp($b['start_date'], $a['start_date']);
-            }
-            if ($a['created_at'] !== $b['created_at']) {
-                return strcmp($b['created_at'], $a['created_at']);
-            }
-            return $b['id'] <=> $a['id'];
-        });
-
-        $items = array_map(function($i) { unset($i['created_at']); return $i; }, $items);
 
         Response::json(['items' => $items]);
     }
