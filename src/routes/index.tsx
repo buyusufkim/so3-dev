@@ -51,6 +51,7 @@ const MemberChangePasswordPage = lazy(() => import("../member/pages/MemberChange
 const MemberDashboardPage = lazy(() => import("../member/pages/MemberDashboardPage").then(m => ({ default: m.MemberDashboardPage })));
 const MemberAppointmentBookingPage = lazy(() => import("../member/pages/MemberAppointmentBookingPage").then(m => ({ default: m.MemberAppointmentBookingPage })));
 const MemberProgressPage = lazy(() => import("../member/pages/MemberProgressPage").then(m => ({ default: m.MemberProgressPage })));
+const MemberCommunityPage = lazy(() => import("../member/pages/MemberCommunityPage").then(m => ({ default: m.MemberCommunityPage })));
 
 const AdminSuspense = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">Yükleniyor...</div>}>
@@ -128,6 +129,10 @@ const router = createBrowserRouter([
       {
         path: "gelisim",
         element: <MemberSuspense><MemberProgressPage /></MemberSuspense>,
+      },
+      {
+        path: "topluluk",
+        element: <MemberSuspense><MemberCommunityPage /></MemberSuspense>,
       },
 
       {

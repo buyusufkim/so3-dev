@@ -89,6 +89,12 @@ export function MemberLayout() {
                 >
                   Gelişimim
                 </NavLink>
+                <NavLink 
+                  to="/uye/topluluk" 
+                  className={({isActive}) => `min-h-[44px] inline-flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  Topluluk
+                </NavLink>
               </nav>
             )}
           </div>
@@ -130,6 +136,12 @@ export function MemberLayout() {
                 className={({isActive}) => `whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
               >
                 Gelişimim
+              </NavLink>
+              <NavLink 
+                to="/uye/topluluk" 
+                className={({isActive}) => `min-h-[44px] inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
+              >
+                Topluluk
               </NavLink>
             </nav>
           </div>

@@ -677,6 +677,19 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * touch targets & accessibility: interactive controls, filter tabs, edit/delete actions, and pagination buttons enforce `min-h-[44px]` touch targets
 * zero social features: strictly zero comments, likes, reactions, direct messaging, user targeting, or media uploads
 
+## F.32C — Member Community Feed
+* route & layout: registered authenticated member route `/uye/topluluk` under `/uye` layout via lazy-loaded `MemberCommunityPage.tsx`; existing public redirect `/topluluk` -> `/#topluluk` preserved without collision
+* navigation: "Topluluk" link added to desktop (`hidden sm:flex`) and mobile (`sm:hidden`) member navigation within `MemberLayout.tsx`, guarded by `isAuthenticated && identity && !identity.account.must_change_password`; link adheres to `min-h-[44px]` touch target contract
+* canonical client & read model: exclusively calls `memberApiClient.getCommunityUpdates(controller.signal)` which targets `GET /api/member/community-updates` and validates via `validateCommunityUpdates`; published-only updates read model; zero direct `fetch` or admin client usage
+* backend ordering & integrity: renders backend-provided canonical ordering directly (`published_at DESC, id DESC`) without client-side `.sort()` or `.reverse()`
+* plain-text formatting: rendered as safe plain text with `whitespace-pre-wrap break-words`; zero `dangerouslySetInnerHTML`, markdown parsers, or HTML injection vulnerabilities; full canonical body rendered without artificial truncation
+* deterministic timestamps: formatting implemented via local pure string regex parser `formatDateTime` (`DD.MM.YYYY HH:mm`), failing closed to em dash (`"—"`); zero `new Date()`, `Date.parse()`, `toLocaleString()`, or `Intl.DateTimeFormat`
+* privacy & no author labels: renders only `title`, `body`, and `published_at`; does not access or expose internal fields (`id`, `uuid`, `status`, `created_at`, `updated_at`, admin identity); zero invented author/admin labels
+* lifecycle & race safety: fetch lifecycle protected by `AbortController`, request generation tracking (`requestGenerationRef`), and mount guard (`isMountedRef`); in-flight requests cleanly aborted on unmount; zero background polling or intervals
+* bounded error handling & retry: user-facing errors bounded to Turkish copy `"Topluluk duyuruları yüklenemedi."`; zero raw exception or error message leakage; manual retry button `"Tekrar Dene"` with `min-h-[44px]` touch target
+* empty state: canonical empty state copy `"Henüz yayınlanmış topluluk duyurusu bulunmuyor."` rendered when feed contains 0 items
+* zero anti-scope & mutations: strictly zero member-generated content, mutations (POST/PATCH/PUT/DELETE), comments, likes, reactions, share, bookmark, follow, direct messages, polls, read receipts, view counts, media uploads, search, or pagination
+
 
 
 
