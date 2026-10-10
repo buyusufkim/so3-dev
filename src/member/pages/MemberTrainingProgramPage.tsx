@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Calendar, User, Dumbbell, AlertCircle } from 'lucide-react';
+import { Calendar, User, Dumbbell, AlertCircle, ChevronDown } from 'lucide-react';
 import { memberApiClient } from '../api/client';
 import type {
   MemberTrainingProgram,
@@ -73,30 +73,58 @@ function ExerciseCard({ exercise }: ExerciseCardProps) {
 
 interface ProgramDaySectionProps {
   day: MemberTrainingProgramDay;
+  defaultOpen?: boolean;
 }
 
-function ProgramDaySection({ day }: ProgramDaySectionProps) {
+function ProgramDaySection({ day, defaultOpen = false }: ProgramDaySectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentId = `program-day-content-${day.id}`;
+  const headerButtonId = `program-day-header-${day.id}`;
+
   return (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black/20">
-      <div className="px-4 py-3 bg-white/[0.03] border-b border-white/10 flex items-center justify-between gap-3">
-        <h4 className="text-white font-medium text-sm sm:text-base flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#851C35]" />
-          {day.title}
-        </h4>
-        <span className="text-xs text-white/40 font-mono">
-          {day.exercises.length} egzersiz
-        </span>
-      </div>
-
-      {day.exercises.length > 0 ? (
-        <div className="divide-y divide-white/5">
-          {day.exercises.map((ex) => (
-            <ExerciseCard key={ex.id} exercise={ex} />
-          ))}
+      <button
+        id={headerButtonId}
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-controls={contentId}
+        className={`w-full min-h-[44px] px-4 py-3 bg-white/[0.03] hover:bg-white/[0.06] flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+          isOpen ? 'border-b border-white/10' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-[#851C35] shrink-0" />
+          <h4 className="text-white font-medium text-sm sm:text-base truncate">
+            {day.title}
+          </h4>
         </div>
-      ) : (
-        <div className="p-4 text-center text-white/40 text-xs sm:text-sm">
-          Bu güne henüz egzersiz eklenmemiş.
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className="text-xs text-white/40 font-mono">
+            {day.exercises.length} egzersiz
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-white/50 transition-transform duration-200 ${
+              isOpen ? 'rotate-180' : ''
+            }`}
+            aria-hidden="true"
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div id={contentId} role="region" aria-labelledby={headerButtonId}>
+          {day.exercises.length > 0 ? (
+            <div className="divide-y divide-white/5">
+              {day.exercises.map((ex) => (
+                <ExerciseCard key={ex.id} exercise={ex} />
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 text-center text-white/40 text-xs sm:text-sm">
+              Bu güne henüz egzersiz eklenmemiş.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -213,6 +241,14 @@ export function MemberTrainingProgramPage() {
             const hasAnyExercises =
               prog.days.some((d) => d.exercises.length > 0) || hasUnassigned;
 
+            // Default open: first day containing exercises, otherwise the first day
+            const firstDayWithExercises = prog.days.find((d) => d.exercises.length > 0);
+            const initialOpenDayId = firstDayWithExercises
+              ? firstDayWithExercises.id
+              : hasDays
+              ? prog.days[0].id
+              : null;
+
             return (
               <div
                 key={prog.id}
@@ -249,10 +285,21 @@ export function MemberTrainingProgramPage() {
 
                 {/* Program Content */}
                 <div className="p-5 sm:p-6 space-y-5">
+                  {/* Empty state when program has zero total exercises */}
+                  {!hasAnyExercises && (
+                    <div className="p-4 rounded-xl border border-white/5 bg-white/[0.02] text-center text-white/40 text-sm">
+                      Bu programa henüz egzersiz eklenmemiş.
+                    </div>
+                  )}
+
                   {hasDays && (
                     <div className="space-y-4">
                       {prog.days.map((day) => (
-                        <ProgramDaySection key={day.id} day={day} />
+                        <ProgramDaySection
+                          key={day.id}
+                          day={day}
+                          defaultOpen={day.id === initialOpenDayId}
+                        />
                       ))}
                     </div>
                   )}
@@ -279,13 +326,6 @@ export function MemberTrainingProgramPage() {
                           <ExerciseCard key={ex.id} exercise={ex} />
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Empty state for program if no days and no unassigned or 0 exercises total */}
-                  {!hasAnyExercises && !hasDays && (
-                    <div className="p-6 text-center text-white/40 text-sm">
-                      Bu programa henüz egzersiz eklenmemiş.
                     </div>
                   )}
                 </div>

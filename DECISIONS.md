@@ -714,6 +714,9 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * bounded error handling & retry: user-facing errors bounded to Turkish copy `"Antrenman programları yüklenemedi."`; manual retry button `"Tekrar Dene"` with `min-h-[44px]` touch target
 * empty states: canonical empty state copy `"Aktif antrenman programın bulunmuyor."` rendered when program list is empty; `"Bu programa henüz egzersiz eklenmemiş."` rendered when an active program contains no exercises
 * strict read-only anti-scope: strictly zero completion checkboxes, rep/weight logging inputs, workout tracking, notes fields, or member mutation requests (POST/PATCH/PUT/DELETE)
+* day accordion & accessibility: `ProgramDaySection` converted from static card to accessible interactive accordion; header uses real `<button type="button">` with `min-h-[44px]` touch target, `aria-expanded={isOpen}`, `aria-controls={contentId}`, and animated `ChevronDown` rotation indicator; exercise count remains visible in all states; content is only rendered when open; empty days are preserved and expandable inside accordion; default open expands the first day with exercises (or first day if all days are empty) per program without cross-program state collisions
+* empty program corrective: replaced flawed `!hasAnyExercises && !hasDays` condition with `!hasAnyExercises`; programs with days defined but zero exercises total now display `"Bu programa henüz egzersiz eklenmemiş."` while keeping the day cards visible; programs with unassigned exercises are not considered empty
+
 
 
 

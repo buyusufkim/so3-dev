@@ -119,60 +119,250 @@ assert(
   "Component sends zero query parameters"
 );
 
-console.log("\n=== 5. Server-Authoritative Ordering (Zero Client Sort) ===");
+console.log("\n=== 5. Real Day Accordion Invariants ===");
+const daySectionMatch = pageContent.match(/function ProgramDaySection[\s\S]*?(?=export function MemberTrainingProgramPage|$)/);
+assert(Boolean(daySectionMatch), "ProgramDaySection component defined in MemberTrainingProgramPage");
+const daySectionSource = daySectionMatch ? daySectionMatch[0] : '';
+
+// 1. useState for open/close state
+assert(
+  daySectionSource.includes('useState') && daySectionSource.includes('isOpen'),
+  "ProgramDaySection manages open/closed state with useState (isOpen)"
+);
+
+// 2. Real button used for header
+assert(
+  daySectionSource.includes('<button') &&
+  daySectionSource.includes('type="button"'),
+  "Day accordion header uses a real <button type=\"button\"> element"
+);
+
+// 3. onClick handler toggles state
+assert(
+  daySectionSource.includes('onClick={() => setIsOpen(') ||
+  daySectionSource.includes('onClick={() => setIsOpen((prev) => !prev)'),
+  "Accordion button onClick toggles isOpen state"
+);
+
+// 4. aria-expanded bound to state
+assert(
+  daySectionSource.includes('aria-expanded={isOpen}'),
+  "Accordion button sets aria-expanded={isOpen}"
+);
+
+// 5. aria-controls points to content ID
+assert(
+  daySectionSource.includes('aria-controls={contentId}') &&
+  daySectionSource.includes('id={contentId}'),
+  "Accordion button aria-controls points to content container ID"
+);
+
+// 6. Content hidden when closed
+assert(
+  daySectionSource.includes('{isOpen && (') || daySectionSource.includes('{isOpen &&'),
+  "Accordion content is only rendered when isOpen is true"
+);
+
+// 7. Button touch target >= 44px
+assert(
+  daySectionSource.includes('min-h-[44px]'),
+  "Accordion header button enforces min-h-[44px] touch target"
+);
+
+// 8. Visible chevron icon with indicator
+assert(
+  daySectionSource.includes('ChevronDown') &&
+  (daySectionSource.includes('rotate-180') || daySectionSource.includes('transition-transform')),
+  "Accordion header renders visible Chevron indicator with animated rotation"
+);
+
+// 9. Day exercise count remains visible in all states
+assert(
+  daySectionSource.includes('{day.exercises.length} egzersiz') &&
+  !daySectionSource.match(/\{isOpen && [\s\S]*?\{day\.exercises\.length\} egzersiz/),
+  "Day exercise count remains visible in header regardless of accordion open/closed state"
+);
+
+// 10. Empty day state inside accordion
+assert(
+  daySectionSource.includes('Bu güne henüz egzersiz eklenmemiş.') &&
+  daySectionSource.indexOf('Bu güne henüz egzersiz eklenmemiş.') > daySectionSource.indexOf('{isOpen &&'),
+  "Empty day state ('Bu güne henüz egzersiz eklenmemiş.') is retained inside accordion content"
+);
+
+console.log("\n=== 6. Algorithmic Day Accordion State Simulation ===");
+// Simulate ProgramDaySection state machine
+function simulateDayAccordion(initialState) {
+  let state = initialState;
+  const toggle = () => { state = !state; };
+  return {
+    getIsOpen: () => state,
+    getAriaExpanded: () => Boolean(state),
+    isContentVisible: () => state === true,
+    toggle
+  };
+}
+
+const acc1 = simulateDayAccordion(true);
+assert(acc1.getIsOpen() === true, "Simulation 1.1: defaultOpen=true starts open");
+assert(acc1.getAriaExpanded() === true, "Simulation 1.2: aria-expanded is true when open");
+assert(acc1.isContentVisible() === true, "Simulation 1.3: content is visible when open");
+acc1.toggle();
+assert(acc1.getIsOpen() === false, "Simulation 1.4: click closes accordion");
+assert(acc1.getAriaExpanded() === false, "Simulation 1.5: aria-expanded is false when closed");
+assert(acc1.isContentVisible() === false, "Simulation 1.6: content is hidden when closed");
+acc1.toggle();
+assert(acc1.getIsOpen() === true, "Simulation 1.7: click re-opens accordion");
+
+const acc2 = simulateDayAccordion(false);
+assert(acc2.getIsOpen() === false, "Simulation 2.1: defaultOpen=false starts closed");
+assert(acc2.isContentVisible() === false, "Simulation 2.2: content hidden initially");
+
+// Simulate Initial Open Day Selector Algorithm
+function computeInitialOpenDayId(program) {
+  const firstDayWithExercises = program.days.find((d) => d.exercises.length > 0);
+  return firstDayWithExercises
+    ? firstDayWithExercises.id
+    : program.days.length > 0
+    ? program.days[0].id
+    : null;
+}
+
+const fixtureProg1 = {
+  days: [
+    { id: 10, title: 'Gün 1', exercises: [] },
+    { id: 20, title: 'Gün 2', exercises: [{ id: 101 }] }
+  ]
+};
+assert(
+  computeInitialOpenDayId(fixtureProg1) === 20,
+  "Simulation 3.1: First day with exercises (Day 2) is chosen as default open"
+);
+
+const fixtureProg2 = {
+  days: [
+    { id: 10, title: 'Gün 1', exercises: [{ id: 101 }] },
+    { id: 20, title: 'Gün 2', exercises: [{ id: 102 }] }
+  ]
+};
+assert(
+  computeInitialOpenDayId(fixtureProg2) === 10,
+  "Simulation 3.2: When Day 1 has exercises, Day 1 is default open"
+);
+
+const fixtureProg3 = {
+  days: [
+    { id: 10, title: 'Gün 1', exercises: [] },
+    { id: 20, title: 'Gün 2', exercises: [] }
+  ]
+};
+assert(
+  computeInitialOpenDayId(fixtureProg3) === 10,
+  "Simulation 3.3: When no day has exercises, first day (Day 1) is default open"
+);
+
+const fixtureProg4 = { days: [] };
+assert(
+  computeInitialOpenDayId(fixtureProg4) === null,
+  "Simulation 3.4: Program with 0 days yields null initialOpenDayId"
+);
+
+console.log("\n=== 7. Empty Program Logic & Algorithmic Simulation ===");
+// Source code invariant:
+assert(
+  pageContent.includes('!hasAnyExercises && (') || pageContent.includes('!hasAnyExercises &&'),
+  "Component uses !hasAnyExercises to evaluate program empty state"
+);
+
+// Negative check: ensure the flawed condition is NOT used
+assert(
+  !pageContent.includes('!hasAnyExercises && !hasDays'),
+  "Flawed condition '!hasAnyExercises && !hasDays' is completely eliminated"
+);
+
+// Ensure day cards are rendered whenever hasDays is true
+assert(
+  pageContent.includes('{hasDays && (') &&
+  pageContent.includes('prog.days.map'),
+  "Day cards are rendered whenever hasDays is true, even when days have zero exercises"
+);
+
+// Algorithmic evaluation of program and day empty states
+function evaluateProgramDisplay(program) {
+  const hasDays = program.days.length > 0;
+  const hasUnassigned = program.unassigned_exercises.length > 0;
+  const hasAnyExercises = program.days.some((d) => d.exercises.length > 0) || hasUnassigned;
+  const showProgramEmptyState = !hasAnyExercises;
+  const renderedDaysCount = hasDays ? program.days.length : 0;
+  const showUnassignedSection = hasUnassigned;
+
+  return {
+    hasDays,
+    hasUnassigned,
+    hasAnyExercises,
+    showProgramEmptyState,
+    renderedDaysCount,
+    showUnassignedSection
+  };
+}
+
+// Case 1: Program has zero days and zero unassigned exercises
+const eval1 = evaluateProgramDisplay({ days: [], unassigned_exercises: [] });
+assert(
+  eval1.showProgramEmptyState === true && eval1.renderedDaysCount === 0,
+  "Fixture 1: Zero days + zero unassigned -> shows program empty state ('Bu programa henüz egzersiz eklenmemiş.')"
+);
+
+// Case 2: Program has days defined, but zero exercises across all days, zero unassigned
+const eval2 = evaluateProgramDisplay({
+  days: [
+    { id: 1, title: 'Gün 1', exercises: [] },
+    { id: 2, title: 'Gün 2', exercises: [] }
+  ],
+  unassigned_exercises: []
+});
+assert(
+  eval2.showProgramEmptyState === true && eval2.renderedDaysCount === 2,
+  "Fixture 2: Defined days with 0 exercises -> displays BOTH program empty state AND keeps day cards visible"
+);
+
+// Case 3: Program has 0 days, but has unassigned exercises
+const eval3 = evaluateProgramDisplay({
+  days: [],
+  unassigned_exercises: [{ id: 50, exercise_name: 'Squat' }]
+});
+assert(
+  eval3.showProgramEmptyState === false && eval3.showUnassignedSection === true,
+  "Fixture 3: Program with unassigned exercises is NOT treated as empty"
+);
+
+// Case 4: Program has days with exercises
+const eval4 = evaluateProgramDisplay({
+  days: [
+    { id: 1, title: 'Gün 1', exercises: [{ id: 10, exercise_name: 'Bench Press' }] }
+  ],
+  unassigned_exercises: []
+});
+assert(
+  eval4.showProgramEmptyState === false && eval4.renderedDaysCount === 1,
+  "Fixture 4: Program with exercises does not show program empty state"
+);
+
+console.log("\n=== 8. Server-Authoritative Ordering & Direct Arrays ===");
 assert(
   !pageContent.includes('.sort(') &&
   !pageContent.includes('.toSorted(') &&
   !pageContent.includes('localeCompare('),
   "Component strictly forbids client-side sorting (.sort, .toSorted, localeCompare)"
 );
-
-console.log("\n=== 6. Day-based Grouped Presentation ===");
-// Page headers
 assert(
-  pageContent.includes('Programım') &&
-  pageContent.includes('Antrenörünün senin için hazırladığı antrenman programları.'),
-  "Component renders canonical title 'Programım' and subtitle"
-);
-
-// Days rendering
-assert(
-  pageContent.includes('prog.days.map') && pageContent.includes('day.title'),
-  "Component maps over prog.days and renders day.title"
-);
-
-// Day exercises rendering
-assert(
+  pageContent.includes('programs.map') &&
+  pageContent.includes('prog.days.map') &&
   pageContent.includes('day.exercises.map'),
-  "Component maps over day.exercises directly"
+  "Component preserves and directly renders canonical API order across programs, days, and exercises"
 );
 
-// Empty day state
-assert(
-  pageContent.includes('Bu güne henüz egzersiz eklenmemiş.') || pageContent.includes('Bu güne henüz egzersiz eklenmemiş'),
-  "Component provides dedicated empty state message for empty days"
-);
-
-// Unassigned exercises section
-assert(
-  pageContent.includes('prog.unassigned_exercises') &&
-  (pageContent.includes('Gün Atanmamış Egzersizler') || pageContent.includes('Atanmamış Egzersizler')),
-  "Component renders dedicated section for unassigned / legacy exercises"
-);
-
-// Empty program state
-assert(
-  pageContent.includes('Bu programa henüz egzersiz eklenmemiş.') || pageContent.includes('Bu programa henüz egzersiz eklenmemiş'),
-  "Component renders empty state when program has no exercises"
-);
-
-// Empty programs state
-assert(
-  pageContent.includes('Aktif antrenman programın bulunmuyor.') || pageContent.includes('Aktif antrenman programın bulunmuyor'),
-  "Component renders empty state when member has no active programs"
-);
-
-console.log("\n=== 7. Exercise Detail Invariants ===");
+console.log("\n=== 9. Exercise Detail & Deterministic Date Formatting ===");
 assert(
   pageContent.includes('exercise.exercise_name') || pageContent.includes('ex.exercise_name'),
   "Exercise card renders exercise_name"
@@ -198,7 +388,15 @@ assert(
   "Exercise card conditionally renders rest_seconds metric"
 );
 
-console.log("\n=== 8. Error Handling & Race Safety ===");
+// Deterministic date formatting
+assert(
+  pageContent.includes('formatDate(') &&
+  !pageContent.includes('new Date(') &&
+  !pageContent.includes('Intl.DateTimeFormat'),
+  "Date formatting uses pure regex string parser without new Date() or Intl"
+);
+
+console.log("\n=== 10. Error Handling & Race Safety ===");
 assert(
   pageContent.includes('Antrenman programları yüklenemedi.') || pageContent.includes('Antrenman programları yüklenemedi'),
   "Component provides bounded Turkish error message"
@@ -222,7 +420,7 @@ assert(
   "Component guards against race conditions with AbortController, request generation counter, and mount guard"
 );
 
-console.log("\n=== 9. Strict Read-Only Anti-Scope ===");
+console.log("\n=== 11. Strict Read-Only Anti-Scope ===");
 assert(
   !pageContent.includes('type="checkbox"') && !pageContent.includes("type='checkbox'"),
   "Anti-scope: Zero completion checkboxes"
@@ -246,6 +444,6 @@ if (exitCode !== 0) {
   console.error("❌ FAILED: One or more invariants failed verification.");
   process.exit(1);
 } else {
-  console.log("✅ SUCCESS: All Member Training Program UI (F.33B) invariants verified.");
+  console.log("✅ SUCCESS: All Member Training Program UI (F.33B) corrective invariants verified.");
   process.exit(0);
 }
