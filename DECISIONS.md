@@ -727,6 +727,14 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * appointment and package regressions preserved: zero modifications to member overview, session packages, appointment cancellation, or appointment rescheduling logic
 * cleanup of temporary helpers: removed temporary F.33A `getProgramExercises(program)` flattening helper and unused `MemberExercise` type import from `MemberDashboardPage.tsx`
 
+## F.33C — Verifier Hardening (Migration Parity & Route Method Contracts)
+* dynamic migration sequence verification: replaced permissive `>= 42` check in `verify-member-appointment-lifecycle-api.mjs` with authoritative dynamic migration sequence check; verifies unbroken 001..N consecutive sequence without gaps or duplicates, dynamic range boundary alignment against latest migration (044), and 1:1 schema_migrations history parity in `fresh-install.sql`
+* balanced-brace route block isolation: replaced fragile `[^}]*?` and boundless `[\s\S]*?` regexes in `verify-member-appointment-lifecycle-api.mjs`, `verify-member-appointment-reschedule-options.mjs`, and `verify-member-training-program-v2.mjs` with deterministic balanced-brace extraction (`extractRouteBlock`); cleanly isolates route bodies regardless of nested `if`, `switch`, or block structures without early cutoffs or cross-route bleeding
+* fail-closed HTTP method restrictions: verified that non-canonical mutation/query methods (POST, DELETE, PUT, GET as applicable) are strictly prohibited on member cancel, reschedule, reschedule-options, and training-program endpoints within isolated route blocks; backed by embedded fail-closed self-tests confirming that nested injections are reliably detected
+* nested-brace safe loop inspection: hardened N+1 query inspection in `verify-member-training-program-v2.mjs` using balanced-brace loop extractor (`extractAllLoopBlocks`); prevents query hiding inside nested inner conditional blocks within foreach loops
+* zero product code or schema modifications: hardened verification contracts exclusively within regression test suite; left product code, endpoints, database migrations, and UI components completely intact
+
+
 
 
 

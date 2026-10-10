@@ -157,21 +157,68 @@ const indexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(indexPath), "api/index.php exists");
 const indexContent = fs.readFileSync(indexPath, 'utf8');
 
+// Deterministic balanced-brace block extractor
+function extractRouteBlock(content, routePattern) {
+  const startIndex = typeof routePattern === 'string'
+    ? content.indexOf(routePattern)
+    : content.search(routePattern);
+  if (startIndex === -1) return null;
+  const openBrace = content.indexOf('{', startIndex);
+  if (openBrace === -1) return null;
+
+  let depth = 1;
+  let i = openBrace + 1;
+  while (i < content.length && depth > 0) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+  return content.slice(startIndex, i);
+}
+
+// Self-test for extractRouteBlock fail-closed behavior on nested blocks
+const mockNestedRoute = `
+if (preg_match('#^/api/test$#', $requestUri, $matches)) {
+    if ($method === 'GET') {
+        $controller->index();
+    }
+    if ($method === 'POST') {
+        $controller->store();
+    }
+}
+`;
+const mockExtracted = extractRouteBlock(mockNestedRoute, "preg_match('#^/api/test$#'");
+assert(
+  mockExtracted !== null && mockExtracted.includes("$method === 'POST'"),
+  "Self-test: extractRouteBlock preserves nested braces and captures subsequent inner blocks"
+);
+assert(
+  (!/\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(mockExtracted)) === false,
+  "Self-test: Disallowed method check fails-closed when mutation method is injected inside nested route block"
+);
+
 // 2.1 Canonical GET /api/member/appointments/{id}/reschedule-options
 assert(
   indexContent.includes("preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule-options$#', $requestUri, $matches)"),
   "api/index.php registers canonical regex for /api/member/appointments/([1-9]\\d*)/reschedule-options"
 );
 
+const rescheduleOptionsBlock = extractRouteBlock(
+  indexContent,
+  "preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule-options$#'"
+);
+assert(rescheduleOptionsBlock !== null, "Reschedule options route block successfully isolated from api/index.php");
 assert(
-  /preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#',\s*\$requestUri,\s*\$matches\)[\s\S]*?\$method\s*===\s*'GET'[\s\S]*?getRescheduleOptions\(\(int\)\$matches\[1\]\)/.test(indexContent),
+  rescheduleOptionsBlock.includes("$method === 'GET'") &&
+  rescheduleOptionsBlock.includes("getRescheduleOptions((int)$matches[1])"),
   "Canonical route matches GET and invokes MemberAppointmentBookingController->getRescheduleOptions((int)$matches[1])"
 );
 
 // 2.2 Prohibit mutation methods on reschedule-options
 assert(
-  !/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#',\s*\$requestUri,\s*\$matches\)\s*\{[^}]*?\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(indexContent),
-  "No POST/PATCH/DELETE/PUT method registered for reschedule-options endpoint"
+  !/\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(rescheduleOptionsBlock),
+  "No POST/PATCH/DELETE/PUT mutation method registered for reschedule-options endpoint"
 );
 
 assert(

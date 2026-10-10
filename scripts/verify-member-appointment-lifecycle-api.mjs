@@ -90,13 +90,60 @@ const indexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(indexPath), "api/index.php exists");
 const indexContent = fs.readFileSync(indexPath, 'utf8');
 
+// Deterministic balanced-brace block extractor
+function extractRouteBlock(content, routePattern) {
+  const startIndex = typeof routePattern === 'string'
+    ? content.indexOf(routePattern)
+    : content.search(routePattern);
+  if (startIndex === -1) return null;
+  const openBrace = content.indexOf('{', startIndex);
+  if (openBrace === -1) return null;
+
+  let depth = 1;
+  let i = openBrace + 1;
+  while (i < content.length && depth > 0) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+  return content.slice(startIndex, i);
+}
+
+// Self-test for extractRouteBlock fail-closed behavior on nested blocks
+const mockNestedRoute = `
+if (preg_match('#^/api/test$#', $requestUri, $matches)) {
+    if ($method === 'PATCH') {
+        $controller->doPatch();
+    }
+    if ($method === 'POST') {
+        $controller->doPost();
+    }
+}
+`;
+const mockExtracted = extractRouteBlock(mockNestedRoute, "preg_match('#^/api/test$#'");
+assert(
+  mockExtracted !== null && mockExtracted.includes("$method === 'POST'"),
+  "Self-test: extractRouteBlock preserves nested braces and captures subsequent inner blocks"
+);
+assert(
+  (!/\$method\s*===\s*'(?:POST|DELETE|PUT)'/.test(mockExtracted)) === false,
+  "Self-test: Disallowed method check fails-closed when prohibited method is injected inside nested route block"
+);
+
 // 2.1 Canonical PATCH /api/member/appointments/{id}/cancel
 assert(
   indexContent.includes("preg_match('#^/api/member/appointments/([1-9]\\d*)/cancel$#', $requestUri, $matches)"),
   "api/index.php registers canonical regex for /api/member/appointments/([1-9]\\d*)/cancel"
 );
+const cancelRouteBlock = extractRouteBlock(
+  indexContent,
+  "preg_match('#^/api/member/appointments/([1-9]\\d*)/cancel$#'"
+);
+assert(cancelRouteBlock !== null, "Cancel route block successfully isolated from api/index.php");
 assert(
-  /preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#',\s*\$requestUri,\s*\$matches\)[\s\S]*?\$method\s*===\s*'PATCH'[\s\S]*?cancelAppointment\(\(int\)\$matches\[1\]\)/.test(indexContent),
+  cancelRouteBlock.includes("$method === 'PATCH'") &&
+  cancelRouteBlock.includes("cancelAppointment((int)$matches[1])"),
   "Canonical member cancel route matches PATCH and routes to MemberAppointmentBookingController->cancelAppointment((int)$matches[1])"
 );
 
@@ -105,19 +152,25 @@ assert(
   indexContent.includes("preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule$#', $requestUri, $matches)"),
   "api/index.php registers canonical regex for /api/member/appointments/([1-9]\\d*)/reschedule"
 );
+const rescheduleRouteBlock = extractRouteBlock(
+  indexContent,
+  "preg_match('#^/api/member/appointments/([1-9]\\d*)/reschedule$#'"
+);
+assert(rescheduleRouteBlock !== null, "Reschedule route block successfully isolated from api/index.php");
 assert(
-  /preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#',\s*\$requestUri,\s*\$matches\)[\s\S]*?\$method\s*===\s*'PATCH'[\s\S]*?rescheduleAppointment\(\(int\)\$matches\[1\]\)/.test(indexContent),
+  rescheduleRouteBlock.includes("$method === 'PATCH'") &&
+  rescheduleRouteBlock.includes("rescheduleAppointment((int)$matches[1])"),
   "Canonical member reschedule route matches PATCH and routes to MemberAppointmentBookingController->rescheduleAppointment((int)$matches[1])"
 );
 
 // 2.3 Prohibit non-canonical mutation routes (POST, DELETE, PUT)
 assert(
-  !/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/cancel\$#',\s*\$requestUri,\s*\$matches\)\s*\{[^}]*?\$method\s*===\s*'(?:POST|DELETE|PUT)'/.test(indexContent),
-  "No POST/DELETE/PUT method allowed for member appointment cancel route"
+  !/\$method\s*===\s*'(?:POST|DELETE|PUT|GET)'/.test(cancelRouteBlock),
+  "No non-canonical HTTP method (POST/DELETE/PUT/GET) allowed for member appointment cancel route block"
 );
 assert(
-  !/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule\$#',\s*\$requestUri,\s*\$matches\)\s*\{[^}]*?\$method\s*===\s*'(?:POST|DELETE|PUT)'/.test(indexContent),
-  "No POST/DELETE/PUT method allowed for member appointment reschedule route"
+  !/\$method\s*===\s*'(?:POST|DELETE|PUT|GET)'/.test(rescheduleRouteBlock),
+  "No non-canonical HTTP method (POST/DELETE/PUT/GET) allowed for member appointment reschedule route block"
 );
 assert(
   !indexContent.includes("'/api/member/appointments/cancel'"),
@@ -381,17 +434,112 @@ assert(
   "MemberAppointmentBookingPage contains zero reschedule UI logic (F25B is backend API only)"
 );
 
-// 6.3 Schema integrity
+// 6.3 Schema integrity & Dynamic Migration Parity
 const migDir = path.resolve(process.cwd(), 'database/migrations');
-const migrations = fs.readdirSync(migDir).filter(f => f.endsWith('.sql'));
-assert(migrations.length >= 42, `At least 42 migrations exist (found: ${migrations.length})`);
+assert(fs.existsSync(migDir), "database/migrations directory exists");
+const migrationFiles = fs.readdirSync(migDir).filter(f => f.endsWith('.sql')).sort();
+
+assert(migrationFiles.length >= 44, `Authoritative migrations count is at least 44 including F32 (found: ${migrationFiles.length})`);
+
+// Validate strict consecutive sequence without gaps or duplicates
+const seenNums = new Set();
+let isSequenceValid = true;
+let duplicateFound = false;
+
+for (let i = 0; i < migrationFiles.length; i++) {
+  const match = migrationFiles[i].match(/^(\d{3})_/);
+  if (!match) {
+    isSequenceValid = false;
+    break;
+  }
+  const num = parseInt(match[1], 10);
+  if (num !== i + 1) {
+    isSequenceValid = false;
+  }
+  if (seenNums.has(num)) {
+    duplicateFound = true;
+  }
+  seenNums.add(num);
+}
+
+assert(isSequenceValid, "Migration sequence is unbroken and strictly consecutive starting at 001");
+assert(!duplicateFound, "Migration sequence contains zero duplicate numeric prefixes");
+
+const firstMatch = migrationFiles[0].match(/^(\d+)/);
+const latestMatch = migrationFiles[migrationFiles.length - 1].match(/^(\d+)/);
+const firstNum = firstMatch ? firstMatch[1] : '001';
+const latestNum = latestMatch ? latestMatch[1] : '044';
+
+assert(firstNum === '001', "First migration prefix is 001");
+assert(
+  parseInt(latestNum, 10) === migrationFiles.length,
+  `Latest migration number (${latestNum}) matches total migration count (${migrationFiles.length})`
+);
 
 const freshInstallPath = path.resolve(process.cwd(), 'database/fresh-install.sql');
+assert(fs.existsSync(freshInstallPath), "database/fresh-install.sql exists");
 const freshInstallContent = fs.readFileSync(freshInstallPath, 'utf8');
+
+// Strict dynamic range match in fresh-install.sql header
+const expectedHeaderRegex = new RegExp(`Generated from migrations\\s+${firstNum}[–-]${latestNum}`, 'i');
 assert(
-  freshInstallContent.includes("Generated from migrations 001-") || freshInstallContent.includes("Generated from migrations 001–"),
-  "database/fresh-install.sql canonical migration range starts from 001"
+  expectedHeaderRegex.test(freshInstallContent),
+  `fresh-install.sql header matches exact dynamic migration range: ${firstNum}-${latestNum}`
 );
+
+const headerRangeMatch = freshInstallContent.match(/Generated from migrations\s+(\d+)[–-](\d+)/i);
+assert(headerRangeMatch !== null, "fresh-install.sql contains 'Generated from migrations' header");
+const headerEnd = headerRangeMatch ? headerRangeMatch[2] : null;
+assert(
+  headerEnd === latestNum,
+  `fresh-install.sql header range end (${headerEnd}) exactly matches latest migration number (${latestNum})`
+);
+
+// Schema migrations history parity in fresh-install.sql
+const insertMatch = freshInstallContent.match(/INSERT\s+INTO\s+schema_migrations\s*\([^)]*\)\s*VALUES\s*([\s\S]*?);/i);
+assert(insertMatch !== null, "fresh-install.sql contains INSERT INTO schema_migrations block");
+
+const historyEntries = [];
+if (insertMatch) {
+  const valuesBlock = insertMatch[1];
+  const rowMatches = valuesBlock.matchAll(/\(\s*'([^']+)'\s*,/g);
+  for (const m of rowMatches) {
+    historyEntries.push(m[1]);
+  }
+}
+
+assert(
+  historyEntries.length === migrationFiles.length,
+  `History entry count in fresh-install (${historyEntries.length}) exactly matches migration file count (${migrationFiles.length})`
+);
+
+const historySet = new Set(historyEntries);
+const missingEntries = migrationFiles.filter(f => !historySet.has(f));
+assert(
+  missingEntries.length === 0,
+  `All migration files are present in fresh-install schema_migrations history (missing: ${missingEntries.join(', ')})`
+);
+
+assert(
+  historySet.has('042_add_member_appointment_lifecycle_actor_attribution.sql'),
+  "042_add_member_appointment_lifecycle_actor_attribution.sql is explicitly recorded in schema_migrations history"
+);
+
+// Self-test: sequence validator detects gaps and duplicates properly
+function testSequenceCheck(files) {
+  const seen = new Set();
+  for (let i = 0; i < files.length; i++) {
+    const m = files[i].match(/^(\d{3})_/);
+    if (!m) return false;
+    const n = parseInt(m[1], 10);
+    if (n !== i + 1 || seen.has(n)) return false;
+    seen.add(n);
+  }
+  return true;
+}
+assert(testSequenceCheck(['001_a.sql', '002_b.sql', '003_c.sql']) === true, "Self-test: sequence validator passes on valid sequence");
+assert(testSequenceCheck(['001_a.sql', '003_c.sql']) === false, "Self-test: sequence validator fails on gap");
+assert(testSequenceCheck(['001_a.sql', '001_dup.sql']) === false, "Self-test: sequence validator fails on duplicate");
 
 // 6.4 DECISIONS.md contains F.25B entry
 const decisionsPath = path.resolve(process.cwd(), 'DECISIONS.md');

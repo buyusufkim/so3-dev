@@ -31,9 +31,40 @@ const indexPath = path.resolve(process.cwd(), 'api/index.php');
 assert(fs.existsSync(indexPath), "api/index.php exists");
 const indexContent = fs.readFileSync(indexPath, 'utf8');
 
+// Deterministic balanced-brace block extractor
+function extractRouteBlock(content, routePattern) {
+  const startIndex = typeof routePattern === 'string'
+    ? content.indexOf(routePattern)
+    : content.search(routePattern);
+  if (startIndex === -1) return null;
+  const openBrace = content.indexOf('{', startIndex);
+  if (openBrace === -1) return null;
+
+  let depth = 1;
+  let i = openBrace + 1;
+  while (i < content.length && depth > 0) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+  return content.slice(startIndex, i);
+}
+
 assert(
   indexContent.includes("$requestUri === '/api/member/training-program' && $method === 'GET'"),
   "api/index.php registers canonical GET /api/member/training-program endpoint"
+);
+
+const tpRouteBlock = extractRouteBlock(indexContent, "$requestUri === '/api/member/training-program'");
+assert(tpRouteBlock !== null, "Training program route block successfully isolated from api/index.php");
+assert(
+  tpRouteBlock.includes("getTrainingPrograms()"),
+  "Training program route invokes MemberPortalController->getTrainingPrograms()"
+);
+assert(
+  !/\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(tpRouteBlock),
+  "No mutation method (POST/PATCH/DELETE/PUT) allowed in member training program route block"
 );
 
 const controllerPath = path.resolve(process.cwd(), 'api/controllers/MemberPortalController.php');
@@ -63,13 +94,54 @@ assert(
   "Method executes dedicated queries for programs, days, and exercises"
 );
 
+// Deterministic extractor for all loop blocks using balanced braces
+function extractAllLoopBlocks(content, keyword = 'foreach') {
+  const blocks = [];
+  let pos = 0;
+  while (true) {
+    const loopIdx = content.indexOf(keyword, pos);
+    if (loopIdx === -1) break;
+    const openBrace = content.indexOf('{', loopIdx);
+    if (openBrace === -1) break;
+    let depth = 1;
+    let i = openBrace + 1;
+    while (i < content.length && depth > 0) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') depth--;
+      i++;
+    }
+    if (depth === 0) {
+      blocks.push(content.slice(loopIdx, i));
+      pos = i;
+    } else {
+      pos = openBrace + 1;
+    }
+  }
+  return blocks;
+}
+
+// Self-test: nested if inside foreach is captured and queries detected
+const mockNestedForeach = `
+foreach ($days as $day) {
+    if ($condition) {
+        $db->query("SELECT 1");
+    }
+}
+`;
+const mockExtractedLoops = extractAllLoopBlocks(mockNestedForeach, 'foreach');
+assert(
+  mockExtractedLoops.length === 1 && mockExtractedLoops[0].includes('->query('),
+  "Self-test: extractAllLoopBlocks captures queries nested inside inner if blocks"
+);
+
 // Verify no queries inside foreach loops
-const loopMatches = getTpBody.match(/foreach\s*\([^{]+\)\s*\{([^}]+)\}/g) || [];
-for (let i = 0; i < loopMatches.length; i++) {
-  const loopBody = loopMatches[i];
+const loopBlocks = extractAllLoopBlocks(getTpBody, 'foreach');
+assert(loopBlocks.length > 0, `Discovered ${loopBlocks.length} foreach loops in getTrainingPrograms`);
+for (let i = 0; i < loopBlocks.length; i++) {
+  const loopBody = loopBlocks[i];
   assert(
     !loopBody.includes('->prepare(') && !loopBody.includes('->query('),
-    `Foreach loop ${i + 1} does not execute database queries (N+1 free)`
+    `Foreach loop ${i + 1} does not execute database queries (N+1 free, nested-brace safe)`
   );
 }
 
