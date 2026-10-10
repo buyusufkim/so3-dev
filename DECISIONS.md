@@ -717,6 +717,17 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * day accordion & accessibility: `ProgramDaySection` converted from static card to accessible interactive accordion; header uses real `<button type="button">` with `min-h-[44px]` touch target, `aria-expanded={isOpen}`, `aria-controls={contentId}`, and animated `ChevronDown` rotation indicator; exercise count remains visible in all states; content is only rendered when open; empty days are preserved and expandable inside accordion; default open expands the first day with exercises (or first day if all days are empty) per program without cross-program state collisions
 * empty program corrective: replaced flawed `!hasAnyExercises && !hasDays` condition with `!hasAnyExercises`; programs with days defined but zero exercises total now display `"Bu programa henüz egzersiz eklenmemiş."` while keeping the day cards visible; programs with unassigned exercises are not considered empty
 
+## F.33C — Member Dashboard Program Summary
+* dashboard compact program summaries: removed long repetitive exercise tables, sets, repetitions, duration, and rest metrics from `MemberDashboardPage.tsx`; replaced with compact program summary cards displaying title, trainer, defined day count, total exercise count, date range, and direct link to `/uye/programim`
+* `/uye/programim` as canonical detail surface: all granular program details, accordion day views, and exercise instructions are centralized exclusively in `/uye/programim`; dashboard acts strictly as an operational summary overview
+* total exercise count with unassigned bucket: total exercises calculated as `program.days.reduce((sum, day) => sum + day.exercises.length, 0) + program.unassigned_exercises.length`, accurately accounting for unassigned/legacy exercises without arbitrarily distributing them across days
+* no duplicate exercise listing: eliminated duplicate exercise rendering between dashboard and program details page, reducing dashboard cognitive load and bundle overhead
+* no new API requests: reused existing `memberApiClient.getTrainingPrograms(signal)` call loaded concurrently via `Promise.all` alongside overview, packages, and appointments; zero additional endpoints or fetches introduced
+* no member mutations: read-only presentation; zero member mutation endpoints, workout completion toggles, or logging inputs
+* appointment and package regressions preserved: zero modifications to member overview, session packages, appointment cancellation, or appointment rescheduling logic
+* cleanup of temporary helpers: removed temporary F.33A `getProgramExercises(program)` flattening helper and unused `MemberExercise` type import from `MemberDashboardPage.tsx`
+
+
 
 
 

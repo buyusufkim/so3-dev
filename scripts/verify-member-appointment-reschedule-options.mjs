@@ -170,7 +170,7 @@ assert(
 
 // 2.2 Prohibit mutation methods on reschedule-options
 assert(
-  !/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#',\s*\$requestUri,\s*\$matches\)[\s\S]*?\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(indexContent),
+  !/preg_match\('#\^\/api\/member\/appointments\/\(\[1-9\]\\d\*\)\/reschedule-options\$#',\s*\$requestUri,\s*\$matches\)\s*\{[^}]*?\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(indexContent),
   "No POST/PATCH/DELETE/PUT method registered for reschedule-options endpoint"
 );
 

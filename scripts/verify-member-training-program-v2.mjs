@@ -467,8 +467,10 @@ const dashboardContent = fs.readFileSync(dashboardPath, 'utf8');
 
 assert(
   dashboardContent.includes('getProgramExercises') ||
-  dashboardContent.includes('prog.days.flatMap'),
-  "Dashboard uses compatibility flattening helper without redesigning UI"
+  dashboardContent.includes('prog.days.flatMap') ||
+  dashboardContent.includes('prog.days.reduce') ||
+  dashboardContent.includes('prog.days.length'),
+  "Dashboard uses day structure without client-side sort"
 );
 
 assert(

@@ -7,17 +7,17 @@ import {
   MemberSessionPackage, 
   MemberAppointmentsData, 
   MemberTrainingProgram,
-  MemberExercise,
   MemberAppointment,
   MemberAppointmentRescheduleOptions,
   MemberRescheduleSlot
 } from '../api/validators';
 
-function getProgramExercises(program: MemberTrainingProgram): MemberExercise[] {
-  return [
-    ...program.days.flatMap(day => day.exercises),
-    ...program.unassigned_exercises
-  ];
+function formatProgramDate(dateStr: string | null | undefined): string {
+  if (!dateStr || typeof dateStr !== 'string') return '—';
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (!match) return '—';
+  const [, year, month, day] = match;
+  return `${day}.${month}.${year}`;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -681,67 +681,50 @@ export function MemberDashboardPage() {
             Aktif antrenman programın bulunmuyor.
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {programs.map(prog => {
-              const programExercises = getProgramExercises(prog);
+              const dayCount = prog.days.length;
+              const totalExercises = prog.days.reduce(
+                (sum, day) => sum + day.exercises.length,
+                0
+              ) + prog.unassigned_exercises.length;
+              const hasDates = Boolean(prog.start_date || prog.end_date);
+              const dateText = hasDates
+                ? `${formatProgramDate(prog.start_date)} – ${formatProgramDate(prog.end_date)}`
+                : '—';
+
               return (
-              <div key={prog.id} className="bg-[#121212] border border-white/10 rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-white/5 flex justify-between items-start gap-4">
-                  <div>
-                    <h3 className="text-white font-medium text-lg mb-1">{prog.title}</h3>
-                    <div className="text-white/50 text-sm">
-                      {prog.trainer ? prog.trainer.name : 'Antrenörsüz'} • {formatDate(prog.start_date)} - {formatDate(prog.end_date)}
+                <div key={prog.id} className="bg-[#121212] border border-white/10 rounded-2xl p-5 sm:p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <h3 className="text-white font-medium text-lg">{prog.title}</h3>
+                      <div className="text-white/60 text-sm">
+                        Antrenör: {prog.trainer ? prog.trainer.name : 'Antrenör atanmamış'}
+                      </div>
+                      <div className="text-white/50 text-xs sm:text-sm flex flex-wrap items-center gap-x-2">
+                        <span>{dayCount} antrenman günü</span>
+                        <span>·</span>
+                        <span>{totalExercises} egzersiz</span>
+                        {hasDates && (
+                          <>
+                            <span>·</span>
+                            <span>{dateText}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 pt-2 sm:pt-0">
+                      <Link
+                        to="/uye/programim"
+                        className="min-h-[44px] inline-flex items-center justify-center gap-1 px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-xl border border-white/10 hover:border-white/20 transition-colors"
+                      >
+                        Programımı Gör →
+                      </Link>
                     </div>
                   </div>
                 </div>
-                
-                {programExercises.length > 0 ? (
-                  <div className="divide-y divide-white/5">
-                    {programExercises.map(ex => (
-                      <div key={ex.id} className="p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:items-center">
-                        <div className="flex-1">
-                          <div className="text-white font-medium mb-1">{ex.exercise_name}</div>
-                          {ex.instructions && (
-                            <div className="text-white/50 text-sm">{ex.instructions}</div>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-3 sm:justify-end shrink-0">
-                          {ex.sets !== null && (
-                            <div className="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-center min-w-16">
-                              <div className="text-[10px] text-white/40 uppercase mb-0.5">Set</div>
-                              <div className="text-white font-medium text-sm">{ex.sets}</div>
-                            </div>
-                          )}
-                          {ex.repetitions && (
-                            <div className="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-center min-w-16">
-                              <div className="text-[10px] text-white/40 uppercase mb-0.5">Tekrar</div>
-                              <div className="text-white font-medium text-sm">{ex.repetitions}</div>
-                            </div>
-                          )}
-                          {ex.duration_seconds !== null && (
-                            <div className="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-center min-w-16">
-                              <div className="text-[10px] text-white/40 uppercase mb-0.5">Süre</div>
-                              <div className="text-white font-medium text-sm">{ex.duration_seconds}s</div>
-                            </div>
-                          )}
-                          {ex.rest_seconds !== null && (
-                            <div className="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-center min-w-16">
-                              <div className="text-[10px] text-white/40 uppercase mb-0.5">Dinlenme</div>
-                              <div className="text-white font-medium text-sm">{ex.rest_seconds}s</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-5 text-center text-white/40 text-sm">
-                    Bu programa henüz egzersiz eklenmemiş.
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
         )}
       </div>
