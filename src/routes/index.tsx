@@ -50,6 +50,7 @@ const MemberChangePasswordPage = lazy(() => import("../member/pages/MemberChange
 
 const MemberDashboardPage = lazy(() => import("../member/pages/MemberDashboardPage").then(m => ({ default: m.MemberDashboardPage })));
 const MemberAppointmentBookingPage = lazy(() => import("../member/pages/MemberAppointmentBookingPage").then(m => ({ default: m.MemberAppointmentBookingPage })));
+const MemberTrainingProgramPage = lazy(() => import("../member/pages/MemberTrainingProgramPage").then(m => ({ default: m.MemberTrainingProgramPage })));
 const MemberProgressPage = lazy(() => import("../member/pages/MemberProgressPage").then(m => ({ default: m.MemberProgressPage })));
 const MemberCommunityPage = lazy(() => import("../member/pages/MemberCommunityPage").then(m => ({ default: m.MemberCommunityPage })));
 
@@ -121,6 +122,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <MemberSuspense><MemberDashboardPage /></MemberSuspense>,
+      },
+      {
+        path: "programim",
+        element: <MemberSuspense><MemberTrainingProgramPage /></MemberSuspense>,
       },
       {
         path: "randevu-al",

@@ -93,7 +93,8 @@
     "verify:community-updates-foundation": "node scripts/verify-community-updates-foundation.mjs",
     "verify:community-updates-admin-ui": "node scripts/verify-community-updates-admin-ui.mjs",
     "verify:member-community-feed": "node scripts/verify-member-community-feed.mjs",
-    "verify:member-training-program-v2": "node scripts/verify-member-training-program-v2.mjs"
+    "verify:member-training-program-v2": "node scripts/verify-member-training-program-v2.mjs",
+    "verify:member-training-program-ui": "node scripts/verify-member-training-program-ui.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

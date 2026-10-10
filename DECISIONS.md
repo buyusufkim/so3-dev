@@ -701,6 +701,21 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * temporary dashboard compatibility: `MemberDashboardPage.tsx` flattens `days.flatMap(d => d.exercises)` and `unassigned_exercises` via temporary local helper `getProgramExercises()` preserving backend order without client-side `.sort()` or UI redesign until F.33B/F.33C
 * zero mutations & workout logging: read-only foundation with strictly zero member-initiated mutations, completion checkboxes, rep/weight logging, RPE, or workout tracking
 
+## F.33B — Member Training Program UI
+* route & layout: registered authenticated member route `/uye/programim` under `/uye` layout via lazy-loaded `MemberTrainingProgramPage.tsx` wrapped in `MemberSuspense`
+* navigation: "Programım" link added to desktop (`hidden sm:flex`) and mobile (`sm:hidden`) member navigation within `MemberLayout.tsx`, guarded by `isAuthenticated && identity && !identity.account.must_change_password`; link adheres to `min-h-[44px]` touch target contract; layout strictly preserves zero references to admin internals
+* canonical client & read model: exclusively consumes `memberApiClient.getTrainingPrograms(controller.signal)` which targets `GET /api/member/training-program` and validates via `validateTrainingPrograms`; strictly zero raw `fetch` or direct admin client calls; sends zero query parameters
+* backend ordering & integrity: renders backend-provided canonical ordering directly (`programs.map`, `prog.days.map`, `day.exercises.map`) without client-side `.sort()`, `.toSorted()`, or `localeCompare()`
+* day-based grouped presentation: presents programs with title, trainer attribution (`trainer.name`, `trainer.role_title` or fallback `'Antrenörsüz'`), and dates (`formatDate(prog.start_date)} - {formatDate(prog.end_date)}`); groups exercises under structured day cards (`day.title`); renders dedicated empty day state (`"Bu güne henüz egzersiz eklenmemiş."`) when days contain zero exercises
+* unassigned / legacy exercises section: renders a dedicated section with amber accent styling for `prog.unassigned_exercises` (`"Gün Atanmamış Egzersizler"`), ensuring no unassigned or legacy exercises are hidden
+* exercise detail cards: renders `exercise_name`, `instructions` (multiline whitespace-pre-wrap), and structured metric badges for `sets`, `repetitions`, `duration_seconds` (`{s}`), and `rest_seconds` (`{s}`)
+* deterministic date formatting: string-based regex parser `formatDate` (`DD.MM.YYYY`), failing closed to em dash (`"—"`); strictly zero `new Date()`, `Date.parse()`, `toLocaleString()`, or `Intl.DateTimeFormat`
+* lifecycle & race safety: fetch lifecycle protected by `AbortController`, request generation tracking (`requestGenerationRef`), and mount guard (`isMountedRef`); in-flight requests cleanly aborted on unmount; zero background polling or intervals
+* bounded error handling & retry: user-facing errors bounded to Turkish copy `"Antrenman programları yüklenemedi."`; manual retry button `"Tekrar Dene"` with `min-h-[44px]` touch target
+* empty states: canonical empty state copy `"Aktif antrenman programın bulunmuyor."` rendered when program list is empty; `"Bu programa henüz egzersiz eklenmemiş."` rendered when an active program contains no exercises
+* strict read-only anti-scope: strictly zero completion checkboxes, rep/weight logging inputs, workout tracking, notes fields, or member mutation requests (POST/PATCH/PUT/DELETE)
+
+
 
 
 
