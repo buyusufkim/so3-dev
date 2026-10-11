@@ -1732,3 +1732,135 @@ export function validateCommunityUpdates(data: unknown): MemberCommunityUpdate[]
   });
 }
 
+export type MemberProfileAccount = {
+  username: string;
+  status: string;
+};
+
+export type MemberProfileData = {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+};
+
+export type MemberProfileResponse = {
+  account: MemberProfileAccount;
+  profile: MemberProfileData;
+};
+
+export function validateMemberProfile(data: unknown): MemberProfileResponse {
+  if (!isRecord(data)) {
+    throw new Error('Member profile data must be an object');
+  }
+
+  const allowedTopKeys = ['account', 'profile'];
+  const topKeys = Object.keys(data);
+
+  for (const key of topKeys) {
+    if (!allowedTopKeys.includes(key)) {
+      throw new Error(`Unexpected top-level key "${key}" in member profile`);
+    }
+  }
+
+  for (const reqKey of allowedTopKeys) {
+    if (!(reqKey in data)) {
+      throw new Error(`Missing required top-level key "${reqKey}" in member profile`);
+    }
+  }
+
+  if (!isRecord(data.account)) {
+    throw new Error('account must be an object in member profile');
+  }
+
+  const allowedAccountKeys = ['username', 'status'];
+  const accountKeys = Object.keys(data.account);
+
+  for (const key of accountKeys) {
+    if (!allowedAccountKeys.includes(key)) {
+      throw new Error(`Unexpected key "${key}" in member profile account`);
+    }
+  }
+
+  for (const reqKey of allowedAccountKeys) {
+    if (!(reqKey in data.account)) {
+      throw new Error(`Missing required key "${reqKey}" in member profile account`);
+    }
+  }
+
+  if (typeof data.account.username !== 'string' || data.account.username.trim().length === 0) {
+    throw new Error('account.username must be a non-empty string');
+  }
+
+  if (typeof data.account.status !== 'string' || data.account.status.trim().length === 0) {
+    throw new Error('account.status must be a non-empty string');
+  }
+
+  if (!isRecord(data.profile)) {
+    throw new Error('profile must be an object in member profile');
+  }
+
+  const allowedProfileKeys = [
+    'first_name',
+    'last_name',
+    'phone',
+    'email',
+    'emergency_contact_name',
+    'emergency_contact_phone'
+  ];
+  const profileKeys = Object.keys(data.profile);
+
+  for (const key of profileKeys) {
+    if (!allowedProfileKeys.includes(key)) {
+      throw new Error(`Unexpected key "${key}" in member profile data`);
+    }
+  }
+
+  for (const reqKey of allowedProfileKeys) {
+    if (!(reqKey in data.profile)) {
+      throw new Error(`Missing required key "${reqKey}" in member profile data`);
+    }
+  }
+
+  if (typeof data.profile.first_name !== 'string' || data.profile.first_name.trim().length === 0) {
+    throw new Error('profile.first_name must be a non-empty string');
+  }
+
+  if (typeof data.profile.last_name !== 'string' || data.profile.last_name.trim().length === 0) {
+    throw new Error('profile.last_name must be a non-empty string');
+  }
+
+  if (typeof data.profile.phone !== 'string' || data.profile.phone.trim().length === 0) {
+    throw new Error('profile.phone must be a non-empty string');
+  }
+
+  if (data.profile.email !== null && typeof data.profile.email !== 'string') {
+    throw new Error('profile.email must be a string or null');
+  }
+
+  if (data.profile.emergency_contact_name !== null && typeof data.profile.emergency_contact_name !== 'string') {
+    throw new Error('profile.emergency_contact_name must be a string or null');
+  }
+
+  if (data.profile.emergency_contact_phone !== null && typeof data.profile.emergency_contact_phone !== 'string') {
+    throw new Error('profile.emergency_contact_phone must be a string or null');
+  }
+
+  return {
+    account: {
+      username: data.account.username,
+      status: data.account.status
+    },
+    profile: {
+      first_name: data.profile.first_name,
+      last_name: data.profile.last_name,
+      phone: data.profile.phone,
+      email: data.profile.email,
+      emergency_contact_name: data.profile.emergency_contact_name,
+      emergency_contact_phone: data.profile.emergency_contact_phone
+    }
+  };
+}
+

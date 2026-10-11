@@ -734,6 +734,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * nested-brace safe loop inspection: hardened N+1 query inspection in `verify-member-training-program-v2.mjs` using balanced-brace loop extractor (`extractAllLoopBlocks`); prevents query hiding inside nested inner conditional blocks within foreach loops
 * zero product code or schema modifications: hardened verification contracts exclusively within regression test suite; left product code, endpoints, database migrations, and UI components completely intact
 
+## F.34A — Member Account & Profile Foundation
+* salt-okunur member profile: created canonical read-only endpoint `GET /api/member/profile` returning authenticated member's account and profile data without mutation capabilities
+* session-based ownership: identity strictly bound to server session `$_SESSION['member_id']` and `$_SESSION['member_account_id']`; strictly zero external ID inputs accepted from query, body, or headers; query parameters rejected with 422 `VALIDATION_ERROR`
+* explicit allowlisted fields: explicit SELECT statement querying solely `username`, `status`, `first_name`, `last_name`, `phone`, `email`, `emergency_contact_name`, `emergency_contact_phone`; strictly zero `SELECT *`; sensitive internal fields (`password_hash`, `auth_version`, `last_login_ip`, `notes`, `consent_given_at`, `trainer_id`, timestamps, primary keys, and UUIDs) strictly omitted
+* profile/account separation: canonical response structure strictly separates `account` (`username`, `status`) and `profile` (`first_name`, `last_name`, `phone`, `email`, `emergency_contact_name`, `emergency_contact_phone`); nullable fields preserved as null
+* active & security guards: enforced `MemberAuthMiddleware::handle()`, `deleted_at IS NULL` check, active status verification, and `must_change_password` check (returns 403 `PASSWORD_CHANGE_REQUIRED` if password change pending)
+* strict frontend validator: implemented `validateMemberProfile` in `src/member/api/validators.ts` enforcing exact key validation, missing/extra key rejection, nullable validation, and zero type assertion bypasses (`as MemberProfileResponse`)
+* member api client: extended `memberApiClient` in `src/member/api/client.ts` with `getProfile(signal?: AbortSignal)` consuming `GET /api/member/profile` and validating through `validateMemberProfile`
+* zero mutations & schema migrations: zero profile mutation endpoints (POST/PATCH/PUT/DELETE) created; zero database schema migrations added; existing 44 migrations preserved unchanged
+* foundation for F.34B UI & F.34C self-service: established secure, validated backend contract and client foundation ahead of F.34B Member Profile UI and F.34C controlled self-service updates
+
+
 
 
 

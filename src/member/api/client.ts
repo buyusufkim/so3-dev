@@ -27,7 +27,9 @@ import {
   MemberMeasurementProgressResponse,
   validateMeasurementProgress,
   MemberCommunityUpdate,
-  validateCommunityUpdates
+  validateCommunityUpdates,
+  MemberProfileResponse,
+  validateMemberProfile
 } from './validators';
 
 export class MemberApiError extends Error {
@@ -285,5 +287,15 @@ export const memberApiClient = {
       signal
     });
     return validateCommunityUpdates(data);
+  },
+
+  async getProfile(
+    signal?: AbortSignal
+  ): Promise<MemberProfileResponse> {
+    const data = await request('/api/member/profile', {
+      method: 'GET',
+      signal
+    });
+    return validateMemberProfile(data);
   }
 };

@@ -1219,6 +1219,11 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
 
 
     // Member Portal
+    if ($requestUri === '/api/member/profile' && $method === 'GET') {
+        require_once __DIR__ . '/controllers/MemberProfileController.php';
+        (new \Controllers\MemberProfileController())->getProfile();
+        $matched = true;
+    }
     if ($requestUri === '/api/member/overview' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';
         (new \Controllers\MemberPortalController())->getOverview();
