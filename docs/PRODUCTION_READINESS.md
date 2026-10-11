@@ -141,8 +141,11 @@ Staging ortamında doğrulanacak kritik akışlar:
 4. **Dosya Güncellemesi**:
    - Derlenmiş `dist/` dosyaları ve `api/` dizini sunucuya yüklenmeli.
    - `api/config/config.local.php` ve `uploads/` dizini korunmalı.
-5. **Staging Smoke Testi**:
-   - `SO3_RUNTIME_BASE_URL="https://staging.so3pt.com.tr" npm run verify:deployment-runtime` çalıştırılmalı.
+5. **Staging Smoke Testi (F.35A Güvenlik Düzeltmesi)**:
+   - `SO3_RUNTIME_BASE_URL="https://staging.alanadiniz.com" npm run verify:deployment-runtime` çalıştırılmalı.
+   - **Kesin Production Yasağı**: `so3pt.com.tr` ve `www.so3pt.com.tr` origin'leri kesin olarak engellenmiştir; hiçbir override bayrağı (`SO3_RUNTIME_ALLOW_PRODUCTION`) bulunmaz.
+   - **Timeout Garantisi**: 8 saniyelik timeout, hem HTTP el sıkışmasını hem de yanıt gövdesinin (body) okunmasını bütünüyle kapsar.
+   - **HTML Doğrulama**: Yanıt gövdesinin gerçekten HTML dokümanı olduğu ve HTTP status 200 döndüğü açık parantez ve durum kontrolleriyle garanti edilir (404/500 HTML veya 200 JSON durumları FAIL üretir).
 
 ---
 
@@ -155,7 +158,19 @@ Olası bir dağıtım arızasında:
 
 ---
 
-## 9. Bilinen Kısıtlar ve Blocker Durumları
+## 9. Desteklenmeyen Güvenlik Garantileri ve Ağ Kısıtlamaları
+
+1. **DNS ve Ağ Katmanı Kısıtlamaları**:
+   - Node.js fetch istemcisi yerel DNS çözümlemesi yapar. Eğer operatörün sağladığı staging domain'i DNS düzeyinde (CNAME veya A kaydı ile) canlı production IP adresine çözümleniyorsa veya sunucu içi reverse proxy kurallarıyla production'a yönlendiriliyorsa, client-side harness bunu IP pinning yapmadan tespit edemez.
+   - Bu fazda IP pinning veya TLS sertifika parmak izi sabitleme (pinning) desteklenmemektedir; operatör staging DNS kaydının ve sunucu altyapısının production ortamından ve canlı veritabanından tamamen izole olduğunu garanti etmelidir.
+   - Cross-origin yönlendirmeler engellenmiş olsa da, aynı origin altındaki iç yönlendirmelerin production servislerine yönlenmemesi operatörün sorumluluğundadır.
+2. **Staging Hedefi Yetkilendirme İlkesi**:
+   - Bir hostname'in içinde yalnızca `staging` kelimesinin geçmesi o hedefin güvenli veya yetkili olduğu anlamına gelmez.
+   - Operatör `SO3_RUNTIME_BASE_URL` değişkenini bilinçli olarak yalnızca kendine ait, izole edilmiş test ortamına ayarlamalıdır.
+
+---
+
+## 10. Bilinen Kısıtlar ve Blocker Durumları
 
 | Başlık | Durum | Açıklama / Etki |
 | :--- | :--- | :--- |
@@ -166,7 +181,7 @@ Olası bir dağıtım arızasında:
 
 ---
 
-## 10. Canlı Yayına Hazırlık Değerlendirmesi
+## 11. Canlı Yayına Hazırlık Değerlendirmesi
 
 - Statik Kod ve Mimari Hazırlığı: **TAMAMLANDI (PASS)**
 - Canlı / Staging Ortam Doğrulaması: **BEKLEMEDE (BLOCKED - Staging URL ve Altyapı Bekleniyor)**

@@ -62,12 +62,17 @@ assert(
   "Runtime script enforces HTTPS protocol (allowing HTTP only for localhost if explicit)"
 );
 
-// 2.4 Production host protection
+// 2.4 Production host protection — Unconditional block with zero override
 assert(
   runtimeContent.includes("so3pt.com.tr") &&
-  runtimeContent.includes("ALLOW_PRODUCTION") &&
-  runtimeContent.includes("blocked by default"),
-  "Runtime script blocks production host so3pt.com.tr by default without explicit override"
+  runtimeContent.includes("www.so3pt.com.tr") &&
+  !runtimeContent.includes("ALLOW_PRODUCTION") &&
+  !runtimeContent.includes("SO3_RUNTIME_ALLOW_PRODUCTION"),
+  "Runtime script strictly prohibits production hosts with ZERO override mechanism (ALLOW_PRODUCTION removed)"
+);
+assert(
+  runtimeContent.includes("normalizedHostname"),
+  "Runtime script normalizes target hostname to prevent case or trailing-dot bypasses"
 );
 
 // 2.5 Cross-origin redirect protection
@@ -78,12 +83,13 @@ assert(
   "Runtime script refuses to follow automatic redirects and rejects cross-origin redirects"
 );
 
-// 2.6 Timeout configured
+// 2.6 Timeout configured across connection and body read stream
 assert(
   runtimeContent.includes("AbortController") &&
   runtimeContent.includes("setTimeout") &&
-  runtimeContent.includes("clearTimeout"),
-  "Runtime script bounds each request with an explicit timeout"
+  runtimeContent.includes("clearTimeout") &&
+  runtimeContent.includes("finally"),
+  "Runtime script bounds each request with an explicit timeout cleaned up in finally covering stream read"
 );
 
 // 2.7 Zero secret or credential logging
@@ -93,6 +99,17 @@ assert(
   !runtimeContent.includes("console.log(cookie") &&
   !runtimeContent.includes("console.log(token"),
   "Runtime script strictly avoids logging raw headers, cookies, or secrets"
+);
+
+// 2.8 Homepage & SPA HTML check precedence fix
+assert(
+  !runtimeContent.includes("res.status === 200 && res.body.includes('<!DOCTYPE html>') || res.body.includes('<html')"),
+  "Runtime script eliminates operator precedence bug on HTML response validation"
+);
+assert(
+  runtimeContent.includes("isSuccessfulHtmlResponse") ||
+  runtimeContent.includes("res.status === 200 && ("),
+  "Runtime script enforces status 200 and valid HTML document structure"
 );
 
 console.log("\n=== 3. Read-Only HTTP Checks Validation ===");
@@ -197,13 +214,21 @@ assert(
 // 4.7 Known Blockers & Audit Limitations
 assert(
   docContent.includes("BLOCKED") &&
-  docContent.includes("F23B") || docContent.includes("Staging Sunucusu"),
+  (docContent.includes("F23B") || docContent.includes("Staging Sunucusu")),
   "Documentation explicitly flags Staging Sunucusu as BLOCKED"
 );
 assert(
   docContent.includes("F.34C") &&
   docContent.includes("audit_logs"),
   "Documentation records F.34C member profile audit log limitation for review"
+);
+
+// 4.8 Unsupported Security Guarantees & Network Boundaries
+assert(
+  docContent.includes("Desteklenmeyen Güvenlik Garantileri") &&
+  docContent.includes("DNS ve Ağ Katmanı") &&
+  docContent.includes("IP pinning"),
+  "Documentation specifies DNS resolution and IP pinning network security boundaries"
 );
 
 console.log("\n=== 5. Algorithmic Simulation & Negative Fixture Self-Tests ===");
@@ -215,19 +240,38 @@ function validateTargetUrl(rawUrl) {
     if (u.search || u.hash) return { ok: false, reason: 'query_or_hash' };
     if (u.pathname !== '/' && u.pathname !== '') return { ok: false, reason: 'subpath' };
     if (u.protocol !== 'https:' && u.hostname !== 'localhost') return { ok: false, reason: 'non_https' };
+    
+    // Normalized production host check
+    const normalizedHost = (u.hostname || '').toLowerCase().replace(/\.$/, '').trim();
+    if (['so3pt.com.tr', 'www.so3pt.com.tr'].includes(normalizedHost)) {
+      return { ok: false, reason: 'production_host' };
+    }
+    
     return { ok: true, origin: u.origin };
   } catch {
     return { ok: false, reason: 'invalid_url' };
   }
 }
 
-assert(validateTargetUrl("https://staging.so3pt.com.tr").ok === true, "Sim: Clean HTTPS target valid");
-assert(validateTargetUrl("https://admin:pass@staging.so3pt.com.tr").reason === 'credentials', "Sim: Target with credentials rejected");
-assert(validateTargetUrl("http://staging.so3pt.com.tr").reason === 'non_https', "Sim: Remote HTTP target rejected");
-assert(validateTargetUrl("https://staging.so3pt.com.tr/sub/path").reason === 'subpath', "Sim: Subpath in target rejected");
-assert(validateTargetUrl("https://staging.so3pt.com.tr?token=xyz").reason === 'query_or_hash', "Sim: Query string in target rejected");
+assert(validateTargetUrl("https://staging.example.com").ok === true, "Sim: Clean HTTPS target valid");
+assert(validateTargetUrl("https://admin:pass@staging.example.com").reason === 'credentials', "Sim: Target with credentials rejected");
+assert(validateTargetUrl("http://staging.example.com").reason === 'non_https', "Sim: Remote HTTP target rejected");
+assert(validateTargetUrl("https://staging.example.com/sub/path").reason === 'subpath', "Sim: Subpath in target rejected");
+assert(validateTargetUrl("https://staging.example.com?token=xyz").reason === 'query_or_hash', "Sim: Query string in target rejected");
 
-// Sim 2: Cross-origin redirect detection
+// Sim 2: Absolute Production Host Prohibition & Normalization Invariants
+assert(validateTargetUrl("https://so3pt.com.tr").reason === 'production_host', "Sim: exact production host so3pt.com.tr blocked");
+assert(validateTargetUrl("https://www.so3pt.com.tr").reason === 'production_host', "Sim: exact production host www.so3pt.com.tr blocked");
+assert(validateTargetUrl("https://SO3PT.COM.TR").reason === 'production_host', "Sim: uppercase production host blocked");
+assert(validateTargetUrl("https://WWW.SO3PT.COM.TR:443").reason === 'production_host', "Sim: uppercase with port production host blocked");
+assert(validateTargetUrl("https://so3pt.com.tr.").reason === 'production_host', "Sim: trailing dot FQDN production host blocked");
+assert(validateTargetUrl("https://so3pt.com.tr:8443").reason === 'production_host', "Sim: custom port production host blocked");
+
+// Target cannot be authorized merely by substring 'staging'
+assert(validateTargetUrl("https://so3pt.com.tr?staging=true").reason === 'query_or_hash', "Sim: 'staging' query parameter rejected");
+assert(validateTargetUrl("https://so3pt.com.tr/staging").reason === 'subpath', "Sim: 'staging' subpath rejected");
+
+// Sim 3: Cross-origin redirect detection
 function checkRedirectSafety(status, locationHeader, currentOrigin) {
   if (![301, 302, 303, 307, 308].includes(status) || !locationHeader) return { safe: true };
   try {
@@ -241,8 +285,36 @@ function checkRedirectSafety(status, locationHeader, currentOrigin) {
   }
 }
 
-assert(checkRedirectSafety(302, "/login", "https://staging.so3pt.com.tr").safe === true, "Sim: Same-origin redirect permitted");
-assert(checkRedirectSafety(302, "https://evil.com/phish", "https://staging.so3pt.com.tr").safe === false, "Sim: Cross-origin redirect blocked");
+assert(checkRedirectSafety(302, "/login", "https://staging.example.com").safe === true, "Sim: Same-origin redirect permitted");
+assert(checkRedirectSafety(302, "https://evil.com/phish", "https://staging.example.com").safe === false, "Sim: Cross-origin redirect blocked");
+
+// Sim 4: HTML response validator negative tests
+function testHtmlValidator(res) {
+  if (!res || res.status !== 200 || !res.body || typeof res.body !== 'string') {
+    return false;
+  }
+  const trimmed = res.body.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return false;
+  }
+  const lower = trimmed.toLowerCase();
+  const hasDoctypeOrHtml = lower.includes('<!doctype html') || lower.includes('<html');
+  const hasClosingOrStructure = lower.includes('</html>') || lower.includes('<body') || lower.includes('<head');
+  return hasDoctypeOrHtml && hasClosingOrStructure;
+}
+
+// 404 + HTML -> FAIL
+assert(testHtmlValidator({ status: 404, body: "<!DOCTYPE html><html><body>Not Found</body></html>" }) === false, "Sim: 404 + HTML -> FAIL");
+// 500 + HTML -> FAIL
+assert(testHtmlValidator({ status: 500, body: "<!DOCTYPE html><html><body>Internal Server Error</body></html>" }) === false, "Sim: 500 + HTML -> FAIL");
+// 200 + JSON -> FAIL
+assert(testHtmlValidator({ status: 200, body: '{"error":null,"data":{"status":"ok"}}' }) === false, "Sim: 200 + JSON -> FAIL");
+// 200 + Plain text -> FAIL
+assert(testHtmlValidator({ status: 200, body: "OK text response" }) === false, "Sim: 200 + Plain text -> FAIL");
+// 200 + Malformed HTML (no document structure) -> FAIL
+assert(testHtmlValidator({ status: 200, body: "<span>Just a fragment</span>" }) === false, "Sim: 200 + Fragment -> FAIL");
+// 200 + HTML -> PASS
+assert(testHtmlValidator({ status: 200, body: "<!DOCTYPE html><html><head><title>SO3 PT</title></head><body><div id=\"root\"></div></body></html>" }) === true, "Sim: 200 + HTML -> PASS");
 
 console.log("\n=== 6. Anti-Scope & Scope Isolation ===");
 // Zero schema migrations added

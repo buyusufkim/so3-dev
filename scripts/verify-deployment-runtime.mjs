@@ -1,5 +1,5 @@
 /**
- * Deployment Runtime Smoke Test Harness (SO3 PT — F.35A)
+ * Deployment Runtime Smoke Test Harness (SO3 PT — F.35A Security Corrective)
  *
  * Verifies real HTTP deployment behavior in a safe, repeatable, and strictly
  * read-only manner against an explicitly provided, authorized staging target.
@@ -9,17 +9,17 @@
  * - If SO3_RUNTIME_BASE_URL is not set: Exits with code 3 (BLOCKED — runtime target not configured)
  * - Requires HTTPS protocol (unless localhost with SO3_RUNTIME_ALLOW_HTTP=true)
  * - Prohibits user credentials in target URL
- * - Blocks production hosts by default (so3pt.com.tr, www.so3pt.com.tr)
+ * - Unconditionally blocks production hosts (so3pt.com.tr, www.so3pt.com.tr) with zero override
  * - Default mode is strictly 'readonly' (SO3_RUNTIME_MODE)
  * - Prohibits cross-origin redirects
  * - Zero secret or sensitive header/cookie logging
- * - Read-only HTTP checks against actual route contracts
+ * - Timeout covers both request transmission and response body reading
+ * - Read-only HTTP checks against actual route contracts with fail-closed status verification
  */
 
 const ENV = process.env;
 const BASE_URL = ENV.SO3_RUNTIME_BASE_URL;
 const MODE = ENV.SO3_RUNTIME_MODE || 'readonly';
-const ALLOW_PRODUCTION = ENV.SO3_RUNTIME_ALLOW_PRODUCTION === 'true';
 const ALLOW_HTTP = ENV.SO3_RUNTIME_ALLOW_HTTP === 'true';
 
 // 1. Missing Target Guard — BLOCKED
@@ -59,17 +59,19 @@ if (parsedUrl.pathname !== '/' && parsedUrl.pathname !== '') {
 }
 
 // 3. Protocol Guard — HTTPS required
-const isLocalhost = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+const rawHostname = parsedUrl.hostname || '';
+const isLocalhost = rawHostname === 'localhost' || rawHostname === '127.0.0.1';
 if (parsedUrl.protocol !== 'https:' && !(isLocalhost && ALLOW_HTTP)) {
   console.error("❌ FAIL: Target URL must use HTTPS. (HTTP allowed only for localhost with SO3_RUNTIME_ALLOW_HTTP=true).");
   process.exit(2);
 }
 
-// 4. Production Host Guard
-const productionHosts = ['so3pt.com.tr', 'www.so3pt.com.tr'];
-if (productionHosts.includes(parsedUrl.hostname.toLowerCase()) && !ALLOW_PRODUCTION) {
-  console.error(`❌ FAIL: Execution against production host '${parsedUrl.hostname}' is blocked by default.`);
-  console.error("To override explicitly, set SO3_RUNTIME_ALLOW_PRODUCTION=true.");
+// 4. Production Host Guard — Strictly prohibited with zero override
+const normalizedHostname = rawHostname.toLowerCase().replace(/\.$/, '').trim();
+const blockedProductionHosts = ['so3pt.com.tr', 'www.so3pt.com.tr'];
+if (blockedProductionHosts.includes(normalizedHostname)) {
+  console.error(`❌ FAIL: Execution against production host '${rawHostname}' is strictly prohibited in this phase.`);
+  console.error("Production testing is not permitted. Runtime smoke tests require an isolated staging environment.");
   process.exit(2);
 }
 
@@ -90,6 +92,25 @@ const results = [];
 let passCount = 0;
 let failCount = 0;
 
+/**
+ * Robust HTML Document Response Validator
+ * Fails closed unless status is exactly 200, content is string, not JSON,
+ * and contains valid HTML structure tags.
+ */
+function isSuccessfulHtmlResponse(res) {
+  if (!res || res.status !== 200 || !res.body || typeof res.body !== 'string') {
+    return false;
+  }
+  const trimmed = res.body.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return false; // Reject JSON payloads
+  }
+  const lower = trimmed.toLowerCase();
+  const hasDoctypeOrHtml = lower.includes('<!doctype html') || lower.includes('<html');
+  const hasClosingOrStructure = lower.includes('</html>') || lower.includes('<body') || lower.includes('<head');
+  return hasDoctypeOrHtml && hasClosingOrStructure;
+}
+
 async function request(path, options = {}) {
   const fullUrl = new URL(path, targetOrigin).toString();
   const method = options.method || 'GET';
@@ -108,7 +129,6 @@ async function request(path, options = {}) {
       redirect: 'manual', // do not follow redirects automatically
       signal: controller.signal
     });
-    clearTimeout(timeoutId);
 
     // Cross-origin redirect protection
     const location = res.headers.get('location');
@@ -142,12 +162,14 @@ async function request(path, options = {}) {
       crossOriginRedirect: false
     };
   } catch (err) {
-    clearTimeout(timeoutId);
     return {
       error: err instanceof Error ? err.message : String(err),
       status: 0,
       body: ''
     };
+  } finally {
+    // Timeout covers both initial request and stream body read completion
+    clearTimeout(timeoutId);
   }
 }
 
@@ -169,11 +191,11 @@ async function runSmokeTests() {
   // Test 1: Public Homepage
   {
     const res = await request('/');
-    const ok = res.status === 200 && res.body.includes('<!DOCTYPE html>') || res.body.includes('<html');
+    const ok = isSuccessfulHtmlResponse(res);
     recordResult(
       "Public Homepage Availability",
       res.status,
-      "HTTP 200 with HTML document",
+      "HTTP 200 with HTML document structure",
       `HTTP ${res.status}${res.error ? ` (${res.error})` : ''}`,
       ok
     );
@@ -182,12 +204,12 @@ async function runSmokeTests() {
   // Test 2: Public SPA Route (Client-side route fallback to index.html)
   {
     const res = await request('/branslar');
-    const ok = res.status === 200 && (res.body.includes('<!DOCTYPE html>') || res.body.includes('<html'));
+    const ok = isSuccessfulHtmlResponse(res);
     recordResult(
       "SPA Public Route Fallback (/branslar)",
       res.status,
-      "HTTP 200 with SPA shell",
-      `HTTP ${res.status}`,
+      "HTTP 200 with SPA HTML document structure",
+      `HTTP ${res.status}${res.error ? ` (${res.error})` : ''}`,
       ok
     );
   }

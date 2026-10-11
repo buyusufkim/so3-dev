@@ -785,6 +785,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * F23B runtime blocker: documented ongoing blocker regarding lack of live staging host and credentials
 * F34C member audit limitation: noted that self-service member profile changes are not recorded in admin-only `audit_logs` table due to strict foreign key schema constraints; flagged for explicit pre-production review in F.35C
 
+## F.35A — Runtime Harness Security Corrective
+* homepage false-pass fix: eliminated operator precedence bug in `scripts/verify-deployment-runtime.mjs` (`res.status === 200 && res.body.includes('<!DOCTYPE html>') || res.body.includes('<html')`); implemented `isSuccessfulHtmlResponse()` helper enforcing HTTP 200 status, string body, rejection of JSON responses, and verification of opening (`<!DOCTYPE html>` / `<html>`) and structural tags (`</html>`, `<body>`, `<head>`); negative test suite enforces 404+HTML=FAIL, 500+HTML=FAIL, 200+JSON=FAIL, and 200+HTML=PASS
+* absolute production host prohibition: completely removed `SO3_RUNTIME_ALLOW_PRODUCTION` override flag; `so3pt.com.tr` and `www.so3pt.com.tr` origins are unconditionally blocked under all modes; hostname normalization strips trailing dots, downcases strings, and ignores ports to prevent bypasses (e.g. `SO3PT.COM.TR:443`)
+* staging authorization discipline: target must be explicitly configured via `SO3_RUNTIME_BASE_URL`; presence of "staging" in hostname or query string does not grant automatic authorization or bypass checks
+* timeout lifecycle fix: extended 8-second request timeout to encompass both connection establishment and complete response body stream consumption; `clearTimeout` moved to `finally` block to prevent premature timer cancellation before `res.text()` finishes
+* secret and log isolation: prohibited logging raw headers, cookies, query strings, and authorization tokens; redirect tracking only records destination origin (`dest.origin`)
+* unsupported network guarantees: documented in `docs/PRODUCTION_READINESS.md` that client-side harness cannot prevent DNS rebinding or internal reverse proxies resolving staging domains to production IPs without IP pinning; operator remains strictly responsible for staging DNS and database isolation
+
+
 
 
 
