@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS `member_session_package_ledger` (
     `created_by` INT NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_mspl_package_id` FOREIGN KEY (`member_session_package_id`) REFERENCES `member_session_packages`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-    CONSTRAINT `fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+    CONSTRAINT `fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
     CONSTRAINT `fk_mspl_created_by` FOREIGN KEY (`created_by`) REFERENCES `admins`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
     CONSTRAINT `uk_mspl_appointment_entry` UNIQUE (`appointment_id`, `entry_type`),
     CONSTRAINT `chk_mspl_canonical_semantics` CHECK (

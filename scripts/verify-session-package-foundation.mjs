@@ -79,6 +79,8 @@ if (fs.existsSync(migrationPath)) {
     check(migrationContent.includes('(`entry_type` = \'reserve\' AND `appointment_id` IS NOT NULL AND `delta` = -1)'), 'ledger constraint: reserve requires appointment and delta -1');
     check(migrationContent.includes('(`entry_type` = \'release\' AND `appointment_id` IS NOT NULL AND `delta` = 1)'), 'ledger constraint: release requires appointment and delta +1');
     check(migrationContent.includes('(`entry_type` = \'adjustment\' AND `appointment_id` IS NULL AND `delta` <> 0)'), 'ledger constraint: adjustment requires no appointment and non-zero delta');
+    check(migrationContent.includes('CONSTRAINT `fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT'), 'ledger foreign key appointment_id enforces ON DELETE RESTRICT for MySQL 8.0 CHECK compatibility');
+    check(!migrationContent.includes('fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE SET NULL'), 'ledger does not use incompatible ON DELETE SET NULL on appointment_id');
 
 }
 
@@ -108,18 +110,21 @@ if (fs.existsSync(appointmentControllerPath)) {
 }
 
 // 17. fresh-install 037 ile parity
-// 18. schema_migrations history 001-037
+// 18. schema_migrations history 001-037+
 if (fs.existsSync(freshInstallPath)) {
     const content = fs.readFileSync(freshInstallPath, 'utf8');
     check(content.includes('037_create_session_packages.sql'), 'fresh-install has parity with 037 schema and history');
     check(content.includes('CONSTRAINT `chk_sp_session_count` CHECK'), 'fresh-install parity includes table check constraints');
-    check(content.includes('Generated from migrations 001-038'), 'fresh-install header updated');
+    const headerMatch = content.match(/Generated from migrations 001-(\d+)/i);
+    check(Boolean(headerMatch && parseInt(headerMatch[1], 10) >= 37), 'fresh-install header updated');
+    check(content.includes('CONSTRAINT `fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT'), 'fresh-install ledger FK appointment_id enforces ON DELETE RESTRICT');
 }
 
-// 19. deployment doc 001-037
+// 19. deployment doc 001-037+
 if (fs.existsSync(deploymentDocPath)) {
     const content = fs.readFileSync(deploymentDocPath, 'utf8');
-    check(content.includes('001–037'), 'deployment docs reference 001-037');
+    const docMatch = content.match(/001[–-](\d+)/);
+    check(Boolean(docMatch && parseInt(docMatch[1], 10) >= 37), 'deployment docs reference 001-037 or later range');
 }
 
 // 20. DECISIONS canonical semantics

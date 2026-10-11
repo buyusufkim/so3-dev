@@ -279,6 +279,53 @@ assert(
   "fresh-install.sql includes nullable conversion for appointment_reschedules.rescheduled_by"
 );
 
+console.log("\n=== 6D. Migration 037 Schema Parity & MySQL 8.0 CHECK Constraint Compatibility ===");
+
+const mig037Path = path.resolve(migrationsDir, '037_create_session_packages.sql');
+assert(fs.existsSync(mig037Path), "037_create_session_packages.sql exists in database/migrations");
+const mig037Content = fs.readFileSync(mig037Path, 'utf8');
+
+// 6D.1 Verify fk_mspl_appointment_id uses ON DELETE RESTRICT in migration 037
+assert(
+  /CONSTRAINT\s+`?fk_mspl_appointment_id`?\s+FOREIGN\s+KEY\s*\(`?appointment_id`?\)\s+REFERENCES\s+`?appointments`?\s*\(`?id`?\)\s+ON\s+DELETE\s+RESTRICT\s+ON\s+UPDATE\s+RESTRICT/i.test(mig037Content),
+  "Migration 037 defines fk_mspl_appointment_id with ON DELETE RESTRICT ON UPDATE RESTRICT"
+);
+assert(
+  !mig037Content.includes("fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE SET NULL"),
+  "Migration 037 does NOT contain incompatible ON DELETE SET NULL on appointment_id"
+);
+
+// 6D.2 Verify fk_mspl_appointment_id uses ON DELETE RESTRICT in fresh-install.sql
+assert(
+  /CONSTRAINT\s+`?fk_mspl_appointment_id`?\s+FOREIGN\s+KEY\s*\(`?appointment_id`?\)\s+REFERENCES\s+`?appointments`?\s*\(`?id`?\)\s+ON\s+DELETE\s+RESTRICT\s+ON\s+UPDATE\s+RESTRICT/i.test(freshInstallContent),
+  "fresh-install.sql defines fk_mspl_appointment_id with ON DELETE RESTRICT ON UPDATE RESTRICT"
+);
+assert(
+  !freshInstallContent.includes("fk_mspl_appointment_id` FOREIGN KEY (`appointment_id`) REFERENCES `appointments`(`id`) ON DELETE SET NULL"),
+  "fresh-install.sql does NOT contain incompatible ON DELETE SET NULL on appointment_id"
+);
+
+// 6D.3 Verify canonical semantics check is present and identical
+assert(
+  mig037Content.includes("chk_mspl_canonical_semantics"),
+  "Migration 037 defines chk_mspl_canonical_semantics CHECK constraint"
+);
+assert(
+  freshInstallContent.includes("chk_mspl_canonical_semantics"),
+  "fresh-install.sql replicates chk_mspl_canonical_semantics CHECK constraint"
+);
+
+// 6D.4 Global anti-MySQL #3823 check constraint scan across fresh-install.sql
+const msplBlockMatch = freshInstallContent.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?member_session_package_ledger`?\s*\(([\s\S]*?)\)\s*ENGINE/i);
+assert(msplBlockMatch !== null, "Extracted member_session_package_ledger block from fresh-install.sql");
+if (msplBlockMatch) {
+  const block = msplBlockMatch[1];
+  assert(
+    !/appointment_id[\s\S]*?ON\s+DELETE\s+SET\s+NULL/i.test(block),
+    "member_session_package_ledger.appointment_id is free from ON DELETE SET NULL (avoids MySQL #3823)"
+  );
+}
+
 console.log("\n=== 7. Deployment Documentation Verification ===");
 const deployDocPath = path.resolve(process.cwd(), 'DEPLOYMENT_PHP_MYSQL.md');
 assert(fs.existsSync(deployDocPath), "DEPLOYMENT_PHP_MYSQL.md exists");

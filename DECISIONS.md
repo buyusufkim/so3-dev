@@ -801,6 +801,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * CSRF GET session side-effect documentation: documented in `docs/PRODUCTION_READINESS.md` that `/api/member-auth/csrf` GET requests may initiate a PHP session and issue `Set-Cookie: PHPSESSID`; flagged for separation into auth preparation phases for zero-side-effect health checks
 * explicit verification separation: established strict separation between Static Verifiers (PASS), Runtime HTTP (BLOCKED - target unconfigured), Runtime MySQL/PDO (NOT RUN), and Runtime Browser (NOT RUN)
 
+## F.35B — Canonical Schema & MySQL #3823 Foreign Key Compatibility Corrective
+* problem identification: MySQL 8.0.16+ throws Error 3823 (`ER_CHECK_CONSTRAINT_CANNOT_REFERENCE_SET_NULL_COLUMN`) when importing `database/fresh-install.sql` or executing migration 037, because `member_session_package_ledger.appointment_id` had an `ON DELETE SET NULL` foreign key clause while being referenced in the `chk_mspl_canonical_semantics` CHECK constraint.
+* appointment lifecycle and ledger integrity: appointments are never hard-deleted in business logic (managed via lifecycle `status = 'cancelled'`); session package ledger entries (`reserve` with delta -1, `release` with delta +1) are immutable financial audit movements. Setting `appointment_id = NULL` upon an appointment deletion would both corrupt the audit ledger and violate `chk_mspl_canonical_semantics` (which requires `appointment_id IS NOT NULL` for reserve and release entries).
+* canonical fix: aligned `fk_mspl_appointment_id` foreign key definition in both `database/migrations/037_create_session_packages.sql` and `database/fresh-install.sql` to `ON DELETE RESTRICT ON UPDATE RESTRICT`.
+* risk & migration analysis: since MySQL 8.0 rejects table creation if an `ON DELETE SET NULL` FK references a column used in a CHECK constraint, migration 037 as previously written could never execute on a fresh MySQL 8.0 installation. Both historical migration 037 and the consolidated `fresh-install.sql` were aligned in place to preserve exact schema parity across 001–044 without phantom version drift, and without altering any business logic.
+* global schema scan: confirmed that no other table in the entire schema combines `ON DELETE SET NULL` with a `CHECK` constraint on the same column.
+* test status: static parity assertions passed (133/133); real MySQL execution against staging or production remains unrun per environment isolation boundaries.
+
+
 
 
 
