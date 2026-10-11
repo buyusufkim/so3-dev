@@ -163,6 +163,21 @@ assert(
   "Runtime script enforces HTTP 200 and valid XML document structure on /sitemap.xml"
 );
 
+// 2.13 SPA /branslar Canonical Trailing-Slash Redirect Invariant
+assert(
+  runtimeContent.includes("initialRes.status === 301") &&
+  runtimeContent.includes("dest.pathname === '/branslar/'") &&
+  runtimeContent.includes("isSameOrigin") &&
+  runtimeContent.includes("request('/branslar/')"),
+  "Runtime script verifies same-origin 301 trailing slash redirect strictly to /branslar/"
+);
+assert(
+  runtimeContent.includes("hasNoQuery") &&
+  runtimeContent.includes("hasNoHash") &&
+  runtimeContent.includes("notProduction"),
+  "Runtime script rejects query, fragment, and production domain in /branslar redirect"
+);
+
 console.log("\n=== 3. Read-Only HTTP Checks Validation ===");
 // Verify presence of canonical contract tests (all strictly read-only GET/HEAD)
 const expectedChecks = [
@@ -486,6 +501,149 @@ assert(testXmlValidator({
   status: 200,
   body: '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://so3pt.com.tr/</loc></url>\n</urlset>'
 }) === true, "Sim: Sitemap 200 + Valid XML -> PASS");
+
+// Sim 9: SPA /branslar Canonical Redirect & Fallback Validator Simulation
+function simulateSpaBranslarCheck(initialRes, followResGetter, currentTargetOrigin = "https://staging.so3pt.com.tr") {
+  const blockedHosts = ['so3pt.com.tr', 'www.so3pt.com.tr'];
+  if (testHtmlValidator(initialRes)) {
+    return { pass: true, reason: 'DIRECT_200_HTML' };
+  }
+  if (initialRes && initialRes.status === 301) {
+    const loc = initialRes.headers && typeof initialRes.headers.get === 'function'
+      ? initialRes.headers.get('location')
+      : (initialRes.headers ? initialRes.headers['location'] : null);
+    if (!loc) {
+      return { pass: false, reason: 'MISSING_LOCATION' };
+    }
+    try {
+      const dest = new URL(loc, currentTargetOrigin);
+      const isSameOrigin = dest.origin === currentTargetOrigin;
+      const isExactSlashPath = dest.pathname === '/branslar/';
+      const hasNoQuery = dest.search === '';
+      const hasNoHash = dest.hash === '';
+      const hasNoAuth = !dest.username && !dest.password;
+      const notProduction = !blockedHosts.includes(dest.hostname.toLowerCase().replace(/\.$/, '').trim());
+
+      if (!isSameOrigin || !isExactSlashPath || !hasNoQuery || !hasNoHash || !hasNoAuth || !notProduction) {
+        return { pass: false, reason: 'INVALID_REDIRECT_TARGET' };
+      }
+    } catch {
+      return { pass: false, reason: 'MALFORMED_LOCATION' };
+    }
+
+    const followRes = typeof followResGetter === 'function' ? followResGetter() : followResGetter;
+    if (!followRes) {
+      return { pass: false, reason: 'FOLLOW_FAILED' };
+    }
+    if (testHtmlValidator(followRes)) {
+      return { pass: true, reason: 'REDIRECT_200_HTML' };
+    }
+    return { pass: false, reason: 'TARGET_NOT_200_HTML' };
+  }
+  return { pass: false, reason: 'UNSUPPORTED_STATUS' };
+}
+
+// 9.1 /branslar doğrudan 200 HTML -> PASS
+assert(
+  simulateSpaBranslarCheck({
+    status: 200,
+    body: "<!DOCTYPE html><html><head><title>Branslar</title></head><body>Content</body></html>"
+  }).pass === true,
+  "Sim: /branslar doğrudan 200 HTML -> PASS"
+);
+
+// 9.2 301 aynı origin /branslar/ + hedef 200 HTML -> PASS
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><head><title>Branslar</title></head><body>Content</body></html>" }
+  ).pass === true,
+  "Sim: 301 aynı origin /branslar/ + hedef 200 HTML -> PASS"
+);
+
+// 9.3 301 aynı origin /branslar/ + hedef 404 -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/' : null } },
+    { status: 404, body: "<!DOCTYPE html><html><body>Not Found</body></html>" }
+  ).pass === false,
+  "Sim: 301 aynı origin /branslar/ + hedef 404 -> FAIL"
+);
+
+// 9.4 301 production domain -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://so3pt.com.tr/branslar/' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 301 production domain -> FAIL"
+);
+
+// 9.5 301 farklı path -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/other/' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 301 farklı path -> FAIL"
+);
+
+// 9.6 301 query/fragment -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/?ref=1' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 301 query -> FAIL"
+);
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/#section' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 301 fragment -> FAIL"
+);
+
+// 9.7 302/307 yönlendirme -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 302, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 302 yönlendirme -> FAIL"
+);
+assert(
+  simulateSpaBranslarCheck(
+    { status: 307, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/' : null } },
+    { status: 200, body: "<!DOCTYPE html><html><body>Content</body></html>" }
+  ).pass === false,
+  "Sim: 307 yönlendirme -> FAIL"
+);
+
+// 9.8 200 JSON -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 200, body: '{"error":null,"data":{"items":[]}}' },
+    null
+  ).pass === false,
+  "Sim: 200 JSON -> FAIL"
+);
+
+// 9.9 Network timeout -> FAIL
+assert(
+  simulateSpaBranslarCheck(
+    { status: 0, error: 'TIMEOUT', body: '' },
+    null
+  ).pass === false,
+  "Sim: Network timeout (initial) -> FAIL"
+);
+assert(
+  simulateSpaBranslarCheck(
+    { status: 301, headers: { get: (k) => k.toLowerCase() === 'location' ? 'https://staging.so3pt.com.tr/branslar/' : null } },
+    { status: 0, error: 'TIMEOUT', body: '' }
+  ).pass === false,
+  "Sim: Network timeout (follow-up) -> FAIL"
+);
 
 console.log("\n=== 6. Anti-Scope & Scope Isolation ===");
 // Zero schema migrations added

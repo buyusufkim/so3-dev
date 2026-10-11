@@ -307,15 +307,59 @@ async function runSmokeTests() {
     );
   }
 
-  // Test 2: Public SPA Route (Client-side route fallback to index.html)
+  // Test 2: Public SPA Route (Client-side route fallback to index.html with canonical directory slash validation)
   {
-    const res = await request('/branslar');
-    const ok = isSuccessfulHtmlResponse(res);
+    const initialRes = await request('/branslar');
+    let ok = false;
+    let finalStatus = initialRes.status;
+    let finalReceived = formatReceived(initialRes);
+
+    if (isSuccessfulHtmlResponse(initialRes)) {
+      // Direct HTTP 200 with valid HTML document structure
+      ok = true;
+    } else if (initialRes.status === 301) {
+      // Strictly validate canonical directory slash redirect (e.g. Apache/LiteSpeed mod_dir /branslar -> /branslar/)
+      const locationHeader = initialRes.headers && typeof initialRes.headers.get === 'function'
+        ? initialRes.headers.get('location')
+        : null;
+
+      let validRedirect = false;
+      if (locationHeader) {
+        try {
+          const dest = new URL(locationHeader, targetOrigin);
+          const isSameOrigin = dest.origin === targetOrigin;
+          const isExactSlashPath = dest.pathname === '/branslar/';
+          const hasNoQuery = dest.search === '';
+          const hasNoHash = dest.hash === '';
+          const hasNoAuth = !dest.username && !dest.password;
+          const notProduction = !blockedProductionHosts.includes(dest.hostname.toLowerCase().replace(/\.$/, '').trim());
+
+          if (isSameOrigin && isExactSlashPath && hasNoQuery && hasNoHash && hasNoAuth && notProduction) {
+            validRedirect = true;
+          }
+        } catch {
+          validRedirect = false;
+        }
+      }
+
+      if (validRedirect) {
+        // Follow specifically to /branslar/ using safe request() with all security guards active
+        const followRes = await request('/branslar/');
+        finalStatus = followRes.status;
+        finalReceived = `HTTP 301 -> ${formatReceived(followRes)}`;
+        if (isSuccessfulHtmlResponse(followRes)) {
+          ok = true;
+        }
+      } else {
+        finalReceived = `HTTP 301 (INVALID_REDIRECT_TARGET: ${locationHeader ? 'unauthorized location' : 'missing location'})`;
+      }
+    }
+
     recordResult(
       "SPA Public Route Fallback (/branslar)",
-      res.status,
+      finalStatus,
       "HTTP 200 with SPA HTML document structure",
-      formatReceived(res),
+      finalReceived,
       ok
     );
   }

@@ -809,6 +809,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * global schema scan: confirmed that no other table in the entire schema combines `ON DELETE SET NULL` with a `CHECK` constraint on the same column.
 * test status: static parity assertions passed (133/133); real MySQL execution against staging or production remains unrun per environment isolation boundaries.
 
+## F.35B — Staging SPA /branslar Trailing-Slash Redirect Corrective
+* problem identification: During real staging HTTP smoke harness execution against `https://staging.so3pt.com.tr`, 7 out of 8 tests passed, but Test 2 (`GET /branslar`) failed with HTTP 301. Root cause: static pre-rendering generates physical directories (`dist/branslar/index.html`); LiteSpeed/Apache `mod_dir` (`DirectorySlash On`) issues a standard 301 redirect to canonicalize `/branslar` to `/branslar/`. The smoke harness had `redirect: 'manual'` and expected direct HTTP 200 without supporting this canonical directory redirect.
+* security-preserving design: Arbitrary redirect following was NOT added to the generic `request()` helper. The `redirect: 'manual'` policy remains strictly in place across the harness.
+* narrow route verification: In Test 2 (`SPA Public Route Fallback (/branslar)`):
+  - Direct HTTP 200 + HTML structure is accepted as PASS.
+  - If HTTP 301 is received, the Location header is strictly validated: must be the exact same staging origin, exact path `/branslar/`, with no query parameters, no hash fragments, no credentials, and never a blocked production host.
+  - Only after passing strict validation, a second GET request is issued to `/branslar/` through `request()`, applying all existing security controls (HTTPS enforcement, production host block, 8s timeout covering body stream, 1 MiB body limit, sanitized logs).
+  - The follow-up request must return HTTP 200 with valid HTML document structure to produce PASS.
+  - Any 302, 303, 307, 308, off-path redirect, cross-origin redirect, or production origin immediately fails.
+* negative test suite: 11 fixture simulations added to `scripts/verify-production-readiness-foundation.mjs` verifying all failure branches (different path, production origin, query/fragment, 302/307, 404 target, JSON target, timeout).
+* live staging verification: Re-running `SO3_RUNTIME_BASE_URL="https://staging.so3pt.com.tr" npm run verify:deployment-runtime` achieved 8/8 PASS with zero failures.
+
 
 
 
