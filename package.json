@@ -98,7 +98,9 @@
     "verify:member-dashboard-program-summary": "node scripts/verify-member-dashboard-program-summary.mjs",
     "verify:member-profile-foundation": "node scripts/verify-member-profile-foundation.mjs",
     "verify:member-profile-ui": "node scripts/verify-member-profile-ui.mjs",
-    "verify:member-profile-self-service": "node scripts/verify-member-profile-self-service.mjs"
+    "verify:member-profile-self-service": "node scripts/verify-member-profile-self-service.mjs",
+    "verify:deployment-runtime": "node scripts/verify-deployment-runtime.mjs",
+    "verify:production-readiness-foundation": "node scripts/verify-production-readiness-foundation.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

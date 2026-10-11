@@ -774,6 +774,18 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * no new schema: zero schema migrations added (44 total migrations intact); zero schema drift
 * runtime verification pending: runtime HTTP, MySQL/PDO, and browser tests not run in sandbox environment; static invariant suites verified
 
+## F.35A — Production Readiness Foundation
+* read-only runtime harness: created `scripts/verify-deployment-runtime.mjs` registering `verify:deployment-runtime` package script; strictly executes read-only network probes without business entity mutations
+* explicit allowed target: requires `SO3_RUNTIME_BASE_URL` target environment variable; exits with code 3 (BLOCKED) without failing closed or generating artificial PASS results
+* fail-closed missing configuration: when staging target is unconfigured, runtime verifier blocks execution deterministically
+* no secret leakage: masks and suppresses all request/response headers, authorization tokens, cookies, session IDs, and database credentials from console outputs
+* no production mutation: production hosts (`so3pt.com.tr`, `www.so3pt.com.tr`) blocked by default; `SO3_RUNTIME_MODE` defaults strictly to `readonly`
+* role and browser test matrices: created `docs/PRODUCTION_READINESS.md` detailing Plesk/cPanel Apache/PHP/MySQL deployment checklist, role authorization matrix (super_admin, admin, editor, trainer, reception, member, unauthenticated), and critical workflow journey contracts for F.35B
+* staging dependency: actual HTTP and browser journeys depend on an isolated live staging environment with dedicated test accounts; build and static tests never masquerade as runtime execution
+* F23B runtime blocker: documented ongoing blocker regarding lack of live staging host and credentials
+* F34C member audit limitation: noted that self-service member profile changes are not recorded in admin-only `audit_logs` table due to strict foreign key schema constraints; flagged for explicit pre-production review in F.35C
+
+
 
 
 

@@ -1,0 +1,314 @@
+/**
+ * Deployment Runtime Smoke Test Harness (SO3 PT — F.35A)
+ *
+ * Verifies real HTTP deployment behavior in a safe, repeatable, and strictly
+ * read-only manner against an explicitly provided, authorized staging target.
+ *
+ * Requirements:
+ * - Reads target from process.env.SO3_RUNTIME_BASE_URL
+ * - If SO3_RUNTIME_BASE_URL is not set: Exits with code 3 (BLOCKED — runtime target not configured)
+ * - Requires HTTPS protocol (unless localhost with SO3_RUNTIME_ALLOW_HTTP=true)
+ * - Prohibits user credentials in target URL
+ * - Blocks production hosts by default (so3pt.com.tr, www.so3pt.com.tr)
+ * - Default mode is strictly 'readonly' (SO3_RUNTIME_MODE)
+ * - Prohibits cross-origin redirects
+ * - Zero secret or sensitive header/cookie logging
+ * - Read-only HTTP checks against actual route contracts
+ */
+
+const ENV = process.env;
+const BASE_URL = ENV.SO3_RUNTIME_BASE_URL;
+const MODE = ENV.SO3_RUNTIME_MODE || 'readonly';
+const ALLOW_PRODUCTION = ENV.SO3_RUNTIME_ALLOW_PRODUCTION === 'true';
+const ALLOW_HTTP = ENV.SO3_RUNTIME_ALLOW_HTTP === 'true';
+
+// 1. Missing Target Guard — BLOCKED
+if (!BASE_URL || !BASE_URL.trim()) {
+  console.log("=======================================================");
+  console.log("SO3 PT — Deployment Runtime Smoke Test Harness");
+  console.log("=======================================================");
+  console.log("STATUS: BLOCKED");
+  console.log("REASON: SO3_RUNTIME_BASE_URL environment variable is not configured.");
+  console.log("USAGE : SO3_RUNTIME_BASE_URL=\"https://staging.yourdomain.com\" npm run verify:deployment-runtime");
+  console.log("NOTE  : Runtime smoke tests are never faked or assumed passing without a live target.");
+  console.log("=======================================================");
+  process.exit(3); // Code 3 = BLOCKED
+}
+
+// 2. Validate URL structure
+let parsedUrl;
+try {
+  parsedUrl = new URL(BASE_URL.trim());
+} catch (e) {
+  console.error("❌ FAIL: Invalid SO3_RUNTIME_BASE_URL format.");
+  process.exit(2);
+}
+
+// Prohibit credentials, query, fragments, path
+if (parsedUrl.username || parsedUrl.password) {
+  console.error("❌ FAIL: Target URL must NOT contain username or password credentials.");
+  process.exit(2);
+}
+if (parsedUrl.search !== '' || parsedUrl.hash !== '') {
+  console.error("❌ FAIL: Target URL must NOT contain query parameters or hash fragments.");
+  process.exit(2);
+}
+if (parsedUrl.pathname !== '/' && parsedUrl.pathname !== '') {
+  console.error("❌ FAIL: Target URL must NOT contain subpaths. Provide origin only (e.g. https://staging.example.com).");
+  process.exit(2);
+}
+
+// 3. Protocol Guard — HTTPS required
+const isLocalhost = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+if (parsedUrl.protocol !== 'https:' && !(isLocalhost && ALLOW_HTTP)) {
+  console.error("❌ FAIL: Target URL must use HTTPS. (HTTP allowed only for localhost with SO3_RUNTIME_ALLOW_HTTP=true).");
+  process.exit(2);
+}
+
+// 4. Production Host Guard
+const productionHosts = ['so3pt.com.tr', 'www.so3pt.com.tr'];
+if (productionHosts.includes(parsedUrl.hostname.toLowerCase()) && !ALLOW_PRODUCTION) {
+  console.error(`❌ FAIL: Execution against production host '${parsedUrl.hostname}' is blocked by default.`);
+  console.error("To override explicitly, set SO3_RUNTIME_ALLOW_PRODUCTION=true.");
+  process.exit(2);
+}
+
+// 5. Read-only Mode Guard
+if (MODE !== 'readonly') {
+  console.error(`❌ FAIL: Unsupported SO3_RUNTIME_MODE '${MODE}'. Only 'readonly' is permitted in F.35A.`);
+  process.exit(2);
+}
+
+const targetOrigin = parsedUrl.origin;
+console.log("=======================================================");
+console.log(`SO3 PT — Deployment Runtime Smoke Test Harness`);
+console.log(`Target: ${targetOrigin}`);
+console.log(`Mode  : ${MODE}`);
+console.log("=======================================================\n");
+
+const results = [];
+let passCount = 0;
+let failCount = 0;
+
+async function request(path, options = {}) {
+  const fullUrl = new URL(path, targetOrigin).toString();
+  const method = options.method || 'GET';
+  const timeoutMs = options.timeoutMs || 8000;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(fullUrl, {
+      method,
+      headers: {
+        'Accept': 'application/json, text/html, */*',
+        ...(options.headers || {})
+      },
+      redirect: 'manual', // do not follow redirects automatically
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    // Cross-origin redirect protection
+    const location = res.headers.get('location');
+    if (location && [301, 302, 303, 307, 308].includes(res.status)) {
+      try {
+        const dest = new URL(location, targetOrigin);
+        if (dest.origin !== targetOrigin) {
+          return {
+            status: res.status,
+            crossOriginRedirect: true,
+            location: dest.origin, // only log origin, never full url with tokens
+            body: ''
+          };
+        }
+      } catch {
+        // invalid redirect location
+      }
+    }
+
+    let bodyText = '';
+    try {
+      bodyText = await res.text();
+    } catch {
+      bodyText = '';
+    }
+
+    return {
+      status: res.status,
+      headers: res.headers,
+      body: bodyText,
+      crossOriginRedirect: false
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    return {
+      error: err instanceof Error ? err.message : String(err),
+      status: 0,
+      body: ''
+    };
+  }
+}
+
+function recordResult(name, status, expectedDesc, receivedDesc, passed) {
+  if (passed) {
+    passCount++;
+    console.log(`✅ PASS: ${name}`);
+    console.log(`   Expected: ${expectedDesc} | Received: ${receivedDesc}`);
+  } else {
+    failCount++;
+    console.log(`❌ FAIL: ${name}`);
+    console.log(`   Expected: ${expectedDesc} | Received: ${receivedDesc}`);
+  }
+  results.push({ name, passed, status, expectedDesc, receivedDesc });
+}
+
+// Test Definitions (Read-Only HTTP Checks)
+async function runSmokeTests() {
+  // Test 1: Public Homepage
+  {
+    const res = await request('/');
+    const ok = res.status === 200 && res.body.includes('<!DOCTYPE html>') || res.body.includes('<html');
+    recordResult(
+      "Public Homepage Availability",
+      res.status,
+      "HTTP 200 with HTML document",
+      `HTTP ${res.status}${res.error ? ` (${res.error})` : ''}`,
+      ok
+    );
+  }
+
+  // Test 2: Public SPA Route (Client-side route fallback to index.html)
+  {
+    const res = await request('/branslar');
+    const ok = res.status === 200 && (res.body.includes('<!DOCTYPE html>') || res.body.includes('<html'));
+    recordResult(
+      "SPA Public Route Fallback (/branslar)",
+      res.status,
+      "HTTP 200 with SPA shell",
+      `HTTP ${res.status}`,
+      ok
+    );
+  }
+
+  // Test 3: Public Robots / Sitemap Route
+  {
+    const res = await request('/sitemap.xml');
+    const ok = res.status === 200 || res.status === 404; // Sitemap may exist or fallback
+    recordResult(
+      "Sitemap endpoint reachability (/sitemap.xml)",
+      res.status,
+      "HTTP 200 or clean 404 without 500 error",
+      `HTTP ${res.status}`,
+      ok && res.status !== 500
+    );
+  }
+
+  // Test 4: Unauthenticated Admin Overview Protected Boundary
+  {
+    const res = await request('/api/admin/overview');
+    const ok = res.status === 401;
+    let hasEnvelope = false;
+    try {
+      const parsed = JSON.parse(res.body);
+      hasEnvelope = parsed && parsed.error && parsed.error.code === 'UNAUTHORIZED';
+    } catch {}
+    recordResult(
+      "Unauthenticated Admin API Access Rejection (/api/admin/overview)",
+      res.status,
+      "HTTP 401 with UNAUTHORIZED JSON envelope",
+      `HTTP ${res.status}`,
+      ok && hasEnvelope
+    );
+  }
+
+  // Test 5: Unauthenticated Member Profile Protected Boundary
+  {
+    const res = await request('/api/member/profile');
+    const ok = res.status === 401;
+    let hasEnvelope = false;
+    try {
+      const parsed = JSON.parse(res.body);
+      hasEnvelope = parsed && parsed.error && parsed.error.code === 'UNAUTHORIZED';
+    } catch {}
+    recordResult(
+      "Unauthenticated Member Profile API Access Rejection (/api/member/profile)",
+      res.status,
+      "HTTP 401 with UNAUTHORIZED JSON envelope",
+      `HTTP ${res.status}`,
+      ok && hasEnvelope
+    );
+  }
+
+  // Test 6: Unauthenticated Member Overview Protected Boundary
+  {
+    const res = await request('/api/member/overview');
+    const ok = res.status === 401;
+    recordResult(
+      "Unauthenticated Member Overview Access Rejection (/api/member/overview)",
+      res.status,
+      "HTTP 401",
+      `HTTP ${res.status}`,
+      ok
+    );
+  }
+
+  // Test 7: Method Not Allowed on Profile Endpoint (POST is disallowed; only GET and PATCH allowed)
+  {
+    const res = await request('/api/member/profile', { method: 'POST' });
+    const ok = res.status === 405 || res.status === 401; // Either 405 Method Not Allowed or 401 Unauthorized
+    recordResult(
+      "Disallowed Method Handling on /api/member/profile (POST)",
+      res.status,
+      "HTTP 405 Method Not Allowed or 401 Unauthorized",
+      `HTTP ${res.status}`,
+      ok
+    );
+  }
+
+  // Test 8: Non-existent API Endpoint Clean 404
+  {
+    const res = await request('/api/non-existent-probe-endpoint-f35');
+    const ok = res.status === 404 || res.status === 401;
+    recordResult(
+      "Non-existent API endpoint response (/api/non-existent-probe-endpoint-f35)",
+      res.status,
+      "HTTP 404 (or 401) without 500 server crash",
+      `HTTP ${res.status}`,
+      ok && res.status !== 500
+    );
+  }
+
+  // Test 9: Public Auth CSRF endpoint reachability
+  {
+    const res = await request('/api/member-auth/csrf');
+    const ok = res.status === 200;
+    let hasToken = false;
+    try {
+      const parsed = JSON.parse(res.body);
+      hasToken = parsed && parsed.data && typeof parsed.data.csrf_token === 'string';
+    } catch {}
+    recordResult(
+      "Public Member Auth CSRF Token Endpoint (/api/member-auth/csrf)",
+      res.status,
+      "HTTP 200 with data.csrf_token",
+      `HTTP ${res.status}`,
+      ok && hasToken
+    );
+  }
+
+  console.log("\n=======================================================");
+  console.log(`Smoke Test Summary: ${passCount} Passed, ${failCount} Failed (Total ${results.length})`);
+  console.log("=======================================================");
+
+  if (failCount > 0) {
+    console.error("❌ FAILED: One or more deployment runtime smoke checks failed.");
+    process.exit(1);
+  } else {
+    console.log("PASS — All read-only deployment runtime checks succeeded.");
+    process.exit(0);
+  }
+}
+
+runSmokeTests();
