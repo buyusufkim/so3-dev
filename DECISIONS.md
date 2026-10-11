@@ -761,6 +761,20 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero new schema migrations: zero schema migrations added (44 total migrations intact); zero backend changes
 * foundation for F.34C: cleanly separates read-only presentation ahead of F.34C controlled self-service profile updates
 
+## F.34C — Controlled Member Profile Self-Service
+* session-bound member PATCH: implemented canonical `PATCH /api/member/profile` endpoint invoked exclusively via `(new \Controllers\MemberProfileController())->updateProfile()` in `api/index.php`; client-provided IDs strictly rejected; identity bound to `$_SESSION['member_id']` and `$_SESSION['member_account_id']`
+* CSRF protection: enforced `CsrfMiddleware::handle()` validating `X-CSRF-Token` headers for PATCH; integrated seamlessly with member client token caching and renewal
+* exact allowlisted payload: accepts strictly `email`, `emergency_contact_name`, and `emergency_contact_phone` (`string | null`); missing keys or extra keys are rejected with 422 `VALIDATION_ERROR`
+* email and emergency contact only: user can only modify communication/emergency details; UPDATE statement strictly restricted to `email`, `emergency_contact_name`, and `emergency_contact_phone`
+* identity/primary phone locked: `first_name`, `last_name`, `phone` (primary membership phone), `username`, `status`, `trainer_id`, session packages, and internal security fields are strictly read-only and immutable by the member
+* null handling: empty strings are normalized to `null`; control characters are strictly rejected; email format and max lengths (120 chars for email and name, 20 chars for phone) are validated; Turkish phone formats supported without heavy 3rd-party dependencies
+* atomic validation/update: payload validated in full before opening transaction; update executed using single atomic `UPDATE members ... WHERE id = :member_id AND status = 'active' AND deleted_at IS NULL` with `FOR UPDATE` ownership verification
+* canonical GET/PATCH response parity: unified response formatting via `formatProfileResponse()` guarantees exact response shape parity between GET and PATCH; zero sensitive fields or internal IDs exposed
+* safe member form: added "Bilgilerimi Düzenle", "Kaydet", and "Vazgeç" controls on `/uye/hesabim`; inputs rendered only for allowlisted 3 fields while identity cards remain read-only; double-submit lock with `isSubmittingRef`; dirty state check disables unnecessary calls; race-safe with abort controllers and generation counters
+* no new schema: zero schema migrations added (44 total migrations intact); zero schema drift
+* runtime verification pending: runtime HTTP, MySQL/PDO, and browser tests not run in sandbox environment; static invariant suites verified
+
+
 
 
 

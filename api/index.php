@@ -1219,10 +1219,18 @@ if (preg_match('#^/api/admin/appointments/([1-9]\d*)/reschedule$#', $requestUri,
 
 
     // Member Portal
-    if ($requestUri === '/api/member/profile' && $method === 'GET') {
-        require_once __DIR__ . '/controllers/MemberProfileController.php';
-        (new \Controllers\MemberProfileController())->getProfile();
-        $matched = true;
+    if ($requestUri === '/api/member/profile') {
+        if ($method === 'GET') {
+            require_once __DIR__ . '/controllers/MemberProfileController.php';
+            (new \Controllers\MemberProfileController())->getProfile();
+            $matched = true;
+        } elseif ($method === 'PATCH') {
+            require_once __DIR__ . '/controllers/MemberProfileController.php';
+            (new \Controllers\MemberProfileController())->updateProfile();
+            $matched = true;
+        } else {
+            \Core\Response::error('Method Not Allowed', 'METHOD_NOT_ALLOWED', 405);
+        }
     }
     if ($requestUri === '/api/member/overview' && $method === 'GET') {
         require_once __DIR__ . '/controllers/MemberPortalController.php';

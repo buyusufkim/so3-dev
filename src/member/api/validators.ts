@@ -1864,3 +1864,10 @@ export function validateMemberProfile(data: unknown): MemberProfileResponse {
   };
 }
 
+export type UpdateMemberProfilePayload = {
+  email: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+};
+
+

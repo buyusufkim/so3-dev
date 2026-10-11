@@ -297,5 +297,21 @@ export const memberApiClient = {
       signal
     });
     return validateMemberProfile(data);
+  },
+
+  async updateProfile(
+    payload: {
+      email: string | null;
+      emergency_contact_name: string | null;
+      emergency_contact_phone: string | null;
+    },
+    signal?: AbortSignal
+  ): Promise<MemberProfileResponse> {
+    const data = await request('/api/member/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      signal
+    });
+    return validateMemberProfile(data);
   }
 };

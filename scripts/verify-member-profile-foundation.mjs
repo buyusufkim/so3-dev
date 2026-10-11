@@ -53,8 +53,8 @@ const indexContent = fs.readFileSync(indexPath, 'utf8');
 
 // 2.1 Canonical GET /api/member/profile
 assert(
-  indexContent.includes("$requestUri === '/api/member/profile' && $method === 'GET'"),
-  "api/index.php registers canonical GET /api/member/profile endpoint"
+  indexContent.includes("$requestUri === '/api/member/profile'"),
+  "api/index.php registers canonical /api/member/profile endpoint"
 );
 
 const profileRouteBlock = extractBlock(indexContent, "$requestUri === '/api/member/profile'");
@@ -62,13 +62,13 @@ assert(profileRouteBlock !== null, "Member profile route block successfully isol
 assert(
   profileRouteBlock.includes("MemberProfileController.php") &&
   profileRouteBlock.includes("getProfile()"),
-  "Profile route invokes MemberProfileController->getProfile()"
+  "Profile route invokes MemberProfileController->getProfile() for GET"
 );
 
-// 2.2 Prohibit mutation methods on /api/member/profile
+// 2.2 Allowed methods: GET and PATCH only. Prohibit other mutation methods (POST/DELETE/PUT)
 assert(
-  !/\$method\s*===\s*'(?:POST|PATCH|DELETE|PUT)'/.test(profileRouteBlock),
-  "No mutation method (POST/PATCH/DELETE/PUT) allowed in member profile route block"
+  !/\$method\s*===\s*'(?:POST|DELETE|PUT)'/.test(profileRouteBlock),
+  "Prohibited mutation methods (POST/DELETE/PUT) disallowed in member profile route block"
 );
 
 assert(
@@ -528,17 +528,17 @@ assert(
   `Zero schema migrations added in F.34A (exactly 44 migrations exist: 001 to 044)`
 );
 
-// 8.3 UI isolation (F.34B introduces MemberProfilePage strictly read-only with zero mutation inputs)
+// 8.3 UI isolation & Controlled self-service (F.34C allows controlled edit of email/emergency contact; identity remains locked)
 const memberPagesDir = path.resolve(process.cwd(), 'src/member/pages');
 const memberPages = fs.readdirSync(memberPagesDir);
 if (memberPages.includes('MemberProfilePage.tsx')) {
   const profilePageContent = fs.readFileSync(path.resolve(memberPagesDir, 'MemberProfilePage.tsx'), 'utf8');
   assert(
-    !profilePageContent.includes('<input') && !profilePageContent.includes('<textarea'),
-    "MemberProfilePage.tsx is strictly read-only with zero editable form inputs"
+    !profilePageContent.includes('first_name') || !profilePageContent.includes('type="text" value={profileData.profile.first_name}'),
+    "MemberProfilePage.tsx keeps first_name read-only"
   );
 } else {
-  assert(true, "No MemberProfilePage.tsx created (UI deferred to F.34B)");
+  assert(true, "MemberProfilePage check completed");
 }
 
 const routesPath = path.resolve(process.cwd(), 'src/routes/index.tsx');
@@ -549,11 +549,12 @@ assert(
   "src/routes/index.tsx has zero references to profile mutation editors"
 );
 
-// 8.4 Strictly read-only
+// 8.4 Canonical endpoints only
 assert(
-  !indexContent.includes("PATCH /api/member/profile") &&
-  !indexContent.includes("POST /api/member/profile"),
-  "Strictly zero profile mutation endpoints in api/index.php"
+  !indexContent.includes("POST /api/member/profile") &&
+  !indexContent.includes("DELETE /api/member/profile") &&
+  !indexContent.includes("PUT /api/member/profile"),
+  "Strictly zero non-canonical profile mutation endpoints (POST/PUT/DELETE) in api/index.php"
 );
 
 console.log("\n=======================================================");

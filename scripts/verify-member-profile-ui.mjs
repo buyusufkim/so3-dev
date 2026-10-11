@@ -273,14 +273,25 @@ assert(simulateAccountStatus('ACTIVE').label === 'Aktif', "Sim: uppercase 'ACTIV
 assert(simulateAccountStatus('inactive').label === 'Belirtilmemiş', "Sim: unknown status safely falls back to 'Belirtilmemiş'");
 assert(simulateAccountStatus(null).label === 'Belirtilmemiş', "Sim: null status falls back to 'Belirtilmemiş'");
 
-console.log("\n=== 8. Strict Read-Only Anti-Scope Invariants ===");
+console.log("\n=== 8. Controlled Self-Service & Anti-Scope Invariants ===");
+// Only email, emergency_contact_name, emergency_contact_phone may have inputs
 assert(
-  !pageContent.includes("<input") && !pageContent.includes("<textarea") && !pageContent.includes("<select"),
-  "Component strictly contains zero editable form inputs (<input>, <textarea>, <select>)"
+  !pageContent.includes("<textarea") && !pageContent.includes("<select"),
+  "Component strictly contains zero textarea or select inputs"
 );
 assert(
-  !pageContent.includes("Kaydet") && !pageContent.includes("Güncelle") && !pageContent.includes("Düzenle"),
-  "Component strictly contains zero edit/update/save mutation buttons"
+  !pageContent.includes('name="first_name"') &&
+  !pageContent.includes('name="last_name"') &&
+  !pageContent.includes('name="phone"') &&
+  !pageContent.includes('name="username"') &&
+  !pageContent.includes('value={editFirstName') &&
+  !pageContent.includes('value={editLastName') &&
+  !pageContent.includes('value={editPhone'),
+  "Identity and primary phone fields are strictly locked from user editing"
+);
+assert(
+  pageContent.includes("Bilgilerimi Düzenle") && pageContent.includes("Kaydet") && pageContent.includes("Vazgeç"),
+  "Component provides controlled 'Bilgilerimi Düzenle', 'Kaydet', and 'Vazgeç' buttons"
 );
 assert(
   !pageContent.includes("type=\"file\"") && !pageContent.includes("avatar"),
