@@ -97,8 +97,9 @@ assert(
   !runtimeContent.includes("console.log(headers") &&
   !runtimeContent.includes("console.log(res.headers") &&
   !runtimeContent.includes("console.log(cookie") &&
-  !runtimeContent.includes("console.log(token"),
-  "Runtime script strictly avoids logging raw headers, cookies, or secrets"
+  !runtimeContent.includes("console.log(token") &&
+  !runtimeContent.includes("err instanceof Error ? err.message : String(err)"),
+  "Runtime script strictly avoids logging raw headers, cookies, tokens, or raw exception strings"
 );
 
 // 2.8 Homepage & SPA HTML check precedence fix
@@ -112,8 +113,58 @@ assert(
   "Runtime script enforces status 200 and valid HTML document structure"
 );
 
+// 2.9 Method Guard & Allowlist Invariant
+assert(
+  runtimeContent.includes("ALLOWED_METHODS") &&
+  runtimeContent.includes("'GET'") &&
+  runtimeContent.includes("'HEAD'") &&
+  runtimeContent.includes("DISALLOWED_METHOD"),
+  "Runtime script enforces strict method allowlist (['GET', 'HEAD']) and rejects mutation methods before fetch"
+);
+assert(
+  !runtimeContent.includes("request('/api/member/profile', { method: 'POST' })") &&
+  !runtimeContent.includes("method: 'POST'"),
+  "Runtime smoke tests contain ZERO mutation POST requests"
+);
+
+// 2.10 Max 1 MiB Body Limit & Stream Reader Invariant
+assert(
+  runtimeContent.includes("MAX_BODY_BYTES") &&
+  runtimeContent.includes("1048576") &&
+  runtimeContent.includes("RESPONSE_TOO_LARGE") &&
+  runtimeContent.includes("getReader()"),
+  "Runtime script bounds response body to 1 MiB (1,048,576 bytes) with stream reader and byte counter"
+);
+assert(
+  runtimeContent.includes("content-length") || runtimeContent.includes("contentLengthHeader"),
+  "Runtime script performs Content-Length pre-check against 1 MiB limit"
+);
+assert(
+  runtimeContent.includes("reader.cancel()"),
+  "Runtime script cancels reader on overflow or error cleanup"
+);
+
+// 2.11 Sanitized Error Codes
+const requiredSanitizedCodes = ['TIMEOUT', 'NETWORK_ERROR', 'INVALID_RESPONSE', 'RESPONSE_TOO_LARGE', 'CROSS_ORIGIN_REDIRECT', 'DISALLOWED_METHOD'];
+for (const code of requiredSanitizedCodes) {
+  assert(
+    runtimeContent.includes(code),
+    `Runtime script defines bounded error code: '${code}'`
+  );
+}
+
+// 2.12 Sitemap Canonical Check
+assert(
+  !runtimeContent.includes("res.status === 200 || res.status === 404"),
+  "Runtime script eliminates false PASS condition on /sitemap.xml (404 no longer allowed)"
+);
+assert(
+  runtimeContent.includes("isSuccessfulXmlResponse"),
+  "Runtime script enforces HTTP 200 and valid XML document structure on /sitemap.xml"
+);
+
 console.log("\n=== 3. Read-Only HTTP Checks Validation ===");
-// Verify presence of canonical contract tests
+// Verify presence of canonical contract tests (all strictly read-only GET/HEAD)
 const expectedChecks = [
   "Public Homepage Availability",
   "SPA Public Route Fallback (/branslar)",
@@ -121,7 +172,6 @@ const expectedChecks = [
   "Unauthenticated Admin API Access Rejection (/api/admin/overview)",
   "Unauthenticated Member Profile API Access Rejection (/api/member/profile)",
   "Unauthenticated Member Overview Access Rejection (/api/member/overview)",
-  "Disallowed Method Handling on /api/member/profile (POST)",
   "Non-existent API endpoint response",
   "Public Member Auth CSRF Token Endpoint"
 ];
@@ -137,7 +187,7 @@ for (const chk of expectedChecks) {
 assert(
   runtimeContent.includes("res.status === 200") &&
   runtimeContent.includes("res.status === 401") &&
-  runtimeContent.includes("res.status === 405"),
+  runtimeContent.includes("res.status === 404"),
   "Runtime checks assert actual HTTP response statuses from network responses"
 );
 
@@ -315,6 +365,127 @@ assert(testHtmlValidator({ status: 200, body: "OK text response" }) === false, "
 assert(testHtmlValidator({ status: 200, body: "<span>Just a fragment</span>" }) === false, "Sim: 200 + Fragment -> FAIL");
 // 200 + HTML -> PASS
 assert(testHtmlValidator({ status: 200, body: "<!DOCTYPE html><html><head><title>SO3 PT</title></head><body><div id=\"root\"></div></body></html>" }) === true, "Sim: 200 + HTML -> PASS");
+
+// Sim 5: Method Allowlist Guard Simulation
+const allowedMethods = ['GET', 'HEAD'];
+function simulateMethodGuard(method, fetchMock) {
+  const normMethod = (method || 'GET').toUpperCase();
+  if (!allowedMethods.includes(normMethod)) {
+    return { status: 0, error: 'DISALLOWED_METHOD', fetched: false };
+  }
+  fetchMock();
+  return { status: 200, error: null, fetched: true };
+}
+
+let fetchMockCalled = false;
+const fetchMock = () => { fetchMockCalled = true; };
+
+fetchMockCalled = false;
+assert(simulateMethodGuard('GET', fetchMock).error === null && fetchMockCalled === true, "Sim: GET method allowed and executed");
+fetchMockCalled = false;
+assert(simulateMethodGuard('HEAD', fetchMock).error === null && fetchMockCalled === true, "Sim: HEAD method allowed and executed");
+fetchMockCalled = false;
+assert(simulateMethodGuard('POST', fetchMock).error === 'DISALLOWED_METHOD' && fetchMockCalled === false, "Sim: POST method rejected before fetch");
+fetchMockCalled = false;
+assert(simulateMethodGuard('PATCH', fetchMock).error === 'DISALLOWED_METHOD' && fetchMockCalled === false, "Sim: PATCH method rejected before fetch");
+fetchMockCalled = false;
+assert(simulateMethodGuard('PUT', fetchMock).error === 'DISALLOWED_METHOD' && fetchMockCalled === false, "Sim: PUT method rejected before fetch");
+fetchMockCalled = false;
+assert(simulateMethodGuard('DELETE', fetchMock).error === 'DISALLOWED_METHOD' && fetchMockCalled === false, "Sim: DELETE method rejected before fetch");
+
+// Sim 6: 1 MiB Body Limit & Stream Reader Simulation
+const MAX_BYTES = 1048576; // 1 MiB
+function simulateBodyReading(contentLengthHeader, chunks) {
+  if (contentLengthHeader) {
+    const cl = parseInt(contentLengthHeader, 10);
+    if (!Number.isNaN(cl) && cl > MAX_BYTES) {
+      return { ok: false, error: 'RESPONSE_TOO_LARGE', bytesRead: 0 };
+    }
+  }
+
+  let totalBytes = 0;
+  let cancelled = false;
+  for (const chunk of chunks) {
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_BYTES) {
+      cancelled = true;
+      break;
+    }
+  }
+
+  if (cancelled) {
+    return { ok: false, error: 'RESPONSE_TOO_LARGE', bytesRead: totalBytes, readerCancelled: true };
+  }
+  return { ok: true, error: null, bytesRead: totalBytes };
+}
+
+// 6.1 Content-Length pre-check rejection
+assert(
+  simulateBodyReading("1048577", []).error === 'RESPONSE_TOO_LARGE',
+  "Sim: Content-Length > 1 MiB rejected immediately without reading"
+);
+// 6.2 Stream read within 1 MiB limit
+const smallChunk = new Uint8Array(500 * 1024); // 500 KiB
+assert(
+  simulateBodyReading(null, [smallChunk]).ok === true,
+  "Sim: Stream read under 1 MiB succeeds"
+);
+// 6.3 Stream read exceeding 1 MiB limit cancels reader
+const chunkA = new Uint8Array(600 * 1024); // 600 KiB
+const chunkB = new Uint8Array(600 * 1024); // 600 KiB (total 1200 KiB > 1024 KiB)
+const largeStreamResult = simulateBodyReading(null, [chunkA, chunkB]);
+assert(
+  largeStreamResult.error === 'RESPONSE_TOO_LARGE' && largeStreamResult.readerCancelled === true,
+  "Sim: Stream exceeding 1 MiB triggers reader cancellation and RESPONSE_TOO_LARGE"
+);
+
+// Sim 7: Sanitized Network Error Mapping Simulation
+function mapNetworkError(err) {
+  let errorCode = 'NETWORK_ERROR';
+  if (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) {
+    errorCode = 'TIMEOUT';
+  } else if (err instanceof TypeError) {
+    errorCode = 'NETWORK_ERROR';
+  } else if (err && err.name === 'SyntaxError') {
+    errorCode = 'INVALID_RESPONSE';
+  }
+  return errorCode;
+}
+
+const timeoutErr = new Error("The operation was aborted.");
+timeoutErr.name = "AbortError";
+assert(mapNetworkError(timeoutErr) === 'TIMEOUT', "Sim: AbortError maps strictly to TIMEOUT");
+
+const typeErr = new TypeError("fetch failed: connection refused to https://secret-token@evil.com");
+assert(mapNetworkError(typeErr) === 'NETWORK_ERROR', "Sim: TypeError maps strictly to NETWORK_ERROR without secret leakage");
+
+const syntaxErr = new SyntaxError("Unexpected token < in JSON");
+assert(mapNetworkError(syntaxErr) === 'INVALID_RESPONSE', "Sim: SyntaxError maps strictly to INVALID_RESPONSE");
+
+// Sim 8: Sitemap 200 XML Response Validator Simulation
+function testXmlValidator(res) {
+  if (!res || res.status !== 200 || !res.body || typeof res.body !== 'string') {
+    return false;
+  }
+  const trimmed = res.body.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return false;
+  }
+  const lower = trimmed.toLowerCase();
+  const hasXmlOrUrlset = lower.includes('<?xml') || lower.includes('<urlset');
+  const hasUrlsetEnd = lower.includes('</urlset>') || lower.includes('</sitemapindex>');
+  return hasXmlOrUrlset && hasUrlsetEnd;
+}
+
+assert(testXmlValidator({ status: 404, body: '<?xml version="1.0"?><urlset></urlset>' }) === false, "Sim: Sitemap 404 + XML -> FAIL");
+assert(testXmlValidator({ status: 500, body: '<?xml version="1.0"?><urlset></urlset>' }) === false, "Sim: Sitemap 500 + XML -> FAIL");
+assert(testXmlValidator({ status: 200, body: '<!DOCTYPE html><html><body>Not XML</body></html>' }) === false, "Sim: Sitemap 200 + HTML -> FAIL");
+assert(testXmlValidator({ status: 200, body: '{"error":"Not found"}' }) === false, "Sim: Sitemap 200 + JSON -> FAIL");
+assert(testXmlValidator({ status: 200, body: '<?xml version="1.0"?><broken>' }) === false, "Sim: Sitemap 200 + Broken XML -> FAIL");
+assert(testXmlValidator({
+  status: 200,
+  body: '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://so3pt.com.tr/</loc></url>\n</urlset>'
+}) === true, "Sim: Sitemap 200 + Valid XML -> PASS");
 
 console.log("\n=== 6. Anti-Scope & Scope Isolation ===");
 // Zero schema migrations added

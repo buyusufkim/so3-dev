@@ -111,9 +111,50 @@ function isSuccessfulHtmlResponse(res) {
   return hasDoctypeOrHtml && hasClosingOrStructure;
 }
 
+/**
+ * Robust XML Sitemap Response Validator
+ * Requires HTTP 200, string body, not JSON, and valid XML urlset tags.
+ * Rejects 404, 500, or invalid XML.
+ */
+function isSuccessfulXmlResponse(res) {
+  if (!res || res.status !== 200 || !res.body || typeof res.body !== 'string') {
+    return false;
+  }
+  const trimmed = res.body.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return false; // Reject JSON payloads
+  }
+  const lower = trimmed.toLowerCase();
+  const hasXmlOrUrlset = lower.includes('<?xml') || lower.includes('<urlset');
+  const hasUrlsetEnd = lower.includes('</urlset>') || lower.includes('</sitemapindex>');
+  return hasXmlOrUrlset && hasUrlsetEnd;
+}
+
+const ALLOWED_METHODS = ['GET', 'HEAD'];
+const MAX_BODY_BYTES = 1048576; // 1 MiB (1,048,576 bytes)
+
+function formatReceived(res) {
+  if (!res) return 'HTTP 0 (INVALID_RESPONSE)';
+  const statusPart = `HTTP ${res.status || 0}`;
+  const errorPart = res.error ? ` (${res.error})` : '';
+  return `${statusPart}${errorPart}`;
+}
+
 async function request(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  
+  // Method allowlist guard: prevent any mutation method BEFORE fetch
+  if (!ALLOWED_METHODS.includes(method)) {
+    return {
+      status: 0,
+      headers: null,
+      body: '',
+      error: 'DISALLOWED_METHOD',
+      crossOriginRedirect: false
+    };
+  }
+
   const fullUrl = new URL(path, targetOrigin).toString();
-  const method = options.method || 'GET';
   const timeoutMs = options.timeoutMs || 8000;
 
   const controller = new AbortController();
@@ -123,7 +164,7 @@ async function request(path, options = {}) {
     const res = await fetch(fullUrl, {
       method,
       headers: {
-        'Accept': 'application/json, text/html, */*',
+        'Accept': 'application/json, text/html, application/xml, */*',
         ...(options.headers || {})
       },
       redirect: 'manual', // do not follow redirects automatically
@@ -139,8 +180,10 @@ async function request(path, options = {}) {
           return {
             status: res.status,
             crossOriginRedirect: true,
+            error: 'CROSS_ORIGIN_REDIRECT',
             location: dest.origin, // only log origin, never full url with tokens
-            body: ''
+            body: '',
+            headers: res.headers
           };
         }
       } catch {
@@ -148,24 +191,87 @@ async function request(path, options = {}) {
       }
     }
 
+    // Pre-check Content-Length header against 1 MiB limit
+    const contentLengthHeader = res.headers.get('content-length');
+    if (contentLengthHeader) {
+      const parsedCl = parseInt(contentLengthHeader, 10);
+      if (!Number.isNaN(parsedCl) && parsedCl > MAX_BODY_BYTES) {
+        return {
+          status: res.status,
+          headers: res.headers,
+          body: '',
+          error: 'RESPONSE_TOO_LARGE',
+          crossOriginRedirect: false
+        };
+      }
+    }
+
     let bodyText = '';
-    try {
-      bodyText = await res.text();
-    } catch {
-      bodyText = '';
+    if (res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let totalBytes = 0;
+      let chunks = '';
+      let exceeded = false;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalBytes += value.byteLength || value.length;
+          if (totalBytes > MAX_BODY_BYTES) {
+            exceeded = true;
+            try {
+              await reader.cancel();
+            } catch {}
+            break;
+          }
+          chunks += decoder.decode(value, { stream: true });
+        }
+        if (!exceeded) {
+          chunks += decoder.decode(); // flush decoder
+          bodyText = chunks;
+        }
+      } catch (streamErr) {
+        try {
+          await reader.cancel();
+        } catch {}
+        throw streamErr;
+      }
+
+      if (exceeded) {
+        return {
+          status: res.status,
+          headers: res.headers,
+          body: '',
+          error: 'RESPONSE_TOO_LARGE',
+          crossOriginRedirect: false
+        };
+      }
     }
 
     return {
       status: res.status,
       headers: res.headers,
       body: bodyText,
-      crossOriginRedirect: false
+      crossOriginRedirect: false,
+      error: null
     };
   } catch (err) {
+    let errorCode = 'NETWORK_ERROR';
+    if (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) {
+      errorCode = 'TIMEOUT';
+    } else if (err instanceof TypeError) {
+      errorCode = 'NETWORK_ERROR';
+    } else if (err && err.name === 'SyntaxError') {
+      errorCode = 'INVALID_RESPONSE';
+    }
     return {
-      error: err instanceof Error ? err.message : String(err),
+      error: errorCode,
       status: 0,
-      body: ''
+      body: '',
+      headers: null,
+      crossOriginRedirect: false
     };
   } finally {
     // Timeout covers both initial request and stream body read completion
@@ -186,7 +292,7 @@ function recordResult(name, status, expectedDesc, receivedDesc, passed) {
   results.push({ name, passed, status, expectedDesc, receivedDesc });
 }
 
-// Test Definitions (Read-Only HTTP Checks)
+// Test Definitions (Strictly Read-Only HTTP Checks)
 async function runSmokeTests() {
   // Test 1: Public Homepage
   {
@@ -196,7 +302,7 @@ async function runSmokeTests() {
       "Public Homepage Availability",
       res.status,
       "HTTP 200 with HTML document structure",
-      `HTTP ${res.status}${res.error ? ` (${res.error})` : ''}`,
+      formatReceived(res),
       ok
     );
   }
@@ -209,21 +315,21 @@ async function runSmokeTests() {
       "SPA Public Route Fallback (/branslar)",
       res.status,
       "HTTP 200 with SPA HTML document structure",
-      `HTTP ${res.status}${res.error ? ` (${res.error})` : ''}`,
+      formatReceived(res),
       ok
     );
   }
 
-  // Test 3: Public Robots / Sitemap Route
+  // Test 3: Public Robots / Sitemap Route (Canonical SEO endpoint via RewriteRule ^sitemap\.xml$ api/seo-sitemap.php)
   {
     const res = await request('/sitemap.xml');
-    const ok = res.status === 200 || res.status === 404; // Sitemap may exist or fallback
+    const ok = isSuccessfulXmlResponse(res);
     recordResult(
       "Sitemap endpoint reachability (/sitemap.xml)",
       res.status,
-      "HTTP 200 or clean 404 without 500 error",
-      `HTTP ${res.status}`,
-      ok && res.status !== 500
+      "HTTP 200 with valid XML urlset document structure",
+      formatReceived(res),
+      ok
     );
   }
 
@@ -240,7 +346,7 @@ async function runSmokeTests() {
       "Unauthenticated Admin API Access Rejection (/api/admin/overview)",
       res.status,
       "HTTP 401 with UNAUTHORIZED JSON envelope",
-      `HTTP ${res.status}`,
+      formatReceived(res),
       ok && hasEnvelope
     );
   }
@@ -258,7 +364,7 @@ async function runSmokeTests() {
       "Unauthenticated Member Profile API Access Rejection (/api/member/profile)",
       res.status,
       "HTTP 401 with UNAUTHORIZED JSON envelope",
-      `HTTP ${res.status}`,
+      formatReceived(res),
       ok && hasEnvelope
     );
   }
@@ -271,25 +377,12 @@ async function runSmokeTests() {
       "Unauthenticated Member Overview Access Rejection (/api/member/overview)",
       res.status,
       "HTTP 401",
-      `HTTP ${res.status}`,
+      formatReceived(res),
       ok
     );
   }
 
-  // Test 7: Method Not Allowed on Profile Endpoint (POST is disallowed; only GET and PATCH allowed)
-  {
-    const res = await request('/api/member/profile', { method: 'POST' });
-    const ok = res.status === 405 || res.status === 401; // Either 405 Method Not Allowed or 401 Unauthorized
-    recordResult(
-      "Disallowed Method Handling on /api/member/profile (POST)",
-      res.status,
-      "HTTP 405 Method Not Allowed or 401 Unauthorized",
-      `HTTP ${res.status}`,
-      ok
-    );
-  }
-
-  // Test 8: Non-existent API Endpoint Clean 404
+  // Test 7: Non-existent API Endpoint Clean 404
   {
     const res = await request('/api/non-existent-probe-endpoint-f35');
     const ok = res.status === 404 || res.status === 401;
@@ -297,12 +390,12 @@ async function runSmokeTests() {
       "Non-existent API endpoint response (/api/non-existent-probe-endpoint-f35)",
       res.status,
       "HTTP 404 (or 401) without 500 server crash",
-      `HTTP ${res.status}`,
+      formatReceived(res),
       ok && res.status !== 500
     );
   }
 
-  // Test 9: Public Auth CSRF endpoint reachability
+  // Test 8: Public Auth CSRF endpoint reachability
   {
     const res = await request('/api/member-auth/csrf');
     const ok = res.status === 200;
@@ -315,7 +408,7 @@ async function runSmokeTests() {
       "Public Member Auth CSRF Token Endpoint (/api/member-auth/csrf)",
       res.status,
       "HTTP 200 with data.csrf_token",
-      `HTTP ${res.status}`,
+      formatReceived(res),
       ok && hasToken
     );
   }

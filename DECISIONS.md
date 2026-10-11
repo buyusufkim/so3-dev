@@ -793,6 +793,15 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * secret and log isolation: prohibited logging raw headers, cookies, query strings, and authorization tokens; redirect tracking only records destination origin (`dest.origin`)
 * unsupported network guarantees: documented in `docs/PRODUCTION_READINESS.md` that client-side harness cannot prevent DNS rebinding or internal reverse proxies resolving staging domains to production IPs without IP pinning; operator remains strictly responsible for staging DNS and database isolation
 
+## F.35A — Final Runtime Harness Corrective
+* pure read-only method guarantee: completely removed Test 7 mutation POST probe (`/api/member/profile`); enforced method allowlist `['GET', 'HEAD']` inside `request()` helper; any mutation method (POST/PATCH/PUT/DELETE) is rejected immediately before fetch with `DISALLOWED_METHOD`; mutation negative testing deferred exclusively to static contract suites
+* response body size ceiling (1 MiB): capped body reads strictly at 1,048,576 bytes; enforced `Content-Length` header pre-check and `res.body.getReader()` byte counter with reader cancellation (`reader.cancel()`); payload overflow produces `RESPONSE_TOO_LARGE` without disk writes or logging
+* sanitized error codes: eliminated raw exception leakage (`err.message`); standardized failure descriptions to bounded enum codes (`TIMEOUT`, `NETWORK_ERROR`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE`, `CROSS_ORIGIN_REDIRECT`, `DISALLOWED_METHOD`); raw URLs, tokens, and cookies never exposed
+* canonical sitemap 200 XML validation: eliminated false-PASS condition on `/sitemap.xml` (`res.status === 200 || res.status === 404`); confirmed canonical rewrite route (`RewriteRule ^sitemap\.xml$ api/seo-sitemap.php [L]`); enforced HTTP 200 status and XML `<urlset>` document validation; 404 and 500 responses strictly produce FAIL
+* CSRF GET session side-effect documentation: documented in `docs/PRODUCTION_READINESS.md` that `/api/member-auth/csrf` GET requests may initiate a PHP session and issue `Set-Cookie: PHPSESSID`; flagged for separation into auth preparation phases for zero-side-effect health checks
+* explicit verification separation: established strict separation between Static Verifiers (PASS), Runtime HTTP (BLOCKED - target unconfigured), Runtime MySQL/PDO (NOT RUN), and Runtime Browser (NOT RUN)
+
+
 
 
 

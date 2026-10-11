@@ -141,11 +141,14 @@ Staging ortamında doğrulanacak kritik akışlar:
 4. **Dosya Güncellemesi**:
    - Derlenmiş `dist/` dosyaları ve `api/` dizini sunucuya yüklenmeli.
    - `api/config/config.local.php` ve `uploads/` dizini korunmalı.
-5. **Staging Smoke Testi (F.35A Güvenlik Düzeltmesi)**:
+5. **Staging Smoke Testi (F.35A Final Güvenlik Düzeltmesi)**:
    - `SO3_RUNTIME_BASE_URL="https://staging.alanadiniz.com" npm run verify:deployment-runtime` çalıştırılmalı.
-   - **Kesin Production Yasağı**: `so3pt.com.tr` ve `www.so3pt.com.tr` origin'leri kesin olarak engellenmiştir; hiçbir override bayrağı (`SO3_RUNTIME_ALLOW_PRODUCTION`) bulunmaz.
-   - **Timeout Garantisi**: 8 saniyelik timeout, hem HTTP el sıkışmasını hem de yanıt gövdesinin (body) okunmasını bütünüyle kapsar.
-   - **HTML Doğrulama**: Yanıt gövdesinin gerçekten HTML dokümanı olduğu ve HTTP status 200 döndüğü açık parantez ve durum kontrolleriyle garanti edilir (404/500 HTML veya 200 JSON durumları FAIL üretir).
+   - **Salt-Okunur Yöntem Garantisi**: Harness içerisinde mutasyon testleri (POST/PATCH/PUT/DELETE) tamamen yasaklanmıştır. Yalnızca `GET` ve `HEAD` yöntemlerine izin verilir. `request()` helper'ı izinli olmayan yöntemleri fetch öncesinde derhal `DISALLOWED_METHOD` koduyla reddeder.
+   - **Response Body Sınırı (1 MiB)**: Maksimum gövde boyutu 1.048.576 bayt (1 MiB) olarak sınırlandırılmıştır. `Content-Length` başlığı varsa ön kontrol yapılır; yoksa `res.body.getReader()` akış okuyucusu üzerinden bayt sayacı çalıştırılır. Sınır aşılırsa okuyucu derhal iptal edilir (`reader.cancel()`) ve `RESPONSE_TOO_LARGE` hatası döner.
+   - **Temizlenmiş Hata Mesajları**: Ham exception mesajları, URL sorgu parametreleri, gizli token ve çerezler konsola veya loglara yazılmaz. Hatalar yalnızca sınırlı hata kodları (`TIMEOUT`, `NETWORK_ERROR`, `INVALID_RESPONSE`, `RESPONSE_TOO_LARGE`, `CROSS_ORIGIN_REDIRECT`, `DISALLOWED_METHOD`) ile formatlanır.
+   - **Kanonik Sitemap Doğrulaması**: `/sitemap.xml` kanonik bir SEO rotasıdır (`RewriteRule ^sitemap\.xml$ api/seo-sitemap.php`). HTTP 200 ve geçerli XML `<urlset>` yapısı zorunludur; 404 ve 500 yanıtları kesinlikle `FAIL` üretir.
+   - **CSRF GET Oturum Notu**: `/api/member-auth/csrf` GET isteği PHP tarafında oturum başlatarak `Set-Cookie: PHPSESSID` üretebilir. Sıfır sunucu oturum yan etkisi hedeflenen ortamlarda CSRF testi ayrı bir kimlik doğrulama hazırlık fazında çalıştırılmalıdır.
+   - **Kesin Production Yasağı**: `so3pt.com.tr` ve `www.so3pt.com.tr` origin'leri koşulsuz olarak engellenmiştir (`SO3_RUNTIME_ALLOW_PRODUCTION` bayrağı kaldırılmıştır).
 
 ---
 
@@ -181,7 +184,11 @@ Olası bir dağıtım arızasında:
 
 ---
 
-## 11. Canlı Yayına Hazırlık Değerlendirmesi
+## 11. Canlı Yayına Hazırlık Doğrulama Matrisi
 
-- Statik Kod ve Mimari Hazırlığı: **TAMAMLANDI (PASS)**
-- Canlı / Staging Ortam Doğrulaması: **BEKLEMEDE (BLOCKED - Staging URL ve Altyapı Bekleniyor)**
+| Doğrulama Alanı | Durum | Açıklama |
+| :--- | :--- | :--- |
+| **Static Verifier Suite** | **PASS** | Tüm statik mimari, şema eşitliği ve güvenlik sözleşmesi invariant'ları geçti. |
+| **Runtime HTTP Smoke** | **BLOCKED** | Staging hedefi (`SO3_RUNTIME_BASE_URL`) tanımlanana kadar exit code 3 ile fail-closed bloklandı. |
+| **Runtime MySQL/PDO** | **NOT RUN** | Harici canlı staging MySQL veritabanı henüz sağlanmadı. |
+| **Runtime Browser** | **NOT RUN** | Canlı staging ortamı ve tarayıcı E2E oturumları henüz başlatılmadı. |
