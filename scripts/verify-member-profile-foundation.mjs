@@ -528,20 +528,25 @@ assert(
   `Zero schema migrations added in F.34A (exactly 44 migrations exist: 001 to 044)`
 );
 
-// 8.3 Zero new UI pages or routes in F.34A
+// 8.3 UI isolation (F.34B introduces MemberProfilePage strictly read-only with zero mutation inputs)
 const memberPagesDir = path.resolve(process.cwd(), 'src/member/pages');
 const memberPages = fs.readdirSync(memberPagesDir);
-assert(
-  !memberPages.includes('MemberProfilePage.tsx'),
-  "No MemberProfilePage.tsx created (UI deferred to F.34B)"
-);
+if (memberPages.includes('MemberProfilePage.tsx')) {
+  const profilePageContent = fs.readFileSync(path.resolve(memberPagesDir, 'MemberProfilePage.tsx'), 'utf8');
+  assert(
+    !profilePageContent.includes('<input') && !profilePageContent.includes('<textarea'),
+    "MemberProfilePage.tsx is strictly read-only with zero editable form inputs"
+  );
+} else {
+  assert(true, "No MemberProfilePage.tsx created (UI deferred to F.34B)");
+}
 
 const routesPath = path.resolve(process.cwd(), 'src/routes/index.tsx');
 assert(fs.existsSync(routesPath), "src/routes/index.tsx exists");
 const routesContent = fs.readFileSync(routesPath, 'utf8');
 assert(
-  !routesContent.includes("MemberProfilePage"),
-  "src/routes/index.tsx has zero references to MemberProfilePage"
+  !routesContent.includes("MemberProfileEditor"),
+  "src/routes/index.tsx has zero references to profile mutation editors"
 );
 
 // 8.4 Strictly read-only

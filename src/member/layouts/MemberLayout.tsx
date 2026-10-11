@@ -101,6 +101,12 @@ export function MemberLayout() {
                 >
                   Topluluk
                 </NavLink>
+                <NavLink 
+                  to="/uye/hesabim" 
+                  className={({isActive}) => `min-h-[44px] inline-flex items-center px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  Hesabım
+                </NavLink>
               </nav>
             )}
           </div>
@@ -154,6 +160,12 @@ export function MemberLayout() {
                 className={({isActive}) => `min-h-[44px] inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
               >
                 Topluluk
+              </NavLink>
+              <NavLink 
+                to="/uye/hesabim" 
+                className={({isActive}) => `min-h-[44px] inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-white/60'}`}
+              >
+                Hesabım
               </NavLink>
             </nav>
           </div>

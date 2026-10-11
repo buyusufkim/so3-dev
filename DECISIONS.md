@@ -745,6 +745,23 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * zero mutations & schema migrations: zero profile mutation endpoints (POST/PATCH/PUT/DELETE) created; zero database schema migrations added; existing 44 migrations preserved unchanged
 * foundation for F.34B UI & F.34C self-service: established secure, validated backend contract and client foundation ahead of F.34B Member Profile UI and F.34C controlled self-service updates
 
+## F.34B — Member Profile Read-Only UI
+* route & layout: registered authenticated member route `/uye/hesabim` under `/uye` layout via lazy-loaded `MemberProfilePage.tsx` wrapped in `MemberSuspense`
+* navigation: added "Hesabım" link to desktop (`hidden sm:flex`) and mobile (`sm:hidden`) member navigation in `MemberLayout.tsx`; strictly guarded by `isAuthenticated && identity && !identity.account.must_change_password`; strictly enforces `min-h-[44px]` touch target; mobile horizontal scroll preserved
+* authenticated member-only profile display: page title "Hesabım" with subtitle "Hesap ve iletişim bilgilerini görüntüle." provides clear read-only orientation
+* canonical getProfile client: exclusively consumes `memberApiClient.getProfile(controller.signal)` which calls `GET /api/member/profile`; zero raw `fetch()` or admin client calls; sends zero query parameters
+* explicit three-card layout & semantic accessibility: structured across 3 cards with semantic `<h2>` headings and `<dl>`, `<dt>`, `<dd>` definitions:
+  - Kart A (Kişisel Bilgiler): `profile.first_name`, `profile.last_name`
+  - Kart B (İletişim Bilgileri): `profile.phone`, `profile.email`
+  - Kart C (Hesap ve Acil Durum Bilgileri): `account.username`, `account.status`, `profile.emergency_contact_name`, `profile.emergency_contact_phone`
+* account status & username display: renders `account.username` and maps `account.status === 'active'` to "Aktif" with neutral accessible badges (not color-only); unknown status safely falls back to "Belirtilmemiş" without technical string leakage
+* nullable fallback: optional or null profile fields (`email`, `emergency_contact_name`, `emergency_contact_phone`) safely render "Belirtilmemiş" without synthetic mocks
+* race-safe fetch and bounded errors: lifecycle protected by `AbortController`, `requestGenerationRef`, and `isMountedRef`; bounded error message "Hesap bilgilerin yüklenemedi." with a `min-h-[44px]` "Tekrar Dene" button
+* strictly read-only: zero form inputs (`<input>`, `<textarea>`), zero edit/save buttons, zero avatar upload, zero mutation endpoints; existing password-change route preserved independently
+* zero new schema migrations: zero schema migrations added (44 total migrations intact); zero backend changes
+* foundation for F.34C: cleanly separates read-only presentation ahead of F.34C controlled self-service profile updates
+
+
 
 
 
