@@ -821,6 +821,12 @@ NULL association yalnız pre-cutover/historical appointment compatibility içind
 * negative test suite: 11 fixture simulations added to `scripts/verify-production-readiness-foundation.mjs` verifying all failure branches (different path, production origin, query/fragment, 302/307, 404 target, JSON target, timeout).
 * live staging verification: Re-running `SO3_RUNTIME_BASE_URL="https://staging.so3pt.com.tr" npm run verify:deployment-runtime` achieved 8/8 PASS with zero failures.
 
+## F.35B — Deployment Archive Isolation & Public Asset Clean-up
+* problem identification: Staging deployment archive (`so3-staging-deployment-f35b.zip`) was inadvertently placed in the root directory and `public/` directory (`public/so3-staging-deployment-f35b.zip`). Because Vite copies everything from `public/` directly into the `dist/` web root, this caused a 21.7 MB deployment archive containing backend API code, Apache rewrite rules, and upload structures to be bundled into the client build output (`dist/so3-staging-deployment-f35b.zip`), posing an information disclosure and bandwidth bloat risk.
+* repository clean-up: Deleted `so3-staging-deployment-f35b.zip` and `public/so3-staging-deployment-f35b.zip` from the workspace. Rebuilt `dist/` to confirm zero deployment zip files are present in the web root.
+* narrow .gitignore protection: Added narrowly scoped rules (`*-deployment*.zip`, `deployment*.zip`) to `.gitignore` without blanket `*.zip` exclusions, ensuring legitimate project zip assets remain permissible while preventing current and future staging/production deployment archives from being tracked or bundled into public assets.
+* operational boundary: Staging and production cPanel servers remain untouched; no remote deletion or upload actions were performed.
+
 
 
 

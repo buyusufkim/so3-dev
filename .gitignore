@@ -9,3 +9,7 @@ coverage/
 
 api/config/config.local.php
 config.local.php
+
+# Deployment packages & release archives
+*-deployment*.zip
+deployment*.zip
